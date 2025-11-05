@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "nodemon src/minimal-server.ts",
     "build": "tsc",
+    "build:min": "tsc -p tsconfig.min.json",
     "start": "node dist/minimal-server.js",
     "test": "jest",
     "test:watch": "jest --watch",
