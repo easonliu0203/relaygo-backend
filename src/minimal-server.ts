@@ -38,6 +38,15 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// ✅ 根路由與 API 根路由（請插在這裡！）
+app.get('/', (req, res) => {
+  res.status(200).json({ success: true, message: 'RelayGo API Connected (Minimal)' });
+});
+
+app.get('/api', (req, res) => {
+  res.status(200).json({ success: true, message: 'RelayGo API Root (Minimal)' });
+});
+
 // API 路由
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/booking-flow', bookingFlowRoutes);
