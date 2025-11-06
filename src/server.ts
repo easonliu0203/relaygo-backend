@@ -107,6 +107,16 @@ app.use('/api/location', authMiddleware, locationRoutes);
 app.use('/api/referral', authMiddleware, referralRoutes);
 app.use('/api/reviews', reviewRoutes); // 評價路由（暫不使用 authMiddleware，在路由內部處理）
 
+// ✅ ✅ ✅ 在這裡插入 ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+app.get('/', (req, res) => {
+  res.status(200).json({ success: true, message: 'RelayGo API Connected' });
+});
+
+app.get('/api', (req, res) => {
+  res.status(200).json({ success: true, message: 'RelayGo API Root' });
+});
+// ✅ ✅ ✅ 插在這裡 ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
+
 // 錯誤處理中間件
 app.use(notFoundHandler);
 app.use(errorHandler);
