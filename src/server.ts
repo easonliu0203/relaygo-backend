@@ -27,6 +27,7 @@ import locationRoutes from './routes/location';
 import referralRoutes from './routes/referral';
 import reviewRoutes from './routes/reviews';
 import gomypayRoutes from './routes/gomypay';
+import pricingRoutes from './routes/pricing';
 
 // 服務導入
 import { initializeFirebase } from './config/firebase';
@@ -106,6 +107,7 @@ app.use('/api/chat', authMiddleware, chatRoutes);
 app.use('/api/location', authMiddleware, locationRoutes);
 app.use('/api/referral', authMiddleware, referralRoutes);
 app.use('/api/reviews', reviewRoutes); // 評價路由（暫不使用 authMiddleware，在路由內部處理）
+app.use('/api/pricing', pricingRoutes); // 價格路由（公開，供客戶端 APP 獲取價格方案）
 
 // ✅ ✅ ✅ 在這裡插入 ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 app.get('/', (req, res) => {
