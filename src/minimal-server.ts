@@ -5,6 +5,7 @@ import bookingFlowRoutes from './routes/bookingFlow-minimal';
 import bookingsRoutes from './routes/bookings';
 import reviewRoutes from './routes/reviews';
 import gomypayRoutes from './routes/gomypay';
+import pricingRoutes from './routes/pricing';
 import { initializeFirebase } from './config/firebase';
 
 // 載入環境變數
@@ -29,6 +30,24 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// 請求日誌中間件（用於診斷）
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${req.method} ${req.path}`);
+
+  // 特別記錄 GOMYPAY 回調請求
+  if (req.path.includes('gomypay-callback')) {
+    console.log('🔔 GOMYPAY 回調請求:');
+    console.log('  Method:', req.method);
+    console.log('  Path:', req.path);
+    console.log('  Content-Type:', req.headers['content-type']);
+    console.log('  Body:', req.body);
+    console.log('  Query:', req.query);
+  }
+
+  next();
+});
+
 // 健康檢查
 app.get('/health', (_req, res) => {
   res.status(200).json({
@@ -52,6 +71,7 @@ app.use('/api/bookings', bookingsRoutes);
 app.use('/api/booking-flow', bookingFlowRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/payment', gomypayRoutes); // GOMYPAY 回調路由（公開，不需要認證）
+app.use('/api/pricing', pricingRoutes); // 價格路由（公開，供客戶端 APP 獲取價格方案）
 
 // 404 處理
 app.use((_req, res) => {
@@ -83,5 +103,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`     - POST /api/payment/gomypay-callback (GOMYPAY 支付回調)`);
   console.log(`     - POST /api/reviews (提交評價)`);
   console.log(`     - GET /api/reviews/check/:bookingId (檢查評價狀態)`);
+  console.log(`     - GET /api/pricing/packages (獲取價格方案)`);
 });
 

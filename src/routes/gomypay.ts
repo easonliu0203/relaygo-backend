@@ -40,8 +40,13 @@ router.get('/gomypay-callback', async (req: Request, res: Response): Promise<voi
  */
 router.post('/gomypay-callback', async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('[GOMYPAY Callback] 收到支付回調:', req.body);
+    console.log('='.repeat(60));
+    console.log('[GOMYPAY Callback] ========== 收到支付回調 ==========');
+    console.log('[GOMYPAY Callback] 時間:', new Date().toISOString());
+    console.log('[GOMYPAY Callback] Content-Type:', req.headers['content-type']);
+    console.log('[GOMYPAY Callback] Body:', req.body);
     console.log('[GOMYPAY Callback] Query params:', req.query);
+    console.log('='.repeat(60));
 
     // 1. 解析支付結果參數（可能在 body 或 query 中）
     const params = { ...req.body, ...req.query };
