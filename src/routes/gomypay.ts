@@ -14,10 +14,27 @@ const supabase = createClient(
 );
 
 /**
+ * GOMYPAY 支付回調端點測試
+ *
+ * 用於測試端點是否可訪問
+ *
+ * @route GET /api/payment/gomypay-callback
+ * @access Public
+ */
+router.get('/gomypay-callback', async (req: Request, res: Response): Promise<void> => {
+  res.status(200).json({
+    success: true,
+    message: 'GOMYPAY callback endpoint is accessible',
+    timestamp: new Date().toISOString(),
+    note: 'This endpoint accepts POST requests from GOMYPAY payment gateway'
+  });
+});
+
+/**
  * GOMYPAY 支付回調 API
- * 
+ *
  * 當 GOMYPAY 完成支付後，會主動呼叫此 API 通知支付結果
- * 
+ *
  * @route POST /api/payment/gomypay-callback
  * @access Public（GOMYPAY 伺服器呼叫）
  */

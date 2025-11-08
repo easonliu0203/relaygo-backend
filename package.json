@@ -2,9 +2,9 @@
   "name": "ride-booking-backend",
   "version": "1.0.0",
   "description": "包車/接送叫車服務後端 API",
-  "main": "dist/server.js",
+  "main": "dist/minimal-server.js",
   "scripts": {
-    "dev": "nodemon src/minimal-server.ts",
+    "dev": "nodemon src/server.ts",
     "build": "tsc",
     "build:min": "tsc -p tsconfig.min.json",
     "start": "node dist/minimal-server.js",
