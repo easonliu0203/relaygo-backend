@@ -88,14 +88,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // 6. 驗證訂單狀態（只有已完成的訂單可以評價）
-    if (booking.status !== 'completed') {
+    // 6. 驗證訂單狀態
+    // ✅ 修改：允許以下狀態提交評價
+    // - trip_ended (行程結束)
+    // - pending_balance (待付尾款)
+    // - completed (訂單完成)
+    // 原因：用戶支付尾款後應該可以立即評價，無需等待 GOMYPAY 回調更新訂單狀態為 'completed'
+    const allowedStatuses = ['trip_ended', 'pending_balance', 'completed'];
+
+    if (!allowedStatuses.includes(booking.status)) {
+      console.error('[API] 訂單狀態不允許評價:', booking.status);
       res.status(400).json({
         success: false,
-        error: '訂單尚未完成，無法評價',
+        error: `訂單狀態不允許評價（當前狀態: ${booking.status}）`,
       });
       return;
     }
+
+    console.log('[API] ✅ 訂單狀態允許評價:', booking.status);
 
     // 7. 檢查是否已評價
     const { data: existingReview, error: checkError } = await supabase
