@@ -105,11 +105,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     console.log('[API] 價格配置:', pricingConfig);
 
     // 5. 計算訂單金額
-    let basePrice = estimatedFare || 1000; // 預設基本費用
+    let basePrice = estimatedFare || 1000; // 優先使用客戶端傳遞的 estimatedFare
     let depositRate = 0.3; // 預設訂金比例 30%
     let vehicleCategory = 'small'; // ✅ 提升到外層作用域，預設小型車
 
-    // 如果有價格配置，使用配置的價格
+    // 如果有價格配置，使用配置的訂金比例
+    // ⚠️ 只有當 estimatedFare 不存在或為 0 時，才使用配置的價格作為後備
     if (pricingConfig && pricingConfig.vehicleTypes) {
       try {
         // 確定車型類別（假設 packageName 包含車型資訊）
@@ -117,15 +118,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           vehicleCategory = 'large';
         }
 
-        // 獲取對應車型的價格配置
-        const vehicleType = pricingConfig.vehicleTypes[vehicleCategory];
-        if (vehicleType) {
-          // 預設使用 8 小時套餐
-          const packageType = vehicleType.packages['8_hours'] || vehicleType.packages['6_hours'];
-          if (packageType) {
-            basePrice = packageType.discount_price || packageType.original_price || basePrice;
-            console.log('[API] 使用配置價格:', basePrice, '車型:', vehicleCategory);
+        // 只有當 estimatedFare 不存在或為 0 時，才使用配置的價格
+        if (!estimatedFare || estimatedFare === 0) {
+          const vehicleType = pricingConfig.vehicleTypes[vehicleCategory];
+          if (vehicleType) {
+            // 預設使用 8 小時套餐
+            const packageType = vehicleType.packages['8_hours'] || vehicleType.packages['6_hours'];
+            if (packageType) {
+              basePrice = packageType.discount_price || packageType.original_price || basePrice;
+              console.log('[API] ⚠️  estimatedFare 不存在，使用配置價格:', basePrice, '車型:', vehicleCategory);
+            }
           }
+        } else {
+          console.log('[API] ✅ 使用客戶端傳遞的 estimatedFare:', estimatedFare, '車型:', vehicleCategory);
         }
 
         // 使用配置的訂金比例
