@@ -106,7 +106,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     // 5. 計算訂單金額
     let basePrice = estimatedFare || 1000; // 優先使用客戶端傳遞的 estimatedFare
-    let depositRate = 0.3; // 預設訂金比例 30%
+    let depositRate = 0.25; // 預設訂金比例 25%
     let vehicleCategory = 'small'; // ✅ 提升到外層作用域，預設小型車
 
     // 如果有價格配置，使用配置的訂金比例
