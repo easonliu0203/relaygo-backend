@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import { getPaymentService } from '../services/payment';
 
 dotenv.config();
 
@@ -105,12 +106,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     console.log('[API] 價格配置:', pricingConfig);
 
     // 5. 計算訂單金額
-    let basePrice = estimatedFare || 1000; // 優先使用客戶端傳遞的 estimatedFare
-    let depositRate = 0.25; // 預設訂金比例 25%
+    let basePrice = estimatedFare || 1000; // 預設基本費用
+    let depositRate = 0.3; // 預設訂金比例 30%
     let vehicleCategory = 'small'; // ✅ 提升到外層作用域，預設小型車
 
-    // 如果有價格配置，使用配置的訂金比例
-    // ⚠️ 只有當 estimatedFare 不存在或為 0 時，才使用配置的價格作為後備
+    // 如果有價格配置，使用配置的價格
     if (pricingConfig && pricingConfig.vehicleTypes) {
       try {
         // 確定車型類別（假設 packageName 包含車型資訊）
@@ -118,19 +118,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           vehicleCategory = 'large';
         }
 
-        // 只有當 estimatedFare 不存在或為 0 時，才使用配置的價格
-        if (!estimatedFare || estimatedFare === 0) {
-          const vehicleType = pricingConfig.vehicleTypes[vehicleCategory];
-          if (vehicleType) {
-            // 預設使用 8 小時套餐
-            const packageType = vehicleType.packages['8_hours'] || vehicleType.packages['6_hours'];
-            if (packageType) {
-              basePrice = packageType.discount_price || packageType.original_price || basePrice;
-              console.log('[API] ⚠️  estimatedFare 不存在，使用配置價格:', basePrice, '車型:', vehicleCategory);
-            }
+        // 獲取對應車型的價格配置
+        const vehicleType = pricingConfig.vehicleTypes[vehicleCategory];
+        if (vehicleType) {
+          // 預設使用 8 小時套餐
+          const packageType = vehicleType.packages['8_hours'] || vehicleType.packages['6_hours'];
+          if (packageType) {
+            basePrice = packageType.discount_price || packageType.original_price || basePrice;
+            console.log('[API] 使用配置價格:', basePrice, '車型:', vehicleCategory);
           }
-        } else {
-          console.log('[API] ✅ 使用客戶端傳遞的 estimatedFare:', estimatedFare, '車型:', vehicleCategory);
         }
 
         // 使用配置的訂金比例
@@ -281,153 +277,95 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
       return;
     }
 
-    // 4. 模擬支付處理
-    // 實際應該調用支付網關 API
-    console.log('[API] 模擬支付處理:', {
+    // 4. 調用支付服務發起支付
+    console.log('[API] 發起支付:', {
       amount: booking.deposit_amount,
       method: paymentMethod
     });
 
-    // 5. 創建支付記錄
-    const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const paymentData = {
-      booking_id: bookingId,
-      customer_id: booking.customer_id, // ✅ 添加必填欄位
-      transaction_id: transactionId,
-      type: 'deposit', // ✅ 修復：使用 'type' 而不是 'payment_type'
-      amount: booking.deposit_amount,
-      currency: 'TWD', // ✅ 添加 currency 欄位
-      status: 'completed', // 支付成功
-      payment_provider: 'mock', // ✅ 添加支付提供者
-      payment_method: paymentMethod || 'cash',
-      is_test_mode: true, // ✅ 添加測試模式標記
-      confirmed_at: new Date().toISOString(), // ✅ 修復：使用 'confirmed_at' 而不是 'paid_at'
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    const { data: payment, error: paymentError } = await supabase
-      .from('payments')
-      .insert(paymentData)
-      .select()
-      .single();
-
-    if (paymentError) {
-      console.error('[API] 創建支付記錄失敗:', paymentError);
-      res.status(500).json({
-        success: false,
-        error: '創建支付記錄失敗'
+    try {
+      const paymentService = getPaymentService();
+      const paymentResult = await paymentService.processPayment({
+        orderId: booking.booking_number,
+        amount: booking.deposit_amount,
+        currency: 'TWD',
+        description: `包車服務訂金 - ${booking.booking_number}`,
+        customerInfo: {
+          customerId: user.id,
+          email: '', // 可以從 users 表獲取
+          phone: ''  // 可以從 users 表獲取
+        },
+        metadata: {
+          bookingId: bookingId,
+          paymentType: 'deposit'
+        }
       });
-      return;
-    }
 
-    console.log('[API] ✅ 支付記錄創建成功:', payment.id);
+      console.log('[API] 支付服務響應:', paymentResult);
 
-    // 6. 更新訂單狀態
-    const { error: updateError } = await supabase
-      .from('bookings')
-      .update({
-        status: 'paid_deposit', // 已付訂金
+      // 5. 創建支付記錄
+      const paymentData = {
+        booking_id: bookingId,
+        customer_id: booking.customer_id,
+        transaction_id: paymentResult.transactionId,
+        type: 'deposit',
+        amount: booking.deposit_amount,
+        currency: 'TWD',
+        status: paymentResult.status,
+        payment_provider: 'mock',
+        payment_method: paymentMethod || 'cash',
+        payment_url: paymentResult.paymentUrl, // ✅ 添加支付 URL
+        is_test_mode: true,
+        expires_at: paymentResult.expiresAt,
+        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      })
-      .eq('id', bookingId);
+      };
 
-    if (updateError) {
-      console.error('[API] 更新訂單狀態失敗:', updateError);
+      const { data: payment, error: paymentError } = await supabase
+        .from('payments')
+        .insert(paymentData)
+        .select()
+        .single();
+
+      if (paymentError) {
+        console.error('[API] 創建支付記錄失敗:', paymentError);
+        res.status(500).json({
+          success: false,
+          error: '創建支付記錄失敗'
+        });
+        return;
+      }
+
+      console.log('[API] ✅ 支付記錄創建成功:', payment.id);
+
+      // 6. 返回支付 URL 讓客戶端跳轉
+      res.json({
+        success: true,
+        data: {
+          bookingId,
+          paymentId: payment.id,
+          transactionId: payment.transaction_id,
+          status: paymentResult.status,
+          depositAmount: booking.deposit_amount,
+          paymentUrl: paymentResult.paymentUrl, // ✅ 返回支付 URL
+          expiresAt: paymentResult.expiresAt
+        },
+        message: '請跳轉到支付頁面完成支付'
+      });
+
+    } catch (paymentError: any) {
+      console.error('[API] 支付服務失敗:', paymentError);
       res.status(500).json({
         success: false,
-        error: '更新訂單狀態失敗'
+        error: paymentError.message || '支付服務失敗'
       });
-      return;
     }
-
-    console.log('[API] ✅ 訂金支付成功');
-
-    // 7. 返回成功響應
-    res.json({
-      success: true,
-      data: {
-        bookingId,
-        paymentId: payment.id,
-        transactionId: payment.transaction_id,
-        status: 'paid_deposit',
-        depositAmount: booking.deposit_amount,
-        paidAt: payment.paid_at
-      },
-      message: '訂金支付成功'
-    });
 
   } catch (error: any) {
     console.error('[API] 支付訂金失敗:', error);
     res.status(500).json({
       success: false,
       error: error.message || '支付訂金失敗'
-    });
-  }
-});
-
-/**
- * @route GET /api/bookings/:bookingId
- * @desc 獲取訂單詳情（直接從 Supabase 讀取）
- * @access Public（用於支付完成後即時獲取訂單狀態）
- */
-router.get('/:bookingId', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { bookingId } = req.params;
-
-    console.log('[API] 獲取訂單詳情:', { bookingId });
-
-    // 從 Supabase 查詢訂單
-    const { data: booking, error } = await supabase
-      .from('bookings')
-      .select('*')
-      .eq('id', bookingId)
-      .single();
-
-    if (error || !booking) {
-      console.error('[API] 查詢訂單失敗:', error);
-      res.status(404).json({
-        success: false,
-        error: '訂單不存在'
-      });
-      return;
-    }
-
-    console.log('[API] ✅ 訂單查詢成功:', booking.id);
-
-    // 狀態映射：將 Supabase 狀態映射為 Flutter APP 期望的狀態
-    const statusMapping: { [key: string]: string } = {
-      'pending_payment': 'pending',       // 待付訂金 → 待配對
-      'paid_deposit': 'pending',          // 已付訂金 → 待配對（等待派單）
-      'assigned': 'awaitingDriver',       // 已分配司機 → 待司機確認
-      'matched': 'awaitingDriver',        // 手動派單 → 待司機確認
-      'driver_confirmed': 'matched',      // 司機確認後 → 已配對
-      'driver_departed': 'inProgress',    // 司機已出發 → 進行中
-      'driver_arrived': 'inProgress',     // 司機已到達 → 進行中
-      'trip_started': 'inProgress',       // 行程開始 → 進行中
-      'trip_ended': 'awaitingBalance',    // 行程結束 → 待付尾款
-      'pending_balance': 'awaitingBalance', // 待付尾款 → 待付尾款
-      'in_progress': 'inProgress',
-      'completed': 'completed',           // 訂單完成 → 已完成
-      'cancelled': 'cancelled',           // 已取消 → 已取消
-    };
-
-    const mappedStatus = statusMapping[booking.status] || 'pending';
-
-    // 返回訂單資訊（包含映射後的狀態）
-    res.status(200).json({
-      success: true,
-      data: {
-        ...booking,
-        status: mappedStatus  // 使用映射後的狀態
-      }
-    });
-
-  } catch (error: any) {
-    console.error('[API] 獲取訂單失敗:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '獲取訂單失敗'
     });
   }
 });
