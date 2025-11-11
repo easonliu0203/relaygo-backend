@@ -3,10 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import bookingFlowRoutes from './routes/bookingFlow-minimal';
 import bookingsRoutes from './routes/bookings';
-import reviewRoutes from './routes/reviews';
-import gomypayRoutes from './routes/gomypay';
-import pricingRoutes from './routes/pricing';
 import { initializeFirebase } from './config/firebase';
+import { initializePaymentProviders } from './services/payment';
 
 // 載入環境變數
 dotenv.config();
@@ -18,8 +16,16 @@ try {
   console.error('⚠️  Firebase Admin SDK 初始化失敗，聊天室功能可能無法使用');
 }
 
+// 初始化支付提供者
+try {
+  initializePaymentProviders();
+  console.log('✅ 支付提供者初始化成功');
+} catch (error) {
+  console.error('⚠️  支付提供者初始化失敗:', error);
+}
+
 const app = express();
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = process.env.PORT || 3000;
 
 // 基礎中間件
 app.use(cors({
@@ -30,24 +36,6 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// 請求日誌中間件（用於診斷）
-app.use((req, res, next) => {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${req.method} ${req.path}`);
-
-  // 特別記錄 GOMYPAY 回調請求
-  if (req.path.includes('gomypay-callback')) {
-    console.log('🔔 GOMYPAY 回調請求:');
-    console.log('  Method:', req.method);
-    console.log('  Path:', req.path);
-    console.log('  Content-Type:', req.headers['content-type']);
-    console.log('  Body:', req.body);
-    console.log('  Query:', req.query);
-  }
-
-  next();
-});
-
 // 健康檢查
 app.get('/health', (_req, res) => {
   res.status(200).json({
@@ -57,21 +45,9 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// ✅ 根路由與 API 根路由（請插在這裡！）
-app.get('/', (req, res) => {
-  res.status(200).json({ success: true, message: 'RelayGo API Connected (Minimal)' });
-});
-
-app.get('/api', (req, res) => {
-  res.status(200).json({ success: true, message: 'RelayGo API Root (Minimal)' });
-});
-
 // API 路由
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/booking-flow', bookingFlowRoutes);
-app.use('/api/reviews', reviewRoutes);
-app.use('/api/payment', gomypayRoutes); // GOMYPAY 回調路由（公開，不需要認證）
-app.use('/api/pricing', pricingRoutes); // 價格路由（公開，供客戶端 APP 獲取價格方案）
 
 // 404 處理
 app.use((_req, res) => {
@@ -91,18 +67,12 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 // 啟動伺服器
-// 監聽 0.0.0.0 以允許區域網訪問（實機測試需要）
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);
-  console.log(`   Local: http://localhost:${PORT}/health`);
-  console.log(`   Network: http://0.0.0.0:${PORT}/health`);
+  console.log(`   Health check: http://localhost:${PORT}/health`);
   console.log(`   API endpoints:`);
   console.log(`     - POST /api/bookings (創建訂單)`);
   console.log(`     - POST /api/bookings/:id/pay-deposit (支付訂金)`);
   console.log(`     - POST /api/booking-flow/bookings/:id/accept (司機確認接單)`);
-  console.log(`     - POST /api/payment/gomypay-callback (GOMYPAY 支付回調)`);
-  console.log(`     - POST /api/reviews (提交評價)`);
-  console.log(`     - GET /api/reviews/check/:bookingId (檢查評價狀態)`);
-  console.log(`     - GET /api/pricing/packages (獲取價格方案)`);
 });
 

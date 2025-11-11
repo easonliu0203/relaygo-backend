@@ -71,7 +71,7 @@ interface VehiclePackage {
  * @desc 獲取所有可用的車型套餐
  * @access Public
  */
-router.get('/packages', async (req: Request, res: Response): Promise<void> => {
+router.get('/packages', async (req: Request, res: Response) => {
   try {
     let pricingData: any[] = [];
     let error: any = null;
@@ -117,12 +117,11 @@ router.get('/packages', async (req: Request, res: Response): Promise<void> => {
     if (!pricingData || pricingData.length === 0) {
       // 如果沒有價格配置，返回預設配置
       const defaultPackages = getDefaultPackages();
-      res.json({
+      return res.json({
         success: true,
         data: defaultPackages,
         source: 'default'
       });
-      return;
     }
 
     // 轉換資料庫格式為客戶端格式，並去重
@@ -181,7 +180,6 @@ router.get('/packages', async (req: Request, res: Response): Promise<void> => {
       data: packages,
       source: error ? 'mock' : 'database'
     });
-    return;
 
   } catch (error: any) {
     console.error('[Pricing API] 獲取價格配置失敗:', error);
@@ -190,7 +188,6 @@ router.get('/packages', async (req: Request, res: Response): Promise<void> => {
       error: '獲取價格配置失敗',
       message: error.message
     });
-    return;
   }
 });
 
