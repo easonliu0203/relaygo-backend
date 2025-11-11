@@ -7,9 +7,17 @@ import { paymentConfig } from '../../config/paymentConfig';
 // 註冊所有支付提供者
 export function initializePaymentProviders(): void {
   // 註冊模擬支付提供者 (封測階段)
+  // ✅ 修復：設置 autoMarkAsPaid: false，需要跳轉到 GoMyPay 支付頁面
   PaymentProviderFactory.registerProvider(
     PaymentProviderType.MOCK,
-    new MockPaymentProvider()
+    new MockPaymentProvider({
+      autoMarkAsPaid: false,  // ❌ 不自動標記為已付款，需要跳轉到 GoMyPay
+      successRate: 0.95,      // 95% 成功率
+      processingDelay: 1500,  // 1.5秒延遲
+      enableFailureSimulation: true,
+      realAmountTesting: true,
+      logTransactions: true
+    })
   );
 
   // 註冊線下支付提供者 (封測階段)
