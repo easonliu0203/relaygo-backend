@@ -1,5 +1,5 @@
 // 支付服務統一入口
-import { PaymentProviderFactory, PaymentProviderType } from './PaymentProvider';
+import { PaymentProviderFactory, PaymentProviderType, PaymentService } from './PaymentProvider';
 import { MockPaymentProvider } from './providers/MockPaymentProvider';
 import { OfflinePaymentProvider } from './providers/OfflinePaymentProvider';
 import { paymentConfig } from '../../config/paymentConfig';
@@ -38,7 +38,6 @@ export function initializePaymentProviders(): void {
 // 獲取當前支付服務實例
 export function getPaymentService() {
   const config = paymentConfig.getCurrentConfig();
-  const { PaymentService } = require('./PaymentProvider');
   return new PaymentService(config);
 }
 
@@ -191,7 +190,7 @@ export class PaymentEventHandler {
 export {
   PaymentProviderType,
   PaymentProviderFactory,
-  paymentConfig
+  PaymentService
 } from './PaymentProvider';
 
 export {
@@ -201,3 +200,6 @@ export {
 export {
   OfflinePaymentProvider
 } from './providers/OfflinePaymentProvider';
+
+// 匯出支付配置
+export { paymentConfig } from '../../config/paymentConfig';
