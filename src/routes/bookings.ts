@@ -291,7 +291,7 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
         currency: 'TWD',
         description: `包車服務訂金 - ${booking.booking_number}`,
         customerInfo: {
-          customerId: user.id,
+          id: user.id,  // ✅ 修復：使用 'id' 而不是 'customerId'
           email: '', // 可以從 users 表獲取
           phone: ''  // 可以從 users 表獲取
         },
@@ -311,7 +311,7 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
         type: 'deposit',
         amount: booking.deposit_amount,
         currency: 'TWD',
-        status: paymentResult.status,
+        status: paymentResult.success ? 'pending' : 'failed',  // ✅ 修復：根據 success 判斷狀態
         payment_provider: 'mock',
         payment_method: paymentMethod || 'cash',
         payment_url: paymentResult.paymentUrl, // ✅ 添加支付 URL
@@ -345,7 +345,7 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
           bookingId,
           paymentId: payment.id,
           transactionId: payment.transaction_id,
-          status: paymentResult.status,
+          status: payment.status,  // ✅ 修復：使用 payment.status 而不是 paymentResult.status
           depositAmount: booking.deposit_amount,
           paymentUrl: paymentResult.paymentUrl, // ✅ 返回支付 URL
           expiresAt: paymentResult.expiresAt
