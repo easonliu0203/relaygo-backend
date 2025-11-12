@@ -255,7 +255,7 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
     // 2. 驗證客戶權限（需要查詢 users 表獲取 user.id）
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, email, phone')
       .eq('firebase_uid', customerUid)
       .single();
 
@@ -276,27 +276,73 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
       return;
     }
 
-    // 4. 模擬支付處理
-    // 實際應該調用支付網關 API
-    console.log('[API] 模擬支付處理:', {
-      amount: booking.deposit_amount,
-      method: paymentMethod
+    // 4. 使用 PaymentProviderFactory 發起支付
+    const { PaymentProviderFactory, PaymentProviderType } = await import('../services/payment/PaymentProvider');
+
+    // 根據環境變數決定使用哪個支付提供者
+    const paymentProviderType = process.env.PAYMENT_PROVIDER === 'gomypay'
+      ? PaymentProviderType.GOMYPAY
+      : PaymentProviderType.MOCK;
+
+    console.log('[API] 使用支付提供者:', paymentProviderType);
+
+    const provider = PaymentProviderFactory.createProvider({
+      provider: paymentProviderType,
+      isTestMode: process.env.GOMYPAY_TEST_MODE === 'true',
+      config: {}
     });
 
-    // 5. 創建支付記錄
-    const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // 5. 發起支付
+    const paymentRequest = {
+      orderId: booking.booking_number,
+      amount: booking.deposit_amount,
+      currency: 'TWD',
+      description: `RelayGo 訂單訂金 - ${booking.booking_number}`,
+      customerInfo: {
+        id: user.id,
+        name: booking.customer_name || '客戶',
+        email: user.email || '',
+        phone: user.phone || booking.customer_phone || ''
+      },
+      metadata: {
+        bookingId: booking.id,
+        paymentType: 'deposit'
+      }
+    };
+
+    console.log('[API] 發起支付請求:', {
+      provider: paymentProviderType,
+      orderId: paymentRequest.orderId,
+      amount: paymentRequest.amount
+    });
+
+    const paymentResponse = await provider.initiatePayment(paymentRequest);
+
+    if (!paymentResponse.success) {
+      res.status(400).json({
+        success: false,
+        error: '支付發起失敗'
+      });
+      return;
+    }
+
+    console.log('[API] ✅ 支付發起成功:', {
+      transactionId: paymentResponse.transactionId,
+      hasPaymentUrl: !!paymentResponse.paymentUrl
+    });
+
+    // 6. 創建支付記錄（狀態為 pending，等待回調確認）
     const paymentData = {
       booking_id: bookingId,
-      customer_id: booking.customer_id, // ✅ 添加必填欄位
-      transaction_id: transactionId,
-      type: 'deposit', // ✅ 修復：使用 'type' 而不是 'payment_type'
+      customer_id: booking.customer_id,
+      transaction_id: paymentResponse.transactionId,
+      type: 'deposit',
       amount: booking.deposit_amount,
-      currency: 'TWD', // ✅ 添加 currency 欄位
-      status: 'completed', // 支付成功
-      payment_provider: 'mock', // ✅ 添加支付提供者
-      payment_method: paymentMethod || 'cash',
-      is_test_mode: true, // ✅ 添加測試模式標記
-      confirmed_at: new Date().toISOString(), // ✅ 修復：使用 'confirmed_at' 而不是 'paid_at'
+      currency: 'TWD',
+      status: 'pending', // 等待支付完成
+      payment_provider: paymentProviderType,
+      payment_method: paymentMethod || 'credit_card',
+      is_test_mode: process.env.GOMYPAY_TEST_MODE === 'true',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -318,39 +364,48 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
 
     console.log('[API] ✅ 支付記錄創建成功:', payment.id);
 
-    // 6. 更新訂單狀態
-    const { error: updateError } = await supabase
-      .from('bookings')
-      .update({
-        status: 'paid_deposit', // 已付訂金
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', bookingId);
-
-    if (updateError) {
-      console.error('[API] 更新訂單狀態失敗:', updateError);
-      res.status(500).json({
-        success: false,
-        error: '更新訂單狀態失敗'
+    // 7. 返回支付 URL（如果有）或成功響應
+    if (paymentResponse.paymentUrl) {
+      // GoMyPay 或其他需要跳轉的支付方式
+      res.json({
+        success: true,
+        data: {
+          bookingId,
+          paymentId: payment.id,
+          transactionId: paymentResponse.transactionId,
+          paymentUrl: paymentResponse.paymentUrl,
+          instructions: paymentResponse.instructions,
+          expiresAt: paymentResponse.expiresAt,
+          requiresRedirect: true
+        }
       });
-      return;
+    } else {
+      // Mock 或其他自動完成的支付方式
+      // 更新訂單狀態為已付訂金
+      const { error: updateError } = await supabase
+        .from('bookings')
+        .update({
+          status: 'paid_deposit',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', bookingId);
+
+      if (updateError) {
+        console.error('[API] 更新訂單狀態失敗:', updateError);
+      }
+
+      res.json({
+        success: true,
+        data: {
+          bookingId,
+          paymentId: payment.id,
+          transactionId: paymentResponse.transactionId,
+          status: 'paid_deposit',
+          depositAmount: booking.deposit_amount,
+          requiresRedirect: false
+        }
+      });
     }
-
-    console.log('[API] ✅ 訂金支付成功');
-
-    // 7. 返回成功響應
-    res.json({
-      success: true,
-      data: {
-        bookingId,
-        paymentId: payment.id,
-        transactionId: payment.transaction_id,
-        status: 'paid_deposit',
-        depositAmount: booking.deposit_amount,
-        paidAt: payment.paid_at
-      },
-      message: '訂金支付成功'
-    });
 
   } catch (error: any) {
     console.error('[API] 支付訂金失敗:', error);
