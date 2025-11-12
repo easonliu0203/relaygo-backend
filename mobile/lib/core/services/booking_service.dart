@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/booking_order.dart';
 import '../config/environment_config.dart';
 
@@ -326,6 +327,102 @@ class BookingService {
     if (!doc.exists) return null;
 
     return BookingOrder.fromFirestore(doc);
+  }
+
+  /// 從 Supabase 直接獲取訂單（用於支付後驗證）
+  ///
+  /// 這個方法直接從 Supabase（單一真實源）讀取訂單狀態，
+  /// 用於支付完成後立即驗證訂單狀態是否已更新。
+  ///
+  /// 注意：這是讀取操作，符合 CQRS 架構原則。
+  Future<BookingOrder?> getBookingFromSupabase(String bookingId) async {
+    try {
+      final supabase = Supabase.instance.client;
+
+      // 從 Supabase bookings 表直接查詢
+      final response = await supabase
+          .from('bookings')
+          .select()
+          .eq('id', bookingId)
+          .maybeSingle();
+
+      if (response == null) {
+        debugPrint('⚠️ 訂單不存在: $bookingId');
+        return null;
+      }
+
+      // 將 Supabase 資料轉換為 BookingOrder
+      return _convertSupabaseToBookingOrder(response);
+    } catch (e) {
+      debugPrint('❌ 從 Supabase 獲取訂單失敗: $e');
+      return null;
+    }
+  }
+
+  /// 將 Supabase 資料轉換為 BookingOrder 模型
+  BookingOrder _convertSupabaseToBookingOrder(Map<String, dynamic> data) {
+    // 解析時間戳
+    DateTime parseTimestamp(dynamic value) {
+      if (value == null) return DateTime.now();
+      if (value is DateTime) return value;
+      if (value is String) return DateTime.parse(value);
+      return DateTime.now();
+    }
+
+    DateTime? parseOptionalTimestamp(dynamic value) {
+      if (value == null) return null;
+      if (value is DateTime) return value;
+      if (value is String) return DateTime.parse(value);
+      return null;
+    }
+
+    // 解析地理位置
+    LocationPoint? parseLocation(dynamic lat, dynamic lng) {
+      if (lat == null || lng == null) return null;
+      return LocationPoint(
+        latitude: (lat as num).toDouble(),
+        longitude: (lng as num).toDouble(),
+      );
+    }
+
+    return BookingOrder(
+      id: data['id'] ?? '',
+      customerId: data['customer_id'] ?? '',
+      driverId: data['driver_id'],
+      customerName: data['customer_name'],
+      customerPhone: data['customer_phone'],
+      driverName: data['driver_name'],
+      driverPhone: data['driver_phone'],
+      driverVehiclePlate: data['driver_vehicle_plate'],
+      driverVehicleModel: data['driver_vehicle_model'],
+      driverRating: data['driver_rating'] != null
+          ? (data['driver_rating'] as num).toDouble()
+          : null,
+      pickupAddress: data['pickup_location'] ?? '',
+      pickupLocation: parseLocation(
+        data['pickup_latitude'],
+        data['pickup_longitude'],
+      ),
+      dropoffAddress: data['destination'] ?? '',
+      dropoffLocation: parseLocation(
+        data['dropoff_latitude'],
+        data['dropoff_longitude'],
+      ),
+      bookingTime: parseTimestamp(data['start_date'] ?? data['created_at']),
+      passengerCount: data['passenger_count'] ?? 1,
+      luggageCount: data['luggage_count'],
+      notes: data['notes'],
+      estimatedFare: (data['total_price'] ?? 0.0).toDouble(),
+      depositAmount: (data['deposit_amount'] ?? 0.0).toDouble(),
+      depositPaid: data['deposit_paid'] ?? false,
+      status: BookingStatus.values.firstWhere(
+        (status) => status.name == data['status'],
+        orElse: () => BookingStatus.pending,
+      ),
+      createdAt: parseTimestamp(data['created_at']),
+      matchedAt: parseOptionalTimestamp(data['matched_at']),
+      completedAt: parseOptionalTimestamp(data['completed_at']),
+    );
   }
 
   /// 監聽特定訂單的變化（從 Firestore 鏡像讀取）
