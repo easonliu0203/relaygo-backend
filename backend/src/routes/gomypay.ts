@@ -21,7 +21,7 @@ const supabase = createClient(
  * @route GET /api/payment/gomypay-callback
  * @access Public
  */
-router.get('/gomypay-callback', async (req: Request, res: Response): Promise<void> => {
+router.get('/gomypay-callback', async (_req: Request, res: Response): Promise<void> => {
   res.status(200).json({
     success: true,
     message: 'GOMYPAY callback endpoint is accessible',
@@ -111,29 +111,9 @@ router.post('/gomypay/return', async (req: Request, res: Response): Promise<void
 });
 
 /**
- * GOMYPAY Callback URL - GoMyPay 後台通知
- *
- * @route POST /api/payment/gomypay/callback
- * @access Public
+ * 共享的 GoMyPay 回調處理邏輯
  */
-router.post('/gomypay/callback', async (req: Request, res: Response): Promise<void> => {
-  // 使用與 gomypay-callback 相同的處理邏輯
-  return router.handle(
-    { ...req, url: '/gomypay-callback', method: 'POST' } as any,
-    res,
-    () => {}
-  );
-});
-
-/**
- * GOMYPAY 支付回調 API
- *
- * 當 GOMYPAY 完成支付後，會主動呼叫此 API 通知支付結果
- *
- * @route POST /api/payment/gomypay-callback
- * @access Public（GOMYPAY 伺服器呼叫）
- */
-router.post('/gomypay-callback', async (req: Request, res: Response): Promise<void> => {
+async function handleGomypayCallback(req: Request, res: Response): Promise<void> {
   try {
     console.log('='.repeat(60));
     console.log('[GOMYPAY Callback] ========== 收到支付回調 ==========');
@@ -409,12 +389,28 @@ router.post('/gomypay-callback', async (req: Request, res: Response): Promise<vo
     console.error('[GOMYPAY Callback] ========================================');
     console.error('[GOMYPAY Callback] ❌ 處理回調失敗');
     console.error('[GOMYPAY Callback] ========================================');
-    console.error('[GOMYPAY Callback] 錯誤訊息:', error.message);
-    console.error('[GOMYPAY Callback] 錯誤堆疊:', error.stack);
+    console.error('[GOMYPAY Callback] 錯誤訊息:', (error as Error).message);
+    console.error('[GOMYPAY Callback] 錯誤堆疊:', (error as Error).stack);
     console.error('[GOMYPAY Callback] ========================================');
     res.status(500).send('Internal server error');
   }
-});
+}
+
+/**
+ * GOMYPAY 支付回調 API（舊版路徑，向後兼容）
+ *
+ * @route POST /api/payment/gomypay-callback
+ * @access Public
+ */
+router.post('/gomypay-callback', handleGomypayCallback);
+
+/**
+ * GOMYPAY Callback URL - GoMyPay 後台通知（新版路徑）
+ *
+ * @route POST /api/payment/gomypay/callback
+ * @access Public
+ */
+router.post('/gomypay/callback', handleGomypayCallback);
 
 /**
  * 驗證 ChkValue
