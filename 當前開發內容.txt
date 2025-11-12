@@ -1,0 +1,412 @@
+接單到完成接單流程
+
+客戶>預約叫車>支付訂金>預約成功>配對司機>配對成功>司機出發前發通知出發了>司機到達客人上車地址發通知抵達>客戶上車>開始行程>結束行程>支付尾款>評價司機
+
+配對司機公司端這邊可以調整手動或自動(自動為現有司機平均分配)，不管手動或自動，皆不能同日期有重複訂單
+封測階段的公司段完善
+
+司機出發前發通知出發了(手動點擊司機端app出發按鈕，並發送通知給客戶與公司)
+司機到達客人上車地址發通知抵達(手動點擊司機端app到達按鈕，並發送通知給客戶與公司)
+
+開始行程與結束行程皆在客戶端app點擊
+
+聊天室功能
+
+那因為在快速上封測，我目前的想法是把訂金跟尾款都設定為0元，已順利測試上訴接單到完成接單流程
+因為目前還沒有串接金流公司，擔心如果有設定金額的話會無法順利測試
+還是說現有模擬支付系統，就算有設定金額，會默認已收到款項，讓流程能順利測試呢
+還是你有跟好的方式可以跟我說明
+
+以上為我目前封測階段想先完成的部分
+
+目前是把Postgres架構做在自己電腦上嗎
+但我好像沒有安裝Postgres軟體
+
+SUPABASE的api
+
+Project URL
+https://vlyhwegpvpnjyocqmfqc.supabase.co
+
+anon public
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZseWh3ZWdwdnBuanlvY3FtZnFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5Nzc5OTYsImV4cCI6MjA3NDU1Mzk5Nn0.qnQBjvLm3IoXvJ0IptfMvPYRni1_7Den3iE9hFj-FYY
+
+service_role secret
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZseWh3ZWdwdnBuanlvY3FtZnFjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODk3Nzk5NiwiZXhwIjoyMDc0NTUzOTk2fQ.nQPynfQcSIZ1QPVSjDcgscugQcEgfRPUauW0psSRTQo
+
+8~9人座車型
+原價8h85
+優惠價75(輸入優惠碼/以後做完整)  
+超時8
+
+原價6h70
+優惠價60(輸入優惠碼/以後做完整)  
+超時8
+
+3~4人座車型
+原價8h60
+優惠價50(輸入優惠碼/以後做完整)  
+超時5
+
+原價6h50
+優惠價40(輸入優惠碼/以後做完整)  
+超時5 
+
+以上為價目表
+
+封測階段為順利測試，當有訂單時需要先自動轉為"已支付"狀態已順利測試
+
+該問題依然存在
+封測訂單測試業面，價格設定頁面
+點擊進去後一片空白，點上一頁也無法順利回去上一頁
+會顯示一片空白，找出原因修復他
+
+目前公司端WEB可以開啟
+封測訂單測試業面，價格設定頁面也可以開
+其他還有好多頁面點進去時顯示
+404This page could not be found.
+是因為我還沒有附於他們功能的關係嗎
+
+
+公司端的WEB基本上做得差不多了
+要準備開始客戶端跟司機端了
+先做客戶端
+
+我要先手動去開啟設定Firebase 該怎麼設定 
+你幫我把專案架構檢查一下 整理整理
+
+技術架構
+1. Firebase：登入、推播、聊天即時、檔案、定位。
+2. Supabase/Postgres(唯一真實來源)：訂單金額、結帳、退款、獎金、報表。 
+
+維護原則（先講結論）
+
+單一真相來源（SoT）：只要牽涉錢（訂金、尾款、超時、退款、推薦獎金）→ 以 Postgres 為準；Firestore 只放 UI 快照。
+
+事件同步＋冪等：用「Transactional Outbox → 背景 Worker 同步 Firestore」，每個事件有 event_id，重試不重複入帳。
+
+強類邊界：把系統切成「即時域（Firebase）」與「交易域（Postgres）」兩層，API 只讓 App 碰即時域資料的讀、交易域一律走後端。
+
+基礎設計制度化：schema 版本、API 合約、測試、部署、觀測、告警都固定流程。
+
+專案名稱
+ride-platform
+專案 ID
+ride-platform-f1676
+專案編號
+930299492291
+Web API 金鑰
+AIzaSyB65u4NIq8HhaPs4hr9G0eoOYRP1y6z-sQ
+
+web
+npm install firebase
+
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyC9HGGFyVONzKcjTNAr1FQo_ivGyrByQz4",
+  authDomain: "ride-platform-f1676.firebaseapp.com",
+  databaseURL: "https://ride-platform-f1676-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "ride-platform-f1676",
+  storageBucket: "ride-platform-f1676.firebasestorage.app",
+  messagingSenderId: "930299492291",
+  appId: "1:930299492291:web:9d86b1b3254b855533ef76",
+  measurementId: "G-2VZTCTLC8Q"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+Firebase Admin SDK
+{
+  "type": "service_account",
+  "project_id": "ride-platform-f1676",
+  "private_key_id": "8fad5fdb15dab1e33f98d10504032f4a8342c8e1",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCv5mKDfrko90FI\nFcHuohjfJWpXX/wV5UR2xzPe8iOOnBPsSTtX1PHWOG+AAFNZLQAwffaClZ1YVe7+\ngYo2wWcJiTeftHa16LekY4HgvD9Z5ka87k5iIc/6aGyceZOAj4Ck1raHT89quQUI\n8DL4FAm1/cqJpokBhaINHEcDm3xRatlZP/+WnpJH01EzMUK4Ir389X/BbosWc24I\nbF3P5e50FJ0rW6qrErBPuhbG+KeF7IcYTcinTGMGNbbQwBUU2clo1UNwfSjeYEN8\ni63iG0Y/NBgWe/H+l8lYOnAPMLSJtf7QQaqkIBfC/SEQcbr/d5y9OlkgYTKSURlZ\nXsXe0857AgMBAAECggEATEm/rScfWBCQfBqPnxcncVRRYC7NbpOeU2OG8CkVWcsA\nawjB15CQCGg2l43MmE8Hl4ByEuWftcmjWzdEggX0UbL08Gt81t1lFENh9129nhhc\n0qEKVs4yXPjALkcePXI/iX5j8KChJTi0YdGHUYejRI6bMoMLRaE3DLeYZwye6NIU\nPBv/QtlIoEwN2b8l2SfpU0haPqFGRzUHQmtppl0enLgE2wM40wOsHSU3Gt4P0rW+\nYZPtH2n8Kew4bXOcOiSt49BA75H0V2ojqSpn6cHf152JPS71aYGvTdsBnbwDC9PG\nyMD9MXSn6tohRhC4OZDPvuE1KLUPZ8PjAkjZDeRkcQKBgQDzhgQjXyJqtCdISqi+\naKdAi0AvHj300IHM3dnsZeqrbG3mbcDrhXk1QGa1hB10xPH7OpI3N+8pBC63etAe\nJPhn+NSwJmNkdWEnqe228kri4d0GJ38NMRJ71DGEEo9iOIIksJIrnj1jYifpgqDy\n6oFEQY+UYlH+FmD5qvJW9923UQKBgQC46XAF9r/ZQkp8tVk9e+2Cd9cVyc0RrYD9\nCM8jWdyYLz5CPVTSFe/hUqNn9hrPdS/yI1eY4WRDuz2iCx+ZXD/Adkh38miYFKdy\nSusD/9osRpA9r4+26hIkJd9J9uDWmoJVt42KqiCalCSq+gjohW2Cc8cVxFABuEZ4\n7TAEpz6OCwKBgD9lQwyGRqpqjdNnBDjVe7z0w1fA0rY51aCknIfLHGVWC+Ix7kgh\n7iTryBE2/IgagTg6zjerywntec/wG9/NFhHTGGNnCvbrC8jMlwLKXq5jyCtC+vNP\nNBWibuWIA2W5ej/c66CJSEfoFKXYiNfULqS7QIqLcfbokoRMeVwkmMaRAoGBALjL\nGdfr82iVFkmxFoEak47aYwn0RcuP4KN/pTqH+KviMs8R6e2WXMeKxaEE02BWldbf\nuRAg2AnUWtDRWv/xsAiQbPXqPNsXcQwIkPvLOmcbEdWD2RUMsZqMeqy5W5M8kFpH\neN2GDdVNjaONA1AU4A8J04EOUoKVfWAmceGEnkBnAoGBAORgAd3v0xxlekfx6aRd\nGe0khvpG3EUkq2Dr/UIgXbUtwz69bO16Hl5yzBSBh8ValD23sMbQ0WMizCZq+x9b\ngNHoSq5rTbmXJGCsWlHJqdiK0MBDj0XBVGFKH5AWvyXcPVCXlkgd12cgy3jU6lnj\nVpoxmPj6/kyez4JyZtRxqVlj\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@ride-platform-f1676.iam.gserviceaccount.com",
+  "client_id": "106828184341447566952",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40ride-platform-f1676.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
+
+google商店上app名稱：Relay GO
+應用程式 ID
+1:930299492291:android:e393786c0728270d33ef76
+應用程式暱稱
+Relay GO
+套件名稱
+com.relaygo.customer
+`google-services.json` (Android)客戶端 放置位置
+
+google商店上app名稱：Relay GO Driver
+應用程式 ID
+1:930299492291:android:c7b6d344a3ca1dc833ef76
+應用程式暱稱
+Relay GO D
+套件名稱
+com.relaygo.driver
+`google-services.json` (Android)司機端 放置位置
+
+apple商店上app名稱：Relay GO
+應用程式 ID
+1:930299492291:ios:ee737706cea5f41233ef76
+編碼應用程式 ID
+app-1-930299492291-ios-ee737706cea5f41233ef76
+應用程式暱稱
+Relay GO I
+軟體包 ID
+com.relaygo.customer.ios
+`GoogleService-Info.plist` (iOS)客戶端 放置位置
+
+apple商店上app名稱：Relay GO Driver
+應用程式 ID
+1:930299492291:ios:2a18ada03f18cd4533ef76
+編碼應用程式 ID
+app-1-930299492291-ios-2a18ada03f18cd4533ef76
+應用程式暱稱
+Relay GO D I
+軟體包 ID
+com.relaygo.driver.ios
+`GoogleService-Info.plist` (iOS)司機端 放置位置
+
+以上是我在firebase上的配置
+另外我需要你告訴我放置位置
+
+
+D:\repo\mobile\android\app\keystore\customer
+key.properties
+storePassword=gfhyhjjfhjytjjhukkn
+keyPassword=gfhyhjjfhjytjjhukkn
+keyAlias=Relay-GO-key
+storeFile=../android/app/keystore/customer/Relay-GO.jks
+
+Relay-GO.jks
+
+
+D:\repo\mobile\android\app\keystore\driver
+key.properties
+storePassword=isdipjmlbpijoaqef
+keyPassword=isdipjmlbpijoaqef
+keyAlias=Relay-GO-driver-key
+storeFile=../android/app/keystore/driver/Relay-GO-driver.jks
+
+Relay-GO-driver.jks
+
+
+現在來建立客戶端APP
+
+firebase目前開啟電子郵件/密碼 GOOGLE APPLE 三種登入方式
+因為還在開發階段我想跟WEB一樣有一組測試帳號再登入頁面
+點擊"使用測試帳號"直接幫我填入測試帳號密碼
+讓我按登入
+
+開啟APP出現登入頁面>主程式頁面"預約轎車"
+先製作三個分頁預約叫車，聊天，個人檔案
+在下方出現導覽列分別預約叫車，聊天，個人檔案
+
+司機端APP
+
+firebase目前開啟電子郵件/密碼 GOOGLE APPLE 三種登入方式
+因為還在開發階段我想跟WEB一樣有一組測試帳號再登入頁面
+點擊"使用測試帳號"直接幫我填入測試帳號密碼
+讓我按登入
+
+開啟APP出現登入頁面>主程式頁面"接單"
+先製作三個分頁接單，聊天，個人檔案
+在下方出現導覽列分別接單，聊天，個人檔案
+
+
+目前不管是客戶端還是司機端的APP
+啟動APP之後都卡在這個畫面
+沒有顯示登入頁面等等
+
+目前在客戶端與司機端各自的測試帳號
+無法順利登入，都會顯示AUTHEXCEPTION:認證憑證無效
+所以無法進入主程式做後續測試
+
+customer.test@relaygo.com
+RelayGO2024!Customer
+
+driver.test@relaygo.com
+RelayGO2024!Driver
+
+現在為客戶端與司機端的個人檔案頁面新增 登出按鈕
+
+司機端的接單頁面名稱應該改成訂單
+現在開始實做客戶預約叫車
+但因為沒有要做即時配對
+目前在封測階段想做的
+讓客戶預約叫車　配對司機　不走實際金流
+我們的實際流程為
+
+客戶>預約叫車>支付訂金>預約成功>配對司機(公司端手動配對)>配對成功
+
+1.先前設置的管理後台: http://localhost:3001 打不開顯示
+
+無法連上這個網站
+localhost 拒絕連線。
+建議做法：
+
+檢查連線狀態
+檢查 Proxy 和防火牆
+ERR_CONNECTION_REFUSED
+
+
+2.點擊立即預約>上下車時間人數等>價目表>選擇好方案後>下方顯示費用>費用下面確認預約按鈕
+價目表則是公司端的"設定價錢"頁面價目表內容
+
+3.模擬信用卡支付之後出現錯誤的畫面
+我附圖給你看
+
+
+管理後台: http://localhost:3001
+登入頁面: http://localhost:3001/login
+健康檢查: http://localhost:3001/health
+封測階段測試帳號
+測試帳號：admin@example.com / admin123456
+備用帳號：manager@example.com / manager123456
+
+
+所以客戶端APP呈現的價目表要抓公司端這邊Supabase的內容
+模擬支付也是要從公司端這邊成立，只是不在客戶端上顯示模擬支付的設定開關那些
+
+模擬支付成功之後，客戶端的我的訂單的進行中要顯示新的訂單
+公司端這邊也要顯示新的訂單
+公司這邊的訂單資訊也要能看到客戶與司機的UID以便追蹤
+
+記住這是我們的技術架構
+
+1. Firebase：登入、推播、聊天即時、檔案、定位。
+2. Supabase/Postgres(唯一真實)：訂單金額、結帳、退款、獎金、報表，模擬支付。
+CQRS 架構
+
+我選了60元方案 為什麼顯示費用150元
+還有支付失敗，是公司端的模擬支付沒啟動嗎
+還是甚麼原因 附圖
+
+flutter run
+
+更新客戶端
+cd mobile
+flutter clean
+flutter pub get
+flutter run --flavor customer --target lib/apps/customer/main_customer.dart
+
+重生
+flutter pub run build_runner build --delete-conflicting-outputs
+
+更新司機端
+cd d:\repo\mobile
+flutter clean
+flutter pub get
+scripts\run-driver.bat
+
+
+# 進入 web-admin 目錄
+cd web-admin
+# 安裝依賴（如果還沒安裝）
+npm install
+# 啟動開發服務器
+npm run dev
+# 應該看到：
+# ✓ Ready on http://localhost:3001
+
+cd web-admin
+scripts\start-admin.bat
+
+npm run dev
+
+# 1. 安裝依賴
+cd d:\repo\mobile
+flutter pub get
+
+# 2. 生成 Freezed 代碼
+flutter packages pub run build_runner build --delete-conflicting-outputs
+
+# 或使用腳本
+scripts\install-dependencies.bat
+
+# 1. 安裝依賴和生成代碼
+cd d:\repo\mobile
+scripts\install-dependencies.bat
+
+# 2. 啟動客戶端應用測試
+cd d:\repo\mobile
+scripts\run-customer.bat
+
+# 3. 啟動司機端應用測試
+cd d:\repo\mobile
+scripts\run-driver.bat
+flutter run -d emulator-5554 --flavor driver --target lib/apps/driver/main_driver.dart
+
+開發先查看QUICK_REFERENCE.md
+不清楚再看ARCHITECTURE.md
+
+d:\repo\
+├── DOCS_README.md                    # 文檔說明（已更新）
+├── ARCHITECTURE.md                   # 完整架構文檔（已更新）
+├── QUICK_REFERENCE.md                # 快速參考卡片（已更新）
+├── DEVELOPMENT_CHECKLIST.md          # 開發檢查清單（已更新）
+└── docs/
+    ├── DOCS_CENTER_README.md         # 文檔中心導航（新增）
+    ├── QUICK_START_GUIDE.md          # 快速啟動指南（新增）
+    ├── DOCUMENTATION_UPDATES_SUMMARY.md  # 文檔更新總結（新增）
+    └── COMPLETION_REPORT.md          # 完成報告（新增）
+
+D:\repo\supabase\functions\sync-to-firestore\cron.yaml
+
+# Supabase Edge Function Cron Job 配置
+# 定期執行 sync-to-firestore 函數，消費 outbox 事件佇列
+
+# ⚠️ 測試環境配置：每 5 秒執行一次（快速驗證同步結果）
+# 🚨 正式環境請改回：*/30 * * * * *（每 30 秒）
+- name: sync-orders-to-firestore
+  schedule: "*/5 * * * * *"  # 每 5 秒（測試用）
+  function: sync-to-firestore
+  description: "同步訂單變更到 Firestore（Outbox Pattern）- 測試環境高頻率"
+
+# 每天凌晨 2 點清理舊事件（保留最近 7 天）
+- name: cleanup-old-outbox-events
+  schedule: "0 2 * * *"  # 每天 02:00
+  function: cleanup-outbox
+  description: "清理 7 天前的已處理 outbox 事件"
+
+sql Edge改5秒 30秒版本
+D:\repo\supabase\update-cron-to-5-seconds.sql
+D:\repo\supabase\restore-cron-to-30-seconds.sql
+
+啟動 Backend 服務
+✅ 執行 cd backend && npm run dev
+✅ Backend 成功啟動並運行在端口 3000
+✅ 驗證健康檢查端點正常工作
+2. 創建啟動腳本
+✅  scripts/start-all-services.bat - 一鍵啟動所有服務
+✅ 自動檢查依賴
+✅ 顯示服務地址和測試命令
+
+立即測試（驗證修復）
+步驟 1: 確認 Backend 正在運行
+# Backend 應該已經在 Terminal ID 5 中運行
+# 驗證：
+curl http://localhost:3000/health
+後續使用（推薦）
+方法 1: 使用啟動腳本
+# 每次開發前執行
+scripts\start-all-services.bat
+方法 2: 手動啟動
+# Terminal 1: 啟動 Backend
+cd backend
+npm run dev
+
+# Terminal 2: 啟動 Flutter
+cd mobile
+flutter run --flavor customer

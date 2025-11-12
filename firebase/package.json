@@ -1,0 +1,42 @@
+{
+  "name": "firebase-root",
+  "version": "1.0.0",
+  "description": "Firebase project root for testing and migrations",
+  "scripts": {
+    "test": "jest --testEnvironment=node",
+    "test:rules": "jest test/firestore-rules-phase1.test.js --testEnvironment=node",
+    "test:watch": "jest --watch --testEnvironment=node",
+    "migrate:users": "node migrations/add-user-language-preferences.js",
+    "migrate:rooms": "node migrations/add-chat-room-member-ids.js",
+    "migrate:messages": "node migrations/add-message-detected-lang.js",
+    "migrate:all": "npm run migrate:users && npm run migrate:rooms",
+    "deploy:rules": "firebase deploy --only firestore:rules",
+    "deploy:indexes": "firebase deploy --only firestore:indexes",
+    "deploy:all": "firebase deploy --only firestore"
+  },
+  "keywords": [
+    "firebase",
+    "firestore",
+    "testing"
+  ],
+  "author": "RelayGo Dev",
+  "license": "MIT",
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.0",
+    "jest": "^29.7.0"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/test/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "migrations/**/*.js",
+      "!**/node_modules/**"
+    ]
+  }
+}
+

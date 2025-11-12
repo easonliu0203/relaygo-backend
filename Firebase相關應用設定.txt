@@ -1,0 +1,61 @@
+Firebase 
+Firestore Database註冊地區 台灣 測試模式
+Realtime Database 註冊地區 新加坡 測試模式
+Supabase/Postgres 註冊地區 東京
+
+專案名稱
+ride-platform
+專案 ID
+ride-platform-f1676
+專案編號
+930299492291
+Web API 金鑰
+AIzaSyB65u4NIq8HhaPs4hr9G0eoOYRP1y6z-sQ
+
+==============================
+google商店上app名稱：Relay GO
+應用程式 ID
+1:930299492291:android:e393786c0728270d33ef76
+應用程式暱稱
+Relay GO
+套件名稱
+com.relaygo.customer
+`google-services.json` (Android)客戶端 放置位置
+
+keytool -genkey -v -keystore Relay-GO.jks -alias Relay-GO-key -keyalg RSA -keysize 2048 -validity 10000
+gfhyhjjfhjytjjhukkn
+==============================
+google商店上app名稱：Relay GO Driver
+應用程式 ID
+1:930299492291:android:c7b6d344a3ca1dc833ef76
+應用程式暱稱
+Relay GO D
+套件名稱
+com.relaygo.driver
+`google-services.json` (Android)司機端 放置位置
+
+keytool -genkey -v -keystore Relay-GO-driver.jks -alias Relay-GO-driver-key -keyalg RSA -keysize 2048 -validity 10000
+isdipjmlbpijoaqef
+==============================
+
+apple商店上app名稱：Relay GO
+應用程式 ID
+1:930299492291:ios:ee737706cea5f41233ef76
+編碼應用程式 ID
+app-1-930299492291-ios-ee737706cea5f41233ef76
+應用程式暱稱
+Relay GO I
+軟體包 ID
+com.relaygo.customer.ios
+`GoogleService-Info.plist` (iOS)客戶端 放置位置
+
+apple商店上app名稱：Relay GO Driver
+應用程式 ID
+1:930299492291:ios:2a18ada03f18cd4533ef76
+編碼應用程式 ID
+app-1-930299492291-ios-2a18ada03f18cd4533ef76
+應用程式暱稱
+Relay GO D I
+軟體包 ID
+com.relaygo.driver.ios
+`GoogleService-Info.plist` (iOS)司機端 放置位置

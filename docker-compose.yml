@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 資料庫
+  postgres:
+    image: postgres:15-alpine
+    container_name: ride_booking_postgres
+    environment:
+      POSTGRES_DB: ride_booking_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/seeds:/docker-entrypoint-initdb.d/seeds
+    networks:
+      - ride_booking_network
+
+  # Redis 快取
+  redis:
+    image: redis:7-alpine
+    container_name: ride_booking_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ride_booking_network
+
+  # 後端 API 服務
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: ride_booking_backend
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/ride_booking_db
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - ride_booking_network
+    command: npm run dev
+
+  # Web 後台管理
+  web-admin:
+    build:
+      context: ./web-admin
+      dockerfile: Dockerfile.dev
+    container_name: ride_booking_web_admin
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./web-admin:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - ride_booking_network
+    command: npm run dev
+
+  # pgAdmin (資料庫管理工具)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ride_booking_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - ride_booking_network
+    profiles:
+      - tools
+
+  # Mailhog (郵件測試工具)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: ride_booking_mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - ride_booking_network
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  ride_booking_network:
+    driver: bridge

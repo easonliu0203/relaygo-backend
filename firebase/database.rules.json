@@ -1,0 +1,55 @@
+{
+  "rules": {
+    // 即時位置追蹤
+    "driver_locations": {
+      "$driverId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $driverId",
+        ".validate": "newData.hasChildren(['lat', 'lng', 'timestamp', 'heading'])"
+      }
+    },
+    
+    // 即時訂單狀態
+    "booking_status": {
+      "$bookingId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (root.child('bookings').child($bookingId).child('customerId').val() == auth.uid || root.child('bookings').child($bookingId).child('driverId').val() == auth.uid)",
+        ".validate": "newData.hasChildren(['status', 'timestamp'])"
+      }
+    },
+    
+    // 即時聊天
+    "chats": {
+      "$chatId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "messages": {
+          "$messageId": {
+            ".validate": "newData.hasChildren(['senderId', 'message', 'timestamp']) && newData.child('senderId').val() == auth.uid"
+          }
+        }
+      }
+    },
+    
+    // 司機線上狀態
+    "driver_online_status": {
+      "$driverId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $driverId",
+        ".validate": "newData.hasChildren(['isOnline', 'lastSeen'])"
+      }
+    },
+    
+    // 系統通知
+    "notifications": {
+      "$userId": {
+        ".read": "auth != null && auth.uid == $userId",
+        ".write": "auth != null && (auth.uid == $userId || auth.token.admin == true)"
+      }
+    },
+    
+    // 預設拒絕所有其他存取
+    ".read": false,
+    ".write": false
+  }
+}
