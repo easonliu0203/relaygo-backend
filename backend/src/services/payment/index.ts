@@ -1,15 +1,24 @@
 // 支付服務統一入口
-import { PaymentProviderFactory, PaymentProviderType } from './PaymentProvider';
+import { PaymentProviderFactory, PaymentProviderType, PaymentService } from './PaymentProvider';
 import { MockPaymentProvider } from './providers/MockPaymentProvider';
 import { OfflinePaymentProvider } from './providers/OfflinePaymentProvider';
+import { GomypayProvider } from './providers/GomypayProvider';
 import { paymentConfig } from '../../config/paymentConfig';
 
 // 註冊所有支付提供者
 export function initializePaymentProviders(): void {
   // 註冊模擬支付提供者 (封測階段)
+  // ✅ 修復：設置 autoMarkAsPaid: false，需要跳轉到 GoMyPay 支付頁面
   PaymentProviderFactory.registerProvider(
     PaymentProviderType.MOCK,
-    new MockPaymentProvider()
+    new MockPaymentProvider({
+      autoMarkAsPaid: false,  // ❌ 不自動標記為已付款，需要跳轉到 GoMyPay
+      successRate: 0.95,      // 95% 成功率
+      processingDelay: 1500,  // 1.5秒延遲
+      enableFailureSimulation: true,
+      realAmountTesting: true,
+      logTransactions: true
+    })
   );
 
   // 註冊線下支付提供者 (封測階段)
@@ -18,11 +27,17 @@ export function initializePaymentProviders(): void {
     new OfflinePaymentProvider()
   );
 
-  // TODO: 正式版本時註冊真實支付提供者
-  // PaymentProviderFactory.registerProvider(
-  //   PaymentProviderType.CREDIT_CARD,
-  //   new CreditCardPaymentProvider()
-  // );
+  // 註冊 GoMyPay 支付提供者
+  PaymentProviderFactory.registerProvider(
+    PaymentProviderType.GOMYPAY,
+    new GomypayProvider({
+      merchantId: process.env.GOMYPAY_MERCHANT_ID || '478A0C2370B2C364AACB347DE0754E14',
+      apiKey: process.env.GOMYPAY_API_KEY || 'f0qbvm3c0qb2qdjxwku59wimwh495271',
+      isTestMode: process.env.GOMYPAY_TEST_MODE === 'true',
+      returnUrl: process.env.GOMYPAY_RETURN_URL || 'https://api.relaygo.pro/api/payment/gomypay/return',
+      callbackUrl: process.env.GOMYPAY_CALLBACK_URL || 'https://api.relaygo.pro/api/payment/gomypay/callback'
+    })
+  );
 
   console.log('Payment providers initialized:', PaymentProviderFactory.getAvailableProviders());
 }
@@ -30,7 +45,6 @@ export function initializePaymentProviders(): void {
 // 獲取當前支付服務實例
 export function getPaymentService() {
   const config = paymentConfig.getCurrentConfig();
-  const { PaymentService } = require('./PaymentProvider');
   return new PaymentService(config);
 }
 
@@ -183,7 +197,7 @@ export class PaymentEventHandler {
 export {
   PaymentProviderType,
   PaymentProviderFactory,
-  paymentConfig
+  PaymentService
 } from './PaymentProvider';
 
 export {
@@ -193,3 +207,6 @@ export {
 export {
   OfflinePaymentProvider
 } from './providers/OfflinePaymentProvider';
+
+// 匯出支付配置
+export { paymentConfig } from '../../config/paymentConfig';

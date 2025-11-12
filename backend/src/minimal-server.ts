@@ -3,7 +3,10 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import bookingFlowRoutes from './routes/bookingFlow-minimal';
 import bookingsRoutes from './routes/bookings';
+import gomypayRoutes from './routes/gomypay';
+import pricingRoutes from './routes/pricing';
 import { initializeFirebase } from './config/firebase';
+import { initializePaymentProviders } from './services/payment';
 
 // 載入環境變數
 dotenv.config();
@@ -13,6 +16,14 @@ try {
   initializeFirebase();
 } catch (error) {
   console.error('⚠️  Firebase Admin SDK 初始化失敗，聊天室功能可能無法使用');
+}
+
+// 初始化支付提供者
+try {
+  initializePaymentProviders();
+  console.log('✅ 支付提供者初始化成功');
+} catch (error) {
+  console.error('⚠️  支付提供者初始化失敗:', error);
 }
 
 const app = express();
@@ -39,6 +50,8 @@ app.get('/health', (_req, res) => {
 // API 路由
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/booking-flow', bookingFlowRoutes);
+app.use('/api/payment', gomypayRoutes); // GoMyPay 回調路由（公開，不需要認證）
+app.use('/api/pricing', pricingRoutes); // 價格路由（公開）
 
 // 404 處理
 app.use((_req, res) => {

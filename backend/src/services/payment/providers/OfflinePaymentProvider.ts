@@ -71,7 +71,7 @@ export class OfflinePaymentProvider implements PaymentProvider {
       transactionId,
       status: transaction.status,
       amount: transaction.amount,
-      paidAt: transaction.confirmedAt,
+      paidAt: transaction.confirmedAt || new Date(),
       metadata: {
         provider: 'offline',
         requiresManualConfirmation: transaction.status === PaymentStatusType.PENDING,
