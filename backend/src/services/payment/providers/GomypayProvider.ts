@@ -47,6 +47,8 @@ export class GomypayProvider implements PaymentProvider {
   async initiatePayment(request: PaymentRequest): Promise<PaymentResponse> {
     try {
       console.log(`[GoMyPay] 發起支付 - 訂單: ${request.orderId}, 金額: ${request.amount}`);
+      console.log(`[GoMyPay] Return URL: ${this.config.returnUrl}`);
+      console.log(`[GoMyPay] Callback URL: ${this.config.callbackUrl}`);
 
       // 生成交易驗證密碼（MD5）
       const chkValue = this.generateCheckValue(request.orderId, request.amount);
@@ -64,6 +66,7 @@ export class GomypayProvider implements PaymentProvider {
 
       console.log(`[GoMyPay] 支付 URL 生成成功`);
       console.log(`[GoMyPay] 訂單號: ${request.orderId}`);
+      console.log(`[GoMyPay] 完整支付 URL: ${paymentUrl}`);
 
       return {
         success: true,
