@@ -443,9 +443,11 @@ class BookingService {
   /// 用於即時畫面展示，資料來自 Supabase 的單向鏡像
   ///
   /// 進行中訂單包含以下狀態：
-  /// - pending: 待配對（待付訂金或待派單）
+  /// - pendingPayment: 待付訂金（訂單已創建，等待支付訂金）
+  /// - pending: 待配對（已付訂金，等待派單）
   /// - awaitingDriver: 待司機確認（已分配司機，等待司機確認接單）
   /// - matched: 已配對（司機已確認接單）
+  /// - onTheWay: 正在路上（司機已出發或已到達）
   /// - inProgress: 行程進行中
   /// - awaitingBalance: 待付尾款（行程已結束，等待支付尾款）
   Stream<List<BookingOrder>> getActiveBookings() {
@@ -458,11 +460,13 @@ class BookingService {
         .collection('orders_rt')
         .where('customerId', isEqualTo: currentUserId)
         .where('status', whereIn: [
+          BookingStatus.pendingPayment.name,      // ⭐ 新增：待付訂金
           BookingStatus.pending.name,
-          BookingStatus.awaitingDriver.name,      // ⭐ 新增：待司機確認
+          BookingStatus.awaitingDriver.name,      // 待司機確認
           BookingStatus.matched.name,
+          BookingStatus.onTheWay.name,            // ⭐ 新增：正在路上
           BookingStatus.inProgress.name,
-          BookingStatus.awaitingBalance.name,     // ⭐ 新增：待付尾款
+          BookingStatus.awaitingBalance.name,     // 待付尾款
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -497,6 +501,7 @@ class BookingService {
   /// - pending: 待配對（司機可以看到待接單的訂單）
   /// - awaitingDriver: 待司機確認（已分配司機，等待司機確認接單）
   /// - matched: 已配對（司機已確認接單）
+  /// - onTheWay: 正在路上（司機已出發或已到達）
   /// - inProgress: 行程進行中
   /// - awaitingBalance: 待付尾款（行程已結束，等待客戶支付尾款）
   ///
@@ -516,10 +521,11 @@ class BookingService {
         .where('driverId', isEqualTo: currentUserId)
         .where('status', whereIn: [
           BookingStatus.pending.name,
-          BookingStatus.awaitingDriver.name,      // ⭐ 新增：待司機確認
+          BookingStatus.awaitingDriver.name,      // 待司機確認
           BookingStatus.matched.name,
+          BookingStatus.onTheWay.name,            // ⭐ 新增：正在路上
           BookingStatus.inProgress.name,
-          BookingStatus.awaitingBalance.name,     // ⭐ 新增：待付尾款
+          BookingStatus.awaitingBalance.name,     // 待付尾款
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
