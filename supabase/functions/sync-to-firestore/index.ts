@@ -325,26 +325,32 @@ async function syncBookingToFirestore(event: OutboxEvent): Promise<void> {
     depositPaid: false,
 
     // 狀態映射：將 Supabase 狀態轉換為 Flutter APP 期望的狀態
-    // ✅ 修改：手動派單後顯示「待配對」，司機確認後顯示「已配對」
-    // 長期方案：修改 Flutter APP 的 BookingStatus 枚舉以支援所有狀態
+    // ✅ 四階段分類：付款與搜尋 → 服務中 → 結算 → 最終
     status: (() => {
       const supabaseStatus = bookingData.status;
       console.log(`[狀態映射] Supabase 狀態: ${supabaseStatus}`);
 
       const statusMapping: { [key: string]: string } = {
-        'pending_payment': 'pending',       // 待付訂金 → 待配對
-        'paid_deposit': 'pending',          // 已付訂金 → 待配對（等待派單）
-        'assigned': 'awaitingDriver',       // 已分配司機 → 待司機確認
-        'matched': 'awaitingDriver',        // 手動派單 → 待司機確認
-        'driver_confirmed': 'matched',      // 司機確認後 → 已配對
-        'driver_departed': 'inProgress',    // 司機已出發 → 進行中
-        'driver_arrived': 'inProgress',     // 司機已到達 → 進行中
-        'trip_started': 'inProgress',       // 行程開始 → 進行中
-        'trip_ended': 'awaitingBalance',    // 行程結束 → 待付尾款
-        'pending_balance': 'awaitingBalance', // 待付尾款 → 待付尾款
-        'in_progress': 'inProgress',
-        'completed': 'completed',           // 訂單完成 → 已完成
-        'cancelled': 'cancelled',           // 已取消 → 已取消
+        // === 階段 I: 付款與搜尋 ===
+        'pending_payment': 'PENDING_PAYMENT',   // 待付訂金 → 待付訂金
+        'paid_deposit': 'pending',              // 已付訂金 → 待配對（等待派單）
+        'assigned': 'awaitingDriver',           // 已分配司機 → 待司機確認
+        'matched': 'awaitingDriver',            // 手動派單 → 待司機確認
+
+        // === 階段 II: 服務中 ===
+        'driver_confirmed': 'matched',          // 司機確認後 → 已配對
+        'driver_departed': 'ON_THE_WAY',        // 司機已出發 → 正在路上
+        'driver_arrived': 'ON_THE_WAY',         // 司機已到達 → 正在路上
+        'trip_started': 'inProgress',           // 行程開始 → 進行中
+        'in_progress': 'inProgress',            // 通用進行中狀態
+
+        // === 階段 III: 結算 ===
+        'trip_ended': 'awaitingBalance',        // 行程結束 → 待付尾款
+        'pending_balance': 'awaitingBalance',   // 待付尾款 → 待付尾款
+
+        // === 階段 IV: 最終 ===
+        'completed': 'completed',               // 訂單完成 → 已完成
+        'cancelled': 'cancelled',               // 已取消 → 已取消
       };
 
       const firestoreStatus = statusMapping[supabaseStatus] || 'pending';
