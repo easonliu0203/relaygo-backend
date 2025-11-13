@@ -141,22 +141,30 @@ async function checkDriverButtonIssue() {
 
 /**
  * 根據 Supabase 狀態獲取預期的 Firestore 狀態
+ * 四階段分類：付款與搜尋 → 服務中 → 結算 → 最終
  */
 function getExpectedFirestoreStatus(supabaseStatus) {
   const statusMapping = {
-    'pending_payment': 'pending',
-    'paid_deposit': 'pending',
-    'assigned': 'awaitingDriver',
-    'matched': 'awaitingDriver',        // ✅ 手動派單 → 待司機確認
-    'driver_confirmed': 'matched',      // ✅ 司機確認後 → 已配對
-    'driver_departed': 'inProgress',
-    'driver_arrived': 'inProgress',
-    'trip_started': 'inProgress',
-    'trip_ended': 'awaitingBalance',
-    'pending_balance': 'awaitingBalance',
-    'in_progress': 'inProgress',
-    'completed': 'completed',
-    'cancelled': 'cancelled',
+    // === 階段 I: 付款與搜尋 ===
+    'pending_payment': 'PENDING_PAYMENT',   // 待付訂金 → 待付訂金
+    'paid_deposit': 'pending',              // 已付訂金 → 待配對（等待派單）
+    'assigned': 'awaitingDriver',           // 已分配司機 → 待司機確認
+    'matched': 'awaitingDriver',            // 手動派單 → 待司機確認
+
+    // === 階段 II: 服務中 ===
+    'driver_confirmed': 'matched',          // 司機確認後 → 已配對
+    'driver_departed': 'ON_THE_WAY',        // 司機已出發 → 正在路上
+    'driver_arrived': 'ON_THE_WAY',         // 司機已到達 → 正在路上
+    'trip_started': 'inProgress',           // 行程開始 → 進行中
+    'in_progress': 'inProgress',            // 通用進行中狀態
+
+    // === 階段 III: 結算 ===
+    'trip_ended': 'awaitingBalance',        // 行程結束 → 待付尾款
+    'pending_balance': 'awaitingBalance',   // 待付尾款 → 待付尾款
+
+    // === 階段 IV: 最終 ===
+    'completed': 'completed',               // 訂單完成 → 已完成
+    'cancelled': 'cancelled',               // 已取消 → 已取消
   };
 
   return statusMapping[supabaseStatus] || 'pending';
