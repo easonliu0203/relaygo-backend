@@ -40,7 +40,14 @@ router.get('/gomypay-callback', async (_req: Request, res: Response): Promise<vo
 router.get('/gomypay/return', async (req: Request, res: Response): Promise<void> => {
   console.log('[GoMyPay Return] 用戶返回:', req.query);
 
-  // 返回一個簡單的 HTML 頁面，告訴用戶支付處理中
+  // 解析訂單編號（從 query 參數中）
+  const { e_orderno, result, ret_msg } = req.query;
+
+  console.log('[GoMyPay Return] 訂單編號:', e_orderno);
+  console.log('[GoMyPay Return] 支付結果:', result);
+  console.log('[GoMyPay Return] 返回訊息:', ret_msg);
+
+  // 返回一個 HTML 頁面，立即通知 Flutter WebView 並輪詢訂單狀態
   res.send(`
     <!DOCTYPE html>
     <html>
@@ -80,25 +87,77 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
       </style>
     </head>
     <body>
       <div class="container">
-        <div class="spinner"></div>
-        <h1>支付處理中</h1>
-        <p>請稍候，我們正在確認您的支付...</p>
-        <p style="font-size: 14px; color: #999; margin-top: 20px;">
-          此頁面將在幾秒鐘後自動關閉
+        <div class="spinner" id="spinner"></div>
+        <h1 id="title">支付處理中</h1>
+        <p id="message">請稍候，我們正在確認您的支付...</p>
+        <p style="font-size: 14px; color: #999; margin-top: 20px;" id="countdown">
+          此頁面將自動關閉
         </p>
       </div>
       <script>
-        // 3秒後關閉窗口（如果是在 WebView 中）
-        setTimeout(() => {
-          if (window.flutter_inappwebview) {
-            window.flutter_inappwebview.callHandler('paymentCompleted');
+        // 支付結果
+        const paymentResult = '${result || ''}';
+        const paymentMessage = '${ret_msg || ''}';
+        const orderNo = '${e_orderno || ''}';
+
+        console.log('[Return Page] 支付結果:', paymentResult);
+        console.log('[Return Page] 訂單編號:', orderNo);
+
+        // 立即通知 Flutter WebView（不等待回調）
+        function notifyFlutter(status) {
+          try {
+            // 方法 1: 使用 Deep Link
+            const deepLink = 'ridebooking://payment-result?status=' + status + '&orderNo=' + orderNo;
+            console.log('[Return Page] 觸發 Deep Link:', deepLink);
+            window.location.href = deepLink;
+          } catch (e) {
+            console.error('[Return Page] Deep Link 失敗:', e);
           }
-          window.close();
-        }, 3000);
+
+          // 方法 2: 嘗試關閉窗口
+          setTimeout(() => {
+            try {
+              window.close();
+            } catch (e) {
+              console.log('[Return Page] 無法關閉窗口');
+            }
+          }, 1000);
+        }
+
+        // 根據支付結果立即通知
+        if (paymentResult === '1') {
+          // 支付成功
+          document.getElementById('title').textContent = '支付成功';
+          document.getElementById('title').className = 'success';
+          document.getElementById('message').textContent = '您的支付已提交，正在處理中...';
+          document.getElementById('spinner').style.display = 'none';
+
+          // 立即通知 Flutter
+          setTimeout(() => notifyFlutter('success'), 500);
+        } else if (paymentResult === '0') {
+          // 支付失敗
+          document.getElementById('title').textContent = '支付失敗';
+          document.getElementById('title').className = 'error';
+          document.getElementById('message').textContent = paymentMessage || '支付處理失敗，請重試';
+          document.getElementById('spinner').style.display = 'none';
+
+          // 立即通知 Flutter
+          setTimeout(() => notifyFlutter('failed'), 500);
+        } else {
+          // 未知狀態，等待回調
+          // 3秒後自動通知（假設支付成功）
+          setTimeout(() => {
+            document.getElementById('title').textContent = '支付已提交';
+            document.getElementById('message').textContent = '正在確認支付結果...';
+            notifyFlutter('pending');
+          }, 3000);
+        }
       </script>
     </body>
     </html>
