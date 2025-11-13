@@ -228,16 +228,33 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
     console.log('[GOMYPAY Callback] ⚠️  暫時跳過 str_check 驗證');
 
     // 5. 解析訂單編號
-    // 新格式 v3：{16字符bookingId}{1字符類型D/B}{8字符時間戳} = 25字符
-    // 範例：d9a63c27914d44deB70517422
-    // 新格式 v2：{20字符bookingId}{1字符類型D/B}{4字符時間戳} = 25字符
-    // 範例：6ee49212c05e4ccf9093D8737
-    // 舊格式（向後兼容）：BOOKING_{bookingId}_{paymentType}_{timestamp}
+    // 支持多種格式：
+    // 1. BK 格式：BK{timestamp} (例: BK1762997624214) - 當前使用
+    // 2. 新格式 v3：{16字符bookingId}{1字符類型D/B}{8字符時間戳} = 25字符
+    //    範例：d9a63c27914d44deB70517422
+    // 3. 新格式 v2：{20字符bookingId}{1字符類型D/B}{4字符時間戳} = 25字符
+    //    範例：6ee49212c05e4ccf9093D8737
+    // 4. 舊格式：BOOKING_{bookingId}_{paymentType}_{timestamp}
 
     let bookingId: string;
     let paymentType: string;
 
-    if (e_orderno.startsWith('BOOKING_')) {
+    if (e_orderno.startsWith('BK')) {
+      // BK 格式：BK{timestamp}
+      // 這是 booking_number 的實際格式
+      // 需要從資料庫查詢 booking_number 來獲取 booking.id
+      console.log('[GOMYPAY Callback] 檢測到 BK 格式訂單編號:', e_orderno);
+
+      // 暫時將整個 booking_number 作為查詢條件
+      // 稍後會用 booking_number 查詢資料庫獲取真實的 booking.id
+      bookingId = e_orderno; // 使用 booking_number 作為臨時 ID
+      paymentType = 'deposit'; // 預設為訂金支付（目前只支持訂金）
+
+      console.log('[GOMYPAY Callback] BK 格式解析:', {
+        bookingNumber: e_orderno,
+        paymentType
+      });
+    } else if (e_orderno.startsWith('BOOKING_')) {
       // 舊格式
       const orderParts = e_orderno.split('_');
       if (orderParts.length < 3) {
@@ -247,14 +264,8 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
       }
       bookingId = orderParts[1];
       paymentType = orderParts[2].toLowerCase(); // 'deposit' or 'balance'
-    } else {
+    } else if (e_orderno.length === 25) {
       // 新格式：25字符
-      if (e_orderno.length !== 25) {
-        console.error('[GOMYPAY Callback] 訂單編號長度錯誤:', e_orderno, '長度:', e_orderno.length);
-        res.status(400).send('Invalid OrderID length');
-        return;
-      }
-
       // 解析訂單編號
       // 檢測格式版本：第17個字符是 D/B 表示 v3，第21個字符是 D/B 表示 v2
       const char17 = e_orderno.substring(16, 17);
@@ -277,6 +288,10 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
         res.status(400).send('Invalid OrderID format');
         return;
       }
+    } else {
+      console.error('[GOMYPAY Callback] 無法識別訂單編號格式:', e_orderno, '長度:', e_orderno.length);
+      res.status(400).send('Invalid OrderID format');
+      return;
     }
 
     console.log('[GOMYPAY Callback] 解析訂單:', {
@@ -311,7 +326,25 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
     let booking: any;
     let bookingError: any;
 
-    if (bookingId.length === 16 || bookingId.length === 20) {
+    if (bookingId.startsWith('BK')) {
+      // BK 格式：使用 booking_number 查詢
+      console.log('[GOMYPAY Callback] 使用 booking_number 查詢:', bookingId);
+
+      const result = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('booking_number', bookingId)
+        .single();
+
+      booking = result.data;
+      bookingError = result.error;
+
+      if (result.error) {
+        console.error('[GOMYPAY Callback] ❌ 查詢訂單失敗:', result.error);
+      } else {
+        console.log('[GOMYPAY Callback] ✅ 找到訂單:', booking?.id);
+      }
+    } else if (bookingId.length === 16 || bookingId.length === 20) {
       // 新格式 v2/v3：使用前16或20字符查詢（需要還原完整 UUID）
       // 使用 LIKE 查詢匹配的訂單
       let bookingIdPattern: string;
