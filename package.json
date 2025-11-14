@@ -5,8 +5,10 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon src/minimal-server.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.min.json",
     "build:min": "tsc -p tsconfig.min.json",
+    "build:full": "tsc",
+    "postinstall": "echo 'Using tsconfig.min.json for build'",
     "start": "node dist/minimal-server.js",
     "test": "jest",
     "test:watch": "jest --watch",
