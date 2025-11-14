@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../shared/providers/booking_provider.dart';
+import '../../../../core/services/payment/payment_models.dart';
 
 class PaymentDepositPage extends ConsumerStatefulWidget {
   const PaymentDepositPage({super.key});
@@ -323,13 +324,30 @@ class _PaymentDepositPageState extends ConsumerState<PaymentDepositPage> {
       final bookingState = ref.read(bookingStateProvider);
       if (bookingState is BookingStateSuccess) {
         // 使用 Supabase API 處理支付
-        await ref.read(bookingStateProvider.notifier).payDepositWithSupabase(
+        final paymentResult = await ref.read(bookingStateProvider.notifier).payDepositWithSupabase(
           bookingState.order.id,
           _selectedPaymentMethod,
         );
 
-        // 導航到預約成功頁面
-        if (mounted) {
+        if (!mounted) return;
+
+        // ✅ 檢查是否需要跳轉到支付頁面（GoMyPay 等第三方支付）
+        if (paymentResult['requiresRedirect'] == true && paymentResult['paymentUrl'] != null) {
+          // 跳轉到 GoMyPay 支付頁面
+          debugPrint('[PaymentDeposit] 跳轉到支付頁面: ${paymentResult['paymentUrl']}');
+          await context.push('/payment-webview', extra: {
+            'url': paymentResult['paymentUrl'],
+            'bookingId': bookingState.order.id,
+            'paymentType': PaymentType.deposit,
+          });
+
+          // 支付完成後，跳轉到預約成功頁面
+          if (mounted) {
+            context.pushReplacement('/booking-success/${bookingState.order.id}');
+          }
+        } else {
+          // 自動支付（Mock）或不需要跳轉，直接導航到預約成功頁面
+          debugPrint('[PaymentDeposit] 自動支付完成，跳轉到預約成功頁面');
           context.pushReplacement('/booking-success/${bookingState.order.id}');
         }
       } else if (bookingState is BookingStateError) {

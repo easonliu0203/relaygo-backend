@@ -86,7 +86,9 @@ class BookingStateNotifier extends StateNotifier<BookingState> {
   }
 
   /// 支付訂金（使用 Supabase API）
-  Future<void> payDepositWithSupabase(String bookingId, String paymentMethod) async {
+  ///
+  /// 返回支付結果，包含 paymentUrl（如果需要跳轉）
+  Future<Map<String, dynamic>> payDepositWithSupabase(String bookingId, String paymentMethod) async {
     state = const BookingStateLoading();
 
     try {
@@ -107,8 +109,12 @@ class BookingStateNotifier extends StateNotifier<BookingState> {
         );
         state = BookingStateSuccess(updatedOrder);
       }
+
+      // ✅ 返回支付結果（包含 paymentUrl 等資訊）
+      return result;
     } catch (e) {
       state = BookingStateError(e.toString());
+      rethrow;  // ✅ 重新拋出異常，讓調用方處理
     }
   }
 
