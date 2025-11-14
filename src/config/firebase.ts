@@ -114,17 +114,36 @@ export function initializeFirebase(): admin.app.App {
       console.log(`  - Client Email: ${clientEmail}`);
 
       try {
-        firebaseApp = admin.initializeApp({
-          credential: admin.credential.cert({
-            projectId,
-            privateKey,
-            clientEmail,
-          }),
+        // Firebase Admin SDK v12+ 需要明確的配置
+        const credential = admin.credential.cert({
           projectId,
+          privateKey,
+          clientEmail,
         });
+
+        // 測試憑證是否有效
+        console.log('[Firebase Init] 憑證對象創建成功');
+        console.log(`  - Credential type: ${typeof credential}`);
+
+        firebaseApp = admin.initializeApp({
+          credential,
+          projectId,
+          // Firebase Admin SDK v12+ 建議明確指定 databaseURL（即使不使用 Realtime Database）
+          databaseURL: `https://${projectId}.firebaseio.com`,
+        });
+
         console.log('✅ Firebase Admin SDK 已初始化');
         console.log(`  - App Name: ${firebaseApp.name}`);
         console.log(`  - Project ID: ${firebaseApp.options.projectId}`);
+
+        // 測試 Firestore 連接
+        try {
+          const firestore = admin.firestore();
+          console.log('[Firebase Init] Firestore 實例創建成功');
+          console.log(`  - Firestore settings: ${JSON.stringify(firestore.settings)}`);
+        } catch (firestoreError) {
+          console.error('[Firebase Init] ⚠️  Firestore 實例創建失敗:', firestoreError);
+        }
       } catch (credError: unknown) {
         console.error('❌ Firebase Admin SDK 憑證初始化失敗:');
         if (credError instanceof Error) {
@@ -180,10 +199,19 @@ export async function createChatRoomInFirestore(chatRoomData: {
   bookingTime?: string;
 }): Promise<string> {
   try {
+    console.log('[Firebase] 開始創建聊天室到 Firestore:', chatRoomData.bookingId);
+
+    // 確保 Firebase 已初始化
+    if (!firebaseApp) {
+      console.log('[Firebase] Firebase App 未初始化，正在初始化...');
+      initializeFirebase();
+    }
+
     const firestore = getFirestore();
     const { bookingId } = chatRoomData;
 
-    console.log('[Firebase] 開始創建聊天室到 Firestore:', bookingId);
+    console.log('[Firebase] Firestore 實例已獲取');
+    console.log('[Firebase] 準備寫入聊天室資料...');
 
     // 準備聊天室資料
     const chatRoom = {
@@ -193,7 +221,7 @@ export async function createChatRoomInFirestore(chatRoomData: {
       customerName: chatRoomData.customerName || '客戶',
       driverName: chatRoomData.driverName || '司機',
       pickupAddress: chatRoomData.pickupAddress || '',
-      bookingTime: chatRoomData.bookingTime 
+      bookingTime: chatRoomData.bookingTime
         ? admin.firestore.Timestamp.fromDate(new Date(chatRoomData.bookingTime))
         : admin.firestore.Timestamp.now(),
       lastMessage: null,
@@ -204,15 +232,39 @@ export async function createChatRoomInFirestore(chatRoomData: {
       updatedAt: admin.firestore.Timestamp.now(),
     };
 
+    console.log('[Firebase] 聊天室資料已準備:', {
+      bookingId,
+      customerId: chatRoomData.customerId,
+      driverId: chatRoomData.driverId,
+    });
+
     // 寫入 Firestore（使用 bookingId 作為文檔 ID）
+    console.log('[Firebase] 正在寫入 Firestore...');
     await firestore.collection('chat_rooms').doc(bookingId).set(chatRoom);
 
     console.log('[Firebase] ✅ 聊天室創建成功:', bookingId);
-    console.log('[Firebase] 聊天室資料:', JSON.stringify(chatRoom, null, 2));
 
     return bookingId;
-  } catch (error) {
-    console.error('[Firebase] ❌ 創建聊天室失敗:', error);
+  } catch (error: unknown) {
+    console.error('[Firebase] ❌ 創建聊天室失敗:');
+    if (error instanceof Error) {
+      console.error(`  - 錯誤訊息: ${error.message}`);
+      console.error(`  - 錯誤名稱: ${error.name}`);
+      console.error(`  - 錯誤堆棧: ${error.stack}`);
+    } else {
+      console.error(`  - 錯誤: ${String(error)}`);
+    }
+
+    // 檢查是否是認證錯誤
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('UNAUTHENTICATED') || errorMessage.includes('authentication')) {
+      console.error('[Firebase] 🔐 這是一個認證錯誤！');
+      console.error('[Firebase] 請檢查：');
+      console.error('  1. FIREBASE_PRIVATE_KEY 格式是否正確');
+      console.error('  2. Service Account 是否有 Firestore 權限');
+      console.error('  3. Firebase Admin SDK 版本是否兼容');
+    }
+
     throw error;
   }
 }
@@ -245,8 +297,16 @@ export async function sendSystemMessage(
   message: string
 ): Promise<void> {
   try {
+    console.log('[Firebase] 開始發送系統訊息:', { bookingId, message });
+
+    // 確保 Firebase 已初始化
+    if (!firebaseApp) {
+      console.log('[Firebase] Firebase App 未初始化，正在初始化...');
+      initializeFirebase();
+    }
+
     const firestore = getFirestore();
-    
+
     const systemMessage = {
       senderId: 'system',
       receiverId: 'all',
@@ -258,12 +318,14 @@ export async function sendSystemMessage(
       readAt: null,
     };
 
+    console.log('[Firebase] 正在寫入訊息到 Firestore...');
     await firestore
       .collection('chat_rooms')
       .doc(bookingId)
       .collection('messages')
       .add(systemMessage);
 
+    console.log('[Firebase] 正在更新聊天室最後訊息...');
     // 更新聊天室的最後訊息
     await firestore.collection('chat_rooms').doc(bookingId).update({
       lastMessage: message,
@@ -272,8 +334,14 @@ export async function sendSystemMessage(
     });
 
     console.log('[Firebase] ✅ 系統訊息已發送:', message);
-  } catch (error) {
-    console.error('[Firebase] ❌ 發送系統訊息失敗:', error);
+  } catch (error: unknown) {
+    console.error('[Firebase] ❌ 發送系統訊息失敗:');
+    if (error instanceof Error) {
+      console.error(`  - 錯誤訊息: ${error.message}`);
+      console.error(`  - 錯誤名稱: ${error.name}`);
+    } else {
+      console.error(`  - 錯誤: ${String(error)}`);
+    }
     // 不拋出錯誤，避免影響主流程
   }
 }
