@@ -10,6 +10,28 @@ dotenv.config();
 
 let firebaseApp: admin.app.App | null = null;
 
+/**
+ * 處理私鑰格式
+ * 支持兩種格式：
+ * 1. 包含 \n 字符串的格式（需要替換為實際換行符）
+ * 2. 已經包含實際換行符的格式（不需要處理）
+ */
+function processPrivateKey(privateKey: string | undefined): string | undefined {
+  if (!privateKey) {
+    return undefined;
+  }
+
+  // 如果私鑰包含 \n 字符串（而不是實際換行符），則替換
+  if (privateKey.includes('\\n')) {
+    console.log('[Firebase] 檢測到私鑰包含 \\n 字符串，正在轉換為實際換行符...');
+    return privateKey.replace(/\\n/g, '\n');
+  }
+
+  // 如果私鑰已經包含實際換行符，直接返回
+  console.log('[Firebase] 私鑰已包含實際換行符，無需轉換');
+  return privateKey;
+}
+
 export function initializeFirebase(): admin.app.App {
   if (firebaseApp) {
     return firebaseApp;
@@ -17,8 +39,20 @@ export function initializeFirebase(): admin.app.App {
 
   try {
     const projectId = process.env.FIREBASE_PROJECT_ID;
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    const privateKey = processPrivateKey(process.env.FIREBASE_PRIVATE_KEY);
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+
+    // 詳細日誌：檢查環境變數
+    console.log('[Firebase Init] 環境變數檢查:');
+    console.log(`  - FIREBASE_PROJECT_ID: ${projectId ? '✅' : '❌'}`);
+    console.log(`  - FIREBASE_CLIENT_EMAIL: ${clientEmail ? '✅' : '❌'}`);
+    console.log(`  - FIREBASE_PRIVATE_KEY: ${privateKey ? `✅ (長度: ${privateKey.length})` : '❌'}`);
+
+    if (privateKey) {
+      console.log(`  - Private Key 前50字符: ${privateKey.substring(0, 50)}...`);
+      console.log(`  - Private Key 包含 BEGIN: ${privateKey.includes('BEGIN PRIVATE KEY') ? '✅' : '❌'}`);
+      console.log(`  - Private Key 包含 END: ${privateKey.includes('END PRIVATE KEY') ? '✅' : '❌'}`);
+    }
 
     if (!projectId || !privateKey || !clientEmail) {
       console.warn('⚠️  Firebase Admin SDK 配置不完整，使用模擬模式');
@@ -26,13 +60,13 @@ export function initializeFirebase(): admin.app.App {
       console.warn('   - FIREBASE_PROJECT_ID');
       console.warn('   - FIREBASE_PRIVATE_KEY');
       console.warn('   - FIREBASE_CLIENT_EMAIL');
-      
+
       // 返回一個模擬的 app（用於開發環境）
       // 在生產環境中應該拋出錯誤
       if (process.env.NODE_ENV === 'production') {
         throw new Error('Firebase Admin SDK 配置不完整');
       }
-      
+
       // 開發環境：使用應用默認憑證（如果可用）
       try {
         firebaseApp = admin.initializeApp({
@@ -45,15 +79,28 @@ export function initializeFirebase(): admin.app.App {
       }
     } else {
       // 使用服務帳戶憑證初始化
-      firebaseApp = admin.initializeApp({
-        credential: admin.credential.cert({
+      console.log('[Firebase Init] 正在使用 Service Account 初始化...');
+      console.log(`  - Project ID: ${projectId}`);
+      console.log(`  - Client Email: ${clientEmail}`);
+
+      try {
+        firebaseApp = admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId,
+            privateKey,
+            clientEmail,
+          }),
           projectId,
-          privateKey,
-          clientEmail,
-        }),
-        projectId,
-      });
-      console.log('✅ Firebase Admin SDK 已初始化');
+        });
+        console.log('✅ Firebase Admin SDK 已初始化');
+        console.log(`  - App Name: ${firebaseApp.name}`);
+        console.log(`  - Project ID: ${firebaseApp.options.projectId}`);
+      } catch (credError) {
+        console.error('❌ Firebase Admin SDK 憑證初始化失敗:');
+        console.error(`  - 錯誤訊息: ${credError.message}`);
+        console.error(`  - 錯誤堆棧: ${credError.stack}`);
+        throw credError;
+      }
     }
 
     return firebaseApp;
