@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 內部儲存 -->
+    <files-path name="internal_files" path="." />
+    
+    <!-- 快取目錄 -->
+    <cache-path name="cache_files" path="." />
+    
+    <!-- 外部儲存 -->
+    <external-files-path name="external_files" path="." />
+    
+    <!-- 外部快取 -->
+    <external-cache-path name="external_cache" path="." />
+    
+    <!-- 圖片目錄 -->
+    <external-files-path name="images" path="Pictures" />
+    
+    <!-- 文件目錄 -->
+    <external-files-path name="documents" path="Documents" />
+</paths>

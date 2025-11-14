@@ -6,79 +6,39 @@ part 'booking_order.freezed.dart';
 part 'booking_order.g.dart';
 
 /// 訂單狀態枚舉
-/// 四階段分類：付款與搜尋 → 服務中 → 結算 → 最終
 enum BookingStatus {
-  // === 階段 I: 付款與搜尋 ===
-  @JsonValue('PENDING_PAYMENT')
-  pendingPayment,  // 待付訂金
-
   @JsonValue('pending')
-  pending,         // 待配對（已付訂金，等待派單）
+  pending,        // 待配對（待付訂金或待派單）
 
   @JsonValue('awaitingDriver')
-  awaitingDriver,  // 待司機確認
+  awaitingDriver, // 待司機確認
 
-  // === 階段 II: 服務中 ===
   @JsonValue('matched')
-  matched,         // 已配對
-
-  @JsonValue('ON_THE_WAY')
-  onTheWay,        // 正在路上（司機已出發或已到達）
+  matched,        // 已配對
 
   @JsonValue('inProgress')
-  inProgress,      // 進行中（行程已開始）
+  inProgress,     // 進行中
 
-  // === 階段 III: 結算 ===
   @JsonValue('awaitingBalance')
   awaitingBalance, // 待付尾款
 
-  // === 階段 IV: 最終 ===
   @JsonValue('completed')
-  completed,       // 已完成
+  completed,      // 已完成
 
   @JsonValue('cancelled')
-  cancelled,       // 已取消
+  cancelled,      // 已取消
 }
 
 /// 訂單狀態擴展方法
 extension BookingStatusExtension on BookingStatus {
-  /// 獲取 Firestore 中存儲的狀態值（對應 @JsonValue）
-  /// 用於 Firestore 查詢時的狀態匹配
-  String get firestoreValue {
-    switch (this) {
-      case BookingStatus.pendingPayment:
-        return 'PENDING_PAYMENT';
-      case BookingStatus.pending:
-        return 'pending';
-      case BookingStatus.awaitingDriver:
-        return 'awaitingDriver';
-      case BookingStatus.matched:
-        return 'matched';
-      case BookingStatus.onTheWay:
-        return 'ON_THE_WAY';
-      case BookingStatus.inProgress:
-        return 'inProgress';
-      case BookingStatus.awaitingBalance:
-        return 'awaitingBalance';
-      case BookingStatus.completed:
-        return 'completed';
-      case BookingStatus.cancelled:
-        return 'cancelled';
-    }
-  }
-
   String get displayName {
     switch (this) {
-      case BookingStatus.pendingPayment:
-        return '待付訂金';
       case BookingStatus.pending:
         return '待配對';
       case BookingStatus.awaitingDriver:
         return '待司機確認';
       case BookingStatus.matched:
         return '已配對';
-      case BookingStatus.onTheWay:
-        return '正在路上';
       case BookingStatus.inProgress:
         return '進行中';
       case BookingStatus.awaitingBalance:
@@ -92,16 +52,12 @@ extension BookingStatusExtension on BookingStatus {
 
   Color get color {
     switch (this) {
-      case BookingStatus.pendingPayment:
-        return const Color(0xFFFF6F00); // 深橙色
       case BookingStatus.pending:
         return const Color(0xFFFF9800); // 橙色
       case BookingStatus.awaitingDriver:
         return const Color(0xFFFFA726); // 淺橙色
       case BookingStatus.matched:
         return const Color(0xFF2196F3); // 藍色
-      case BookingStatus.onTheWay:
-        return const Color(0xFF00BCD4); // 青色
       case BookingStatus.inProgress:
         return const Color(0xFF4CAF50); // 綠色
       case BookingStatus.awaitingBalance:
@@ -229,7 +185,7 @@ class BookingOrder with _$BookingOrder {
       depositAmount: (data['depositAmount'] ?? 0.0).toDouble(),
       depositPaid: data['depositPaid'] ?? false,
       status: BookingStatus.values.firstWhere(
-        (status) => status.firestoreValue == data['status'],
+        (status) => status.name == data['status'],
         orElse: () => BookingStatus.pending,
       ),
       createdAt: createdAt,

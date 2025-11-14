@@ -9,13 +9,11 @@ import '../pages/chat_list_page.dart';
 import '../pages/instant_translation_page.dart';
 import '../pages/payment_deposit_page.dart';
 import '../pages/payment_balance_page.dart';
-import '../pages/payment_webview_page.dart';
 import '../pages/booking_success_page.dart';
 import '../pages/booking_complete_page.dart';
 import '../pages/order_detail_page.dart';
 import '../pages/order_list_page.dart';
 import '../pages/package_selection_page.dart';
-import '../../../../core/services/payment/payment_models.dart';
 import '../../../../shared/presentation/pages/auth/login_page.dart';
 import '../../../../shared/presentation/pages/auth/register_page.dart';
 import '../../../../shared/presentation/pages/splash_page.dart';
@@ -170,22 +168,6 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
         path: '/payment-deposit',
         name: 'payment-deposit',
         builder: (context, state) => const PaymentDepositPage(),
-      ),
-      GoRoute(
-        path: '/payment-webview',
-        name: 'payment-webview',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
-          final paymentUrl = extra?['url'] as String? ?? '';
-          final bookingId = extra?['bookingId'] as String? ?? '';
-          final paymentType = extra?['paymentType'] as PaymentType? ?? PaymentType.deposit;
-
-          return PaymentWebViewPage(
-            paymentUrl: paymentUrl,
-            bookingId: bookingId,
-            paymentType: paymentType,
-          );
-        },
       ),
       GoRoute(
         path: '/booking-success/:orderId',

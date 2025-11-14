@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/services/booking_service.dart';
-import '../../../../core/services/payment/payment_models.dart';
 
 /// 支付尾款頁面
 /// 
@@ -332,34 +331,16 @@ class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
 
     try {
       // 調用支付尾款 API
-      final paymentResult = await _bookingService.payBalance(
+      await _bookingService.payBalance(
         widget.bookingId,
         _selectedPaymentMethod,
       );
 
-      if (!mounted) return;
-
-      // 檢查是否需要跳轉到支付頁面（GoMyPay 等第三方支付）
-      if (paymentResult['requiresRedirect'] == true && paymentResult['paymentUrl'] != null) {
-        // 跳轉到 GoMyPay 支付頁面
-        debugPrint('[PaymentBalance] 跳轉到支付頁面: ${paymentResult['paymentUrl']}');
-        await context.push('/payment-webview', extra: {
-          'url': paymentResult['paymentUrl'],
-          'bookingId': widget.bookingId,
-          'paymentType': PaymentType.balance,
-        });
-
-        // 支付完成後，跳轉到訂單完成頁面
-        if (mounted) {
-          context.pushReplacement('/booking-complete/${widget.bookingId}');
-        }
-      } else {
-        // 自動支付（Mock）或不需要跳轉，直接導航到訂單完成頁面
-        debugPrint('[PaymentBalance] 自動支付完成，跳轉到訂單完成頁面');
+      // 支付成功，導航到訂單完成頁面
+      if (mounted) {
         context.pushReplacement('/booking-complete/${widget.bookingId}');
       }
     } catch (e) {
-      debugPrint('[PaymentBalance] ❌ 支付處理失敗: $e');
       _showErrorDialog('支付處理失敗：$e');
     } finally {
       if (mounted) {

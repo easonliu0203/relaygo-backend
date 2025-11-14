@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Relay GO 司機端主題色彩 -->
+    <color name="notification_color">#4CAF50</color>
+    <color name="primary_color">#4CAF50</color>
+    <color name="primary_dark">#388E3C</color>
+    <color name="accent_color">#FF9800</color>
+    <color name="background_color">#FFFFFF</color>
+    <color name="surface_color">#F5F5F5</color>
+    <color name="error_color">#B00020</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="on_background">#000000</color>
+    <color name="on_surface">#000000</color>
+    <color name="on_error">#FFFFFF</color>
+</resources>

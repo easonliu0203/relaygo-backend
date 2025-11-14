@@ -1,0 +1,83 @@
+{
+  "project_info": {
+    "project_number": "930299492291",
+    "firebase_url": "https://ride-platform-f1676-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "ride-platform-f1676",
+    "storage_bucket": "ride-platform-f1676.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:930299492291:android:e393786c0728270d33ef76",
+        "android_client_info": {
+          "package_name": "com.relaygo.customer"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "930299492291-gciqa2hnempv7bn66t2mgotadho5gl8c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB65u4NIq8HhaPs4hr9G0eoOYRP1y6z-sQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "930299492291-gciqa2hnempv7bn66t2mgotadho5gl8c.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "930299492291-9obu88q2do5c76rn2rq8gbve7vkfb5fh.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.relaygo.driver.ios"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:930299492291:android:c7b6d344a3ca1dc833ef76",
+        "android_client_info": {
+          "package_name": "com.relaygo.driver"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "930299492291-gciqa2hnempv7bn66t2mgotadho5gl8c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB65u4NIq8HhaPs4hr9G0eoOYRP1y6z-sQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "930299492291-gciqa2hnempv7bn66t2mgotadho5gl8c.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "930299492291-9obu88q2do5c76rn2rq8gbve7vkfb5fh.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.relaygo.driver.ios"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

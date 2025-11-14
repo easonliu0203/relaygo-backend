@@ -133,16 +133,12 @@ class DriverOrderDetailPage extends ConsumerWidget {
 
   IconData _getStatusIcon(BookingStatus status) {
     switch (status) {
-      case BookingStatus.pendingPayment:
-        return Icons.payment;
       case BookingStatus.pending:
         return Icons.schedule;
       case BookingStatus.awaitingDriver:
         return Icons.person_search;
       case BookingStatus.matched:
         return Icons.check_circle;
-      case BookingStatus.onTheWay:
-        return Icons.local_taxi;
       case BookingStatus.inProgress:
         return Icons.directions_car;
       case BookingStatus.awaitingBalance:
@@ -533,7 +529,7 @@ class DriverOrderDetailPage extends ConsumerWidget {
         // 1. 司機確認接單後，Supabase 狀態為 'driver_confirmed'
         // 2. Edge Function 同步到 Firestore 時，映射為 'matched'（已配對）
         // 3. 司機點擊「出發前往載客」後，Supabase 狀態變為 'driver_departed'
-        // 4. Edge Function 再次同步，Firestore 狀態變為 'ON_THE_WAY'（正在路上）
+        // 4. Edge Function 再次同步，Firestore 狀態變為 'inProgress'（進行中）
         if (order.status == BookingStatus.matched)
           SizedBox(
             width: double.infinity,
@@ -644,15 +640,13 @@ class DriverOrderDetailPage extends ConsumerWidget {
             ),
           ),
 
-        // 當訂單狀態為 onTheWay（正在路上）時，顯示「抵達上車地點」按鈕
-        // 邏輯說明：
-        // 1. 司機點擊「出發前往載客」後，Supabase 狀態變為 'driver_departed'
-        // 2. Edge Function 同步到 Firestore 時，映射為 'ON_THE_WAY'（正在路上）
-        // 3. 司機點擊「抵達上車地點」後，Supabase 狀態變為 'driver_arrived'
-        // 4. Edge Function 再次同步，Firestore 狀態仍為 'ON_THE_WAY'（正在路上）
-        // 5. 客戶點擊「開始行程」後，Supabase 狀態變為 'trip_started'
-        // 6. Edge Function 同步，Firestore 狀態變為 'inProgress'（進行中）
-        if (order.status == BookingStatus.onTheWay)
+        // 當訂單狀態為 inProgress（進行中）時，根據實際狀態顯示不同按鈕
+        // 注意：由於 Flutter 的 BookingStatus 枚舉較簡化，我們需要通過其他方式判斷
+        // 這裡我們假設 inProgress 包含了 driver_departed 和 driver_arrived 兩個狀態
+        // 實際上需要查看訂單的詳細狀態來決定顯示哪個按鈕
+        if (order.status == BookingStatus.inProgress)
+          // 這裡暫時顯示「抵達上車地點」按鈕
+          // TODO: 需要根據訂單的實際 Supabase 狀態來判斷顯示哪個按鈕
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(

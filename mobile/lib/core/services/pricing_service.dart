@@ -55,8 +55,8 @@ class PricingService {
   PricingService._internal();
 
   // 管理後台 API 基礎 URL
-  // 使用生產環境 API，確保模擬器也能獲取正確的價格資料
-  static const String _baseUrl = 'https://api.relaygo.pro/api';
+  // Android 模擬器使用 10.0.2.2 訪問主機的 localhost
+  static const String _baseUrl = 'http://10.0.2.2:3001/api';
 
   /// 獲取所有可用的車型套餐
   Future<List<VehiclePackage>> getAvailablePackages() async {

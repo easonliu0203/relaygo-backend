@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Relay GO 客戶端字串資源 -->
+    <string name="app_name">Relay GO</string>
+    <string name="notification_channel_name">Relay GO 通知</string>
+    <string name="notification_channel_description">接收預約確認、司機資訊和行程更新</string>
+    <string name="location_permission_title">位置權限</string>
+    <string name="location_permission_message">Relay GO 需要位置權限來提供準確的接送服務</string>
+    <string name="camera_permission_title">相機權限</string>
+    <string name="camera_permission_message">需要相機權限來拍攝和上傳照片</string>
+    <string name="phone_permission_title">電話權限</string>
+    <string name="phone_permission_message">需要電話權限來聯絡司機</string>
+</resources>

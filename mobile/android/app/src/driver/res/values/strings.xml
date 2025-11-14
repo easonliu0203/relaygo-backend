@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Relay GO 司機端字串資源 -->
+    <string name="app_name">Relay GO Driver</string>
+    <string name="notification_channel_name">Relay GO Driver 通知</string>
+    <string name="notification_channel_description">接收新訂單、客戶資訊和系統通知</string>
+    <string name="location_permission_title">位置權限</string>
+    <string name="location_permission_message">Relay GO Driver 需要位置權限來追蹤您的位置並提供導航服務</string>
+    <string name="background_location_permission_title">背景位置權限</string>
+    <string name="background_location_permission_message">需要背景位置權限來在應用程式關閉時持續追蹤位置</string>
+    <string name="camera_permission_title">相機權限</string>
+    <string name="camera_permission_message">需要相機權限來拍攝和上傳照片</string>
+    <string name="phone_permission_title">電話權限</string>
+    <string name="phone_permission_message">需要電話權限來聯絡客戶</string>
+    <string name="location_service_title">位置追蹤服務</string>
+    <string name="location_service_message">正在追蹤您的位置以提供更好的服務</string>
+</resources>

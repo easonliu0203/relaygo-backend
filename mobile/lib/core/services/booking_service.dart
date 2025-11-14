@@ -4,9 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/booking_order.dart';
-import '../config/environment_config.dart';
 
 /// 預約服務類
 class BookingService {
@@ -17,13 +15,10 @@ class BookingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  /// Backend API 基礎 URL
-  ///
-  /// ✅ 使用 EnvironmentConfig 自動根據環境選擇正確的 URL：
-  /// - Development: http://10.0.2.2:3001/api (Android 模擬器) 或 http://localhost:3001/api (iOS 模擬器)
-  /// - Staging: https://api.relaygo.pro/api (Railway Backend)
-  /// - Production: https://api.relaygo.pro/api (Railway Backend)
-  String get _baseUrl => EnvironmentConfig.apiBaseUrl;
+  // Backend API 基礎 URL
+  // Android 模擬器使用 10.0.2.2 訪問主機的 localhost
+  // Backend API 運行在 3000 端口，web-admin 運行在 3001 端口
+  static const String _baseUrl = 'http://10.0.2.2:3000/api';
 
   /// 獲取當前用戶 ID
   String? get currentUserId => _auth.currentUser?.uid;
@@ -153,13 +148,15 @@ class BookingService {
 
       debugPrint('[BookingService] 響應狀態碼: ${response.statusCode}');
       debugPrint('[BookingService] 響應 Content-Type: ${response.headers['content-type']}');
-      debugPrint('[BookingService] 完整響應內容: ${response.body}');
+      final bodyPreview = response.body.length > 200
+          ? response.body.substring(0, 200)
+          : response.body;
+      debugPrint('[BookingService] 響應內容: $bodyPreview');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
           debugPrint('[BookingService] 支付成功');
-          debugPrint('[BookingService] 返回數據: ${data['data']}');
 
           // 資料將由 Supabase Trigger 自動鏡像到 Firestore
           // 不再從客戶端直接寫入 Firebase
@@ -329,102 +326,6 @@ class BookingService {
     return BookingOrder.fromFirestore(doc);
   }
 
-  /// 從 Supabase 直接獲取訂單（用於支付後驗證）
-  ///
-  /// 這個方法直接從 Supabase（單一真實源）讀取訂單狀態，
-  /// 用於支付完成後立即驗證訂單狀態是否已更新。
-  ///
-  /// 注意：這是讀取操作，符合 CQRS 架構原則。
-  Future<BookingOrder?> getBookingFromSupabase(String bookingId) async {
-    try {
-      final supabase = Supabase.instance.client;
-
-      // 從 Supabase bookings 表直接查詢
-      final response = await supabase
-          .from('bookings')
-          .select()
-          .eq('id', bookingId)
-          .maybeSingle();
-
-      if (response == null) {
-        debugPrint('⚠️ 訂單不存在: $bookingId');
-        return null;
-      }
-
-      // 將 Supabase 資料轉換為 BookingOrder
-      return _convertSupabaseToBookingOrder(response);
-    } catch (e) {
-      debugPrint('❌ 從 Supabase 獲取訂單失敗: $e');
-      return null;
-    }
-  }
-
-  /// 將 Supabase 資料轉換為 BookingOrder 模型
-  BookingOrder _convertSupabaseToBookingOrder(Map<String, dynamic> data) {
-    // 解析時間戳
-    DateTime parseTimestamp(dynamic value) {
-      if (value == null) return DateTime.now();
-      if (value is DateTime) return value;
-      if (value is String) return DateTime.parse(value);
-      return DateTime.now();
-    }
-
-    DateTime? parseOptionalTimestamp(dynamic value) {
-      if (value == null) return null;
-      if (value is DateTime) return value;
-      if (value is String) return DateTime.parse(value);
-      return null;
-    }
-
-    // 解析地理位置
-    LocationPoint? parseLocation(dynamic lat, dynamic lng) {
-      if (lat == null || lng == null) return null;
-      return LocationPoint(
-        latitude: (lat as num).toDouble(),
-        longitude: (lng as num).toDouble(),
-      );
-    }
-
-    return BookingOrder(
-      id: data['id'] ?? '',
-      customerId: data['customer_id'] ?? '',
-      driverId: data['driver_id'],
-      customerName: data['customer_name'],
-      customerPhone: data['customer_phone'],
-      driverName: data['driver_name'],
-      driverPhone: data['driver_phone'],
-      driverVehiclePlate: data['driver_vehicle_plate'],
-      driverVehicleModel: data['driver_vehicle_model'],
-      driverRating: data['driver_rating'] != null
-          ? (data['driver_rating'] as num).toDouble()
-          : null,
-      pickupAddress: data['pickup_location'] ?? '',
-      pickupLocation: parseLocation(
-        data['pickup_latitude'],
-        data['pickup_longitude'],
-      ),
-      dropoffAddress: data['destination'] ?? '',
-      dropoffLocation: parseLocation(
-        data['dropoff_latitude'],
-        data['dropoff_longitude'],
-      ),
-      bookingTime: parseTimestamp(data['start_date'] ?? data['created_at']),
-      passengerCount: data['passenger_count'] ?? 1,
-      luggageCount: data['luggage_count'],
-      notes: data['notes'],
-      estimatedFare: (data['total_price'] ?? 0.0).toDouble(),
-      depositAmount: (data['deposit_amount'] ?? 0.0).toDouble(),
-      depositPaid: data['deposit_paid'] ?? false,
-      status: BookingStatus.values.firstWhere(
-        (status) => status.name == data['status'],
-        orElse: () => BookingStatus.pending,
-      ),
-      createdAt: parseTimestamp(data['created_at']),
-      matchedAt: parseOptionalTimestamp(data['matched_at']),
-      completedAt: parseOptionalTimestamp(data['completed_at']),
-    );
-  }
-
   /// 監聽特定訂單的變化（從 Firestore 鏡像讀取）
   /// 用於即時畫面展示，資料來自 Supabase 的單向鏡像
   Stream<BookingOrder?> watchBooking(String orderId) {
@@ -443,11 +344,9 @@ class BookingService {
   /// 用於即時畫面展示，資料來自 Supabase 的單向鏡像
   ///
   /// 進行中訂單包含以下狀態：
-  /// - pendingPayment: 待付訂金（訂單已創建，等待支付訂金）
-  /// - pending: 待配對（已付訂金，等待派單）
+  /// - pending: 待配對（待付訂金或待派單）
   /// - awaitingDriver: 待司機確認（已分配司機，等待司機確認接單）
   /// - matched: 已配對（司機已確認接單）
-  /// - onTheWay: 正在路上（司機已出發或已到達）
   /// - inProgress: 行程進行中
   /// - awaitingBalance: 待付尾款（行程已結束，等待支付尾款）
   Stream<List<BookingOrder>> getActiveBookings() {
@@ -460,13 +359,11 @@ class BookingService {
         .collection('orders_rt')
         .where('customerId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.pendingPayment.firestoreValue,      // ⭐ 新增：待付訂金
-          BookingStatus.pending.firestoreValue,
-          BookingStatus.awaitingDriver.firestoreValue,      // 待司機確認
-          BookingStatus.matched.firestoreValue,
-          BookingStatus.onTheWay.firestoreValue,            // ⭐ 新增：正在路上
-          BookingStatus.inProgress.firestoreValue,
-          BookingStatus.awaitingBalance.firestoreValue,     // 待付尾款
+          BookingStatus.pending.name,
+          BookingStatus.awaitingDriver.name,      // ⭐ 新增：待司機確認
+          BookingStatus.matched.name,
+          BookingStatus.inProgress.name,
+          BookingStatus.awaitingBalance.name,     // ⭐ 新增：待付尾款
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -501,7 +398,6 @@ class BookingService {
   /// - pending: 待配對（司機可以看到待接單的訂單）
   /// - awaitingDriver: 待司機確認（已分配司機，等待司機確認接單）
   /// - matched: 已配對（司機已確認接單）
-  /// - onTheWay: 正在路上（司機已出發或已到達）
   /// - inProgress: 行程進行中
   /// - awaitingBalance: 待付尾款（行程已結束，等待客戶支付尾款）
   ///
@@ -520,12 +416,11 @@ class BookingService {
         .collection('orders_rt')
         .where('driverId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.pending.firestoreValue,
-          BookingStatus.awaitingDriver.firestoreValue,      // 待司機確認
-          BookingStatus.matched.firestoreValue,
-          BookingStatus.onTheWay.firestoreValue,            // ⭐ 新增：正在路上
-          BookingStatus.inProgress.firestoreValue,
-          BookingStatus.awaitingBalance.firestoreValue,     // 待付尾款
+          BookingStatus.pending.name,
+          BookingStatus.awaitingDriver.name,      // ⭐ 新增：待司機確認
+          BookingStatus.matched.name,
+          BookingStatus.inProgress.name,
+          BookingStatus.awaitingBalance.name,     // ⭐ 新增：待付尾款
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -551,8 +446,8 @@ class BookingService {
         .collection('orders_rt')
         .where('driverId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.completed.firestoreValue,
-          BookingStatus.cancelled.firestoreValue,
+          BookingStatus.completed.name,
+          BookingStatus.cancelled.name,
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -578,8 +473,8 @@ class BookingService {
         .collection('orders_rt')
         .where('customerId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.completed.firestoreValue,
-          BookingStatus.cancelled.firestoreValue,
+          BookingStatus.completed.name,
+          BookingStatus.cancelled.name,
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
