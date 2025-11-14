@@ -46,6 +46,7 @@ class OrderDetailPage extends ConsumerWidget {
 
                 // 司機資訊（如果已配對）
                 if (order.status == BookingStatus.matched ||
+                    order.status == BookingStatus.onTheWay ||
                     order.status == BookingStatus.inProgress ||
                     order.status == BookingStatus.awaitingBalance ||
                     order.status == BookingStatus.completed)
@@ -383,14 +384,15 @@ class OrderDetailPage extends ConsumerWidget {
           const SizedBox(height: 12),
         ],
 
-        // 開始行程按鈕（司機已確認或已到達時顯示）
+        // 開始行程按鈕（司機已出發或已到達時顯示）
         // 邏輯說明：
-        // 1. 司機確認接單後，Firestore 狀態為 'matched'
-        // 2. 司機到達後，Firestore 狀態為 'inProgress'
-        // 3. 客戶點擊「開始行程」後，Supabase 狀態變為 'trip_started'
-        if (order.status == BookingStatus.matched ||
-            order.status == BookingStatus.inProgress ||
-            order.status == BookingStatus.awaitingBalance) ...[
+        // 1. 司機點擊「出發前往載客」後，Supabase 狀態變為 'driver_departed'
+        // 2. Edge Function 同步到 Firestore 時，映射為 'ON_THE_WAY'（正在路上）
+        // 3. 司機點擊「抵達上車地點」後，Supabase 狀態變為 'driver_arrived'
+        // 4. Edge Function 再次同步，Firestore 狀態仍為 'ON_THE_WAY'（正在路上）
+        // 5. 客戶點擊「開始行程」後，Supabase 狀態變為 'trip_started'
+        // 6. Edge Function 同步，Firestore 狀態變為 'inProgress'（進行中）
+        if (order.status == BookingStatus.onTheWay) ...[
           Column(
             children: [
               SizedBox(
@@ -521,10 +523,11 @@ class OrderDetailPage extends ConsumerWidget {
         ],
 
         // 結束行程按鈕（行程進行中時顯示）
-        // 注意：由於 Flutter 的 BookingStatus 枚舉較簡化，
-        // inProgress 狀態包含了 driver_departed, driver_arrived, trip_started 等多個 Supabase 狀態
-        // 這裡暫時在 inProgress 狀態下顯示「結束行程」按鈕
-        // TODO: 需要根據訂單的實際 Supabase 狀態來判斷是否顯示此按鈕
+        // 邏輯說明：
+        // 1. 客戶點擊「開始行程」後，Supabase 狀態變為 'trip_started'
+        // 2. Edge Function 同步到 Firestore 時，映射為 'inProgress'（進行中）
+        // 3. 客戶點擊「結束行程」後，Supabase 狀態變為 'trip_ended'
+        // 4. Edge Function 同步，Firestore 狀態變為 'awaitingBalance'（待付尾款）
         if (order.status == BookingStatus.inProgress) ...[
           Column(
             children: [

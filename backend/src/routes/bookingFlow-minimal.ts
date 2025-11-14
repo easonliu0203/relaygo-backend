@@ -811,26 +811,75 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
 
     console.log('[API] 尾款金額:', balanceAmount);
 
-    // 6. 模擬支付處理（與支付訂金相同的邏輯）
-    console.log('[API] 模擬支付處理:', {
-      amount: balanceAmount,
-      method: paymentMethod
+    // 6. 使用 PaymentProviderFactory 創建支付提供者（與支付訂金相同的邏輯）
+    const { PaymentProviderFactory, PaymentProviderType } = await import('../services/payment/PaymentProvider');
+
+    // 決定使用哪個支付提供者
+    const paymentProviderType = process.env.PAYMENT_PROVIDER === 'gomypay'
+      ? PaymentProviderType.GOMYPAY
+      : PaymentProviderType.MOCK;
+
+    console.log('[API] 使用支付提供者:', paymentProviderType);
+
+    const provider = PaymentProviderFactory.createProvider({
+      provider: paymentProviderType,
+      isTestMode: process.env.GOMYPAY_TEST_MODE === 'true',
+      config: {}
     });
 
-    // 7. 創建支付記錄
+    // 7. 發起支付
+    const paymentRequest = {
+      orderId: booking.booking_number,
+      amount: balanceAmount,
+      currency: 'TWD',
+      description: `RelayGo 訂單尾款 - ${booking.booking_number}`,
+      customerInfo: {
+        id: customer.id,
+        name: booking.customer_name || '客戶',
+        email: '', // 可以從 users 表查詢
+        phone: booking.customer_phone || ''
+      },
+      metadata: {
+        bookingId: booking.id,
+        paymentType: 'balance'
+      }
+    };
+
+    console.log('[API] 發起支付請求:', {
+      provider: paymentProviderType,
+      orderId: paymentRequest.orderId,
+      amount: paymentRequest.amount
+    });
+
+    const paymentResponse = await provider.initiatePayment(paymentRequest);
+
+    if (!paymentResponse.success) {
+      res.status(400).json({
+        success: false,
+        error: '支付發起失敗'
+      });
+      return;
+    }
+
+    console.log('[API] ✅ 支付發起成功:', {
+      transactionId: paymentResponse.transactionId,
+      hasPaymentUrl: !!paymentResponse.paymentUrl
+    });
+
+    // 8. 創建支付記錄（狀態為 pending，等待回調確認）
     const paymentData = {
       booking_id: bookingId,
       customer_id: customer.id,
+      transaction_id: paymentResponse.transactionId,
       type: 'balance',  // 尾款類型
       amount: balanceAmount,
       currency: 'TWD',
-      status: 'processing',  // 模擬支付處理中
-      payment_provider: 'mock',
-      payment_method: paymentMethod,
-      is_test_mode: true,
-      transaction_id: `mock_balance_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      created_at: new Date().toISOString()
+      status: 'pending', // 等待支付完成
+      payment_provider: paymentProviderType,
+      payment_method: paymentMethod || 'credit_card',
+      is_test_mode: process.env.GOMYPAY_TEST_MODE === 'true',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
 
     const { data: payment, error: paymentError } = await supabase
@@ -850,49 +899,62 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
 
     console.log('[API] ✅ 支付記錄創建成功:', payment.id);
 
-    // 8. 更新訂單狀態為 completed（支付成功後）
-    // 注意：實際應該等待支付網關回調後再更新
-    // 這裡為了簡化流程，直接更新為 completed
-    const now = new Date().toISOString();
-    const { error: updateError } = await supabase
-      .from('bookings')
-      .update({
-        status: 'completed',
-        updated_at: now
-      })
-      .eq('id', bookingId);
-
-    if (updateError) {
-      console.error('[API] 更新訂單狀態失敗:', updateError);
-      // 不返回錯誤，因為支付記錄已創建
+    // 9. 返回支付 URL（如果有）或成功響應
+    if (paymentResponse.paymentUrl) {
+      // GoMyPay 或其他需要跳轉的支付方式
+      res.json({
+        success: true,
+        data: {
+          bookingId,
+          paymentId: payment.id,
+          transactionId: paymentResponse.transactionId,
+          paymentUrl: paymentResponse.paymentUrl,
+          instructions: paymentResponse.instructions,
+          expiresAt: paymentResponse.expiresAt,
+          requiresRedirect: true
+        }
+      });
     } else {
-      console.log('[API] ✅ 訂單狀態已更新為 completed');
-    }
+      // Mock 或其他自動完成的支付方式
+      // 更新訂單狀態為已完成
+      const now = new Date().toISOString();
+      const { error: updateError } = await supabase
+        .from('bookings')
+        .update({
+          status: 'completed',
+          updated_at: now
+        })
+        .eq('id', bookingId);
 
-    // 9. 發送系統訊息到聊天室
-    try {
-      await sendSystemMessage(
-        bookingId,
-        '尾款支付成功，訂單已完成 ✅'
-      );
-      console.log('[API] ✅ 系統訊息已發送');
-    } catch (messageError) {
-      console.error('[API] ⚠️  發送系統訊息失敗（不影響主流程）:', messageError);
-    }
-
-    // 10. 返回成功響應
-    res.json({
-      success: true,
-      data: {
-        paymentId: payment.id,
-        transactionId: payment.transaction_id,
-        amount: balanceAmount,
-        status: 'processing',
-        isAutoPayment: true,  // 模擬自動支付
-        estimatedProcessingTime: 2,  // 預計處理時間（秒）
-        message: '尾款支付成功'
+      if (updateError) {
+        console.error('[API] 更新訂單狀態失敗:', updateError);
+      } else {
+        console.log('[API] ✅ 訂單狀態已更新為 completed');
       }
-    });
+
+      // 發送系統訊息到聊天室
+      try {
+        await sendSystemMessage(
+          bookingId,
+          '尾款支付成功，訂單已完成 ✅'
+        );
+        console.log('[API] ✅ 系統訊息已發送');
+      } catch (messageError) {
+        console.error('[API] ⚠️  發送系統訊息失敗（不影響主流程）:', messageError);
+      }
+
+      res.json({
+        success: true,
+        data: {
+          bookingId,
+          paymentId: payment.id,
+          transactionId: paymentResponse.transactionId,
+          amount: balanceAmount,
+          status: 'completed',
+          message: '尾款支付成功'
+        }
+      });
+    }
 
   } catch (error: any) {
     console.error('[API] 支付尾款失敗:', error);
