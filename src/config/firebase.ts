@@ -95,10 +95,14 @@ export function initializeFirebase(): admin.app.App {
         console.log('✅ Firebase Admin SDK 已初始化');
         console.log(`  - App Name: ${firebaseApp.name}`);
         console.log(`  - Project ID: ${firebaseApp.options.projectId}`);
-      } catch (credError) {
+      } catch (credError: unknown) {
         console.error('❌ Firebase Admin SDK 憑證初始化失敗:');
-        console.error(`  - 錯誤訊息: ${credError.message}`);
-        console.error(`  - 錯誤堆棧: ${credError.stack}`);
+        if (credError instanceof Error) {
+          console.error(`  - 錯誤訊息: ${credError.message}`);
+          console.error(`  - 錯誤堆棧: ${credError.stack}`);
+        } else {
+          console.error(`  - 錯誤: ${String(credError)}`);
+        }
         throw credError;
       }
     }

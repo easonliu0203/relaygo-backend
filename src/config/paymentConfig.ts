@@ -40,6 +40,16 @@ export class PaymentConfigManager {
         };
         break;
 
+      case PaymentProviderType.GOMYPAY:
+        config = {
+          merchantId: process.env.GOMYPAY_MERCHANT_ID,
+          apiKey: process.env.GOMYPAY_API_KEY,
+          isTestMode: process.env.GOMYPAY_TEST_MODE === 'true',
+          returnUrl: process.env.GOMYPAY_RETURN_URL,
+          callbackUrl: process.env.GOMYPAY_CALLBACK_URL
+        };
+        break;
+
       case PaymentProviderType.CREDIT_CARD:
         config = {
           merchantId: process.env.CREDIT_CARD_MERCHANT_ID,
@@ -175,6 +185,7 @@ export class PaymentConfigManager {
     const displayNames = {
       [PaymentProviderType.MOCK]: '模擬支付',
       [PaymentProviderType.OFFLINE]: '線下支付',
+      [PaymentProviderType.GOMYPAY]: 'GoMyPay 信用卡支付',
       [PaymentProviderType.CREDIT_CARD]: '信用卡支付',
       [PaymentProviderType.DIGITAL_WALLET]: '電子錢包',
       [PaymentProviderType.BANK_TRANSFER]: '銀行轉帳'
@@ -225,8 +236,9 @@ export class PaymentConfigManager {
       }
 
       this.currentConfig = importedConfig;
-    } catch (error) {
-      throw new Error(`Failed to import config: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to import config: ${errorMessage}`);
     }
   }
 
