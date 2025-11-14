@@ -21,7 +21,7 @@ const supabase = createClient(
  * @route GET /api/payment/gomypay-callback
  * @access Public
  */
-router.get('/gomypay-callback', async (req: Request, res: Response): Promise<void> => {
+router.get('/gomypay-callback', async (_req: Request, res: Response): Promise<void> => {
   res.status(200).json({
     success: true,
     message: 'GOMYPAY callback endpoint is accessible',
@@ -31,14 +31,148 @@ router.get('/gomypay-callback', async (req: Request, res: Response): Promise<voi
 });
 
 /**
- * GOMYPAY 支付回調 API
+ * GOMYPAY Return URL - 用戶支付完成後跳轉
  *
- * 當 GOMYPAY 完成支付後，會主動呼叫此 API 通知支付結果
- *
- * @route POST /api/payment/gomypay-callback
- * @access Public（GOMYPAY 伺服器呼叫）
+ * @route GET /api/payment/gomypay/return
+ * @route POST /api/payment/gomypay/return
+ * @access Public
  */
-router.post('/gomypay-callback', async (req: Request, res: Response): Promise<void> => {
+router.get('/gomypay/return', async (req: Request, res: Response): Promise<void> => {
+  console.log('[GoMyPay Return] 用戶返回:', req.query);
+
+  // 解析訂單編號（從 query 參數中）
+  const { e_orderno, result, ret_msg } = req.query;
+
+  console.log('[GoMyPay Return] 訂單編號:', e_orderno);
+  console.log('[GoMyPay Return] 支付結果:', result);
+  console.log('[GoMyPay Return] 返回訊息:', ret_msg);
+
+  // 返回一個 HTML 頁面，立即通知 Flutter WebView 並輪詢訂單狀態
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>支付處理中</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          height: 100vh;
+          margin: 0;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+          text-align: center;
+          background: white;
+          padding: 40px;
+          border-radius: 10px;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; margin-bottom: 20px; }
+        p { color: #666; font-size: 16px; }
+        .spinner {
+          border: 4px solid #f3f3f3;
+          border-top: 4px solid #667eea;
+          border-radius: 50%;
+          width: 40px;
+          height: 40px;
+          animation: spin 1s linear infinite;
+          margin: 20px auto;
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="spinner" id="spinner"></div>
+        <h1 id="title">支付處理中</h1>
+        <p id="message">請稍候，我們正在確認您的支付...</p>
+        <p style="font-size: 14px; color: #999; margin-top: 20px;" id="countdown">
+          此頁面將自動關閉
+        </p>
+      </div>
+      <script>
+        // 支付結果
+        const paymentResult = '${result || ''}';
+        const paymentMessage = '${ret_msg || ''}';
+        const orderNo = '${e_orderno || ''}';
+
+        console.log('[Return Page] 支付結果:', paymentResult);
+        console.log('[Return Page] 訂單編號:', orderNo);
+
+        // 立即通知 Flutter WebView（不等待回調）
+        function notifyFlutter(status) {
+          try {
+            // 方法 1: 使用 Deep Link
+            const deepLink = 'ridebooking://payment-result?status=' + status + '&orderNo=' + orderNo;
+            console.log('[Return Page] 觸發 Deep Link:', deepLink);
+            window.location.href = deepLink;
+          } catch (e) {
+            console.error('[Return Page] Deep Link 失敗:', e);
+          }
+
+          // 方法 2: 嘗試關閉窗口
+          setTimeout(() => {
+            try {
+              window.close();
+            } catch (e) {
+              console.log('[Return Page] 無法關閉窗口');
+            }
+          }, 1000);
+        }
+
+        // 根據支付結果立即通知
+        if (paymentResult === '1') {
+          // 支付成功
+          document.getElementById('title').textContent = '支付成功';
+          document.getElementById('title').className = 'success';
+          document.getElementById('message').textContent = '您的支付已提交，正在處理中...';
+          document.getElementById('spinner').style.display = 'none';
+
+          // 立即通知 Flutter
+          setTimeout(() => notifyFlutter('success'), 500);
+        } else if (paymentResult === '0') {
+          // 支付失敗
+          document.getElementById('title').textContent = '支付失敗';
+          document.getElementById('title').className = 'error';
+          document.getElementById('message').textContent = paymentMessage || '支付處理失敗，請重試';
+          document.getElementById('spinner').style.display = 'none';
+
+          // 立即通知 Flutter
+          setTimeout(() => notifyFlutter('failed'), 500);
+        } else {
+          // 未知狀態，等待回調
+          // 3秒後自動通知（假設支付成功）
+          setTimeout(() => {
+            document.getElementById('title').textContent = '支付已提交';
+            document.getElementById('message').textContent = '正在確認支付結果...';
+            notifyFlutter('pending');
+          }, 3000);
+        }
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+router.post('/gomypay/return', async (req: Request, res: Response): Promise<void> => {
+  console.log('[GoMyPay Return POST] 用戶返回:', req.body);
+  res.redirect('/api/payment/gomypay/return?' + new URLSearchParams(req.body).toString());
+});
+
+/**
+ * 共享的 GoMyPay 回調處理邏輯
+ */
+async function handleGomypayCallback(req: Request, res: Response): Promise<void> {
   try {
     console.log('='.repeat(60));
     console.log('[GOMYPAY Callback] ========== 收到支付回調 ==========');
@@ -94,16 +228,33 @@ router.post('/gomypay-callback', async (req: Request, res: Response): Promise<vo
     console.log('[GOMYPAY Callback] ⚠️  暫時跳過 str_check 驗證');
 
     // 5. 解析訂單編號
-    // 新格式 v3：{16字符bookingId}{1字符類型D/B}{8字符時間戳} = 25字符
-    // 範例：d9a63c27914d44deB70517422
-    // 新格式 v2：{20字符bookingId}{1字符類型D/B}{4字符時間戳} = 25字符
-    // 範例：6ee49212c05e4ccf9093D8737
-    // 舊格式（向後兼容）：BOOKING_{bookingId}_{paymentType}_{timestamp}
+    // 支持多種格式：
+    // 1. BK 格式：BK{timestamp} (例: BK1762997624214) - 當前使用
+    // 2. 新格式 v3：{16字符bookingId}{1字符類型D/B}{8字符時間戳} = 25字符
+    //    範例：d9a63c27914d44deB70517422
+    // 3. 新格式 v2：{20字符bookingId}{1字符類型D/B}{4字符時間戳} = 25字符
+    //    範例：6ee49212c05e4ccf9093D8737
+    // 4. 舊格式：BOOKING_{bookingId}_{paymentType}_{timestamp}
 
     let bookingId: string;
     let paymentType: string;
 
-    if (e_orderno.startsWith('BOOKING_')) {
+    if (e_orderno.startsWith('BK')) {
+      // BK 格式：BK{timestamp}
+      // 這是 booking_number 的實際格式
+      // 需要從資料庫查詢 booking_number 來獲取 booking.id
+      console.log('[GOMYPAY Callback] 檢測到 BK 格式訂單編號:', e_orderno);
+
+      // 暫時將整個 booking_number 作為查詢條件
+      // 稍後會用 booking_number 查詢資料庫獲取真實的 booking.id
+      bookingId = e_orderno; // 使用 booking_number 作為臨時 ID
+      paymentType = 'deposit'; // 預設為訂金支付（目前只支持訂金）
+
+      console.log('[GOMYPAY Callback] BK 格式解析:', {
+        bookingNumber: e_orderno,
+        paymentType
+      });
+    } else if (e_orderno.startsWith('BOOKING_')) {
       // 舊格式
       const orderParts = e_orderno.split('_');
       if (orderParts.length < 3) {
@@ -113,14 +264,8 @@ router.post('/gomypay-callback', async (req: Request, res: Response): Promise<vo
       }
       bookingId = orderParts[1];
       paymentType = orderParts[2].toLowerCase(); // 'deposit' or 'balance'
-    } else {
+    } else if (e_orderno.length === 25) {
       // 新格式：25字符
-      if (e_orderno.length !== 25) {
-        console.error('[GOMYPAY Callback] 訂單編號長度錯誤:', e_orderno, '長度:', e_orderno.length);
-        res.status(400).send('Invalid OrderID length');
-        return;
-      }
-
       // 解析訂單編號
       // 檢測格式版本：第17個字符是 D/B 表示 v3，第21個字符是 D/B 表示 v2
       const char17 = e_orderno.substring(16, 17);
@@ -143,6 +288,10 @@ router.post('/gomypay-callback', async (req: Request, res: Response): Promise<vo
         res.status(400).send('Invalid OrderID format');
         return;
       }
+    } else {
+      console.error('[GOMYPAY Callback] 無法識別訂單編號格式:', e_orderno, '長度:', e_orderno.length);
+      res.status(400).send('Invalid OrderID format');
+      return;
     }
 
     console.log('[GOMYPAY Callback] 解析訂單:', {
@@ -177,7 +326,25 @@ router.post('/gomypay-callback', async (req: Request, res: Response): Promise<vo
     let booking: any;
     let bookingError: any;
 
-    if (bookingId.length === 16 || bookingId.length === 20) {
+    if (bookingId.startsWith('BK')) {
+      // BK 格式：使用 booking_number 查詢
+      console.log('[GOMYPAY Callback] 使用 booking_number 查詢:', bookingId);
+
+      const result = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('booking_number', bookingId)
+        .single();
+
+      booking = result.data;
+      bookingError = result.error;
+
+      if (result.error) {
+        console.error('[GOMYPAY Callback] ❌ 查詢訂單失敗:', result.error);
+      } else {
+        console.log('[GOMYPAY Callback] ✅ 找到訂單:', booking?.id);
+      }
+    } else if (bookingId.length === 16 || bookingId.length === 20) {
       // 新格式 v2/v3：使用前16或20字符查詢（需要還原完整 UUID）
       // 使用 LIKE 查詢匹配的訂單
       let bookingIdPattern: string;
@@ -314,12 +481,28 @@ router.post('/gomypay-callback', async (req: Request, res: Response): Promise<vo
     console.error('[GOMYPAY Callback] ========================================');
     console.error('[GOMYPAY Callback] ❌ 處理回調失敗');
     console.error('[GOMYPAY Callback] ========================================');
-    console.error('[GOMYPAY Callback] 錯誤訊息:', error.message);
-    console.error('[GOMYPAY Callback] 錯誤堆疊:', error.stack);
+    console.error('[GOMYPAY Callback] 錯誤訊息:', (error as Error).message);
+    console.error('[GOMYPAY Callback] 錯誤堆疊:', (error as Error).stack);
     console.error('[GOMYPAY Callback] ========================================');
     res.status(500).send('Internal server error');
   }
-});
+}
+
+/**
+ * GOMYPAY 支付回調 API（舊版路徑，向後兼容）
+ *
+ * @route POST /api/payment/gomypay-callback
+ * @access Public
+ */
+router.post('/gomypay-callback', handleGomypayCallback);
+
+/**
+ * GOMYPAY Callback URL - GoMyPay 後台通知（新版路徑）
+ *
+ * @route POST /api/payment/gomypay/callback
+ * @access Public
+ */
+router.post('/gomypay/callback', handleGomypayCallback);
 
 /**
  * 驗證 ChkValue

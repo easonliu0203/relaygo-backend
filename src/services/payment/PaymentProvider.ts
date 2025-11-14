@@ -24,6 +24,7 @@ export interface PaymentProvider {
 export enum PaymentProviderType {
   MOCK = 'mock',
   OFFLINE = 'offline',
+  GOMYPAY = 'gomypay',              // GoMyPay 信用卡支付
   CREDIT_CARD = 'credit_card',
   DIGITAL_WALLET = 'digital_wallet',
   BANK_TRANSFER = 'bank_transfer'
@@ -180,16 +181,16 @@ export class PaymentService {
     return refund;
   }
 
-  private async savePaymentRecord(request: PaymentRequest, response: PaymentResponse): Promise<void> {
+  private async savePaymentRecord(_request: PaymentRequest, _response: PaymentResponse): Promise<void> {
     // 實作資料庫記錄邏輯
     // 這裡會調用資料庫服務保存支付記錄
   }
 
-  private async updatePaymentRecord(transactionId: string, confirmation: PaymentConfirmation): Promise<void> {
+  private async updatePaymentRecord(_transactionId: string, _confirmation: PaymentConfirmation): Promise<void> {
     // 實作資料庫更新邏輯
   }
 
-  private async saveRefundRecord(refund: RefundResponse): Promise<void> {
+  private async saveRefundRecord(_refund: RefundResponse): Promise<void> {
     // 實作退款記錄邏輯
   }
 }
