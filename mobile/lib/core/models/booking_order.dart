@@ -42,6 +42,31 @@ enum BookingStatus {
 
 /// 訂單狀態擴展方法
 extension BookingStatusExtension on BookingStatus {
+  /// 獲取 Firestore 中存儲的狀態值（對應 @JsonValue）
+  /// 用於 Firestore 查詢時的狀態匹配
+  String get firestoreValue {
+    switch (this) {
+      case BookingStatus.pendingPayment:
+        return 'PENDING_PAYMENT';
+      case BookingStatus.pending:
+        return 'pending';
+      case BookingStatus.awaitingDriver:
+        return 'awaitingDriver';
+      case BookingStatus.matched:
+        return 'matched';
+      case BookingStatus.onTheWay:
+        return 'ON_THE_WAY';
+      case BookingStatus.inProgress:
+        return 'inProgress';
+      case BookingStatus.awaitingBalance:
+        return 'awaitingBalance';
+      case BookingStatus.completed:
+        return 'completed';
+      case BookingStatus.cancelled:
+        return 'cancelled';
+    }
+  }
+
   String get displayName {
     switch (this) {
       case BookingStatus.pendingPayment:
@@ -204,7 +229,7 @@ class BookingOrder with _$BookingOrder {
       depositAmount: (data['depositAmount'] ?? 0.0).toDouble(),
       depositPaid: data['depositPaid'] ?? false,
       status: BookingStatus.values.firstWhere(
-        (status) => status.name == data['status'],
+        (status) => status.firestoreValue == data['status'],
         orElse: () => BookingStatus.pending,
       ),
       createdAt: createdAt,

@@ -460,13 +460,13 @@ class BookingService {
         .collection('orders_rt')
         .where('customerId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.pendingPayment.name,      // ⭐ 新增：待付訂金
-          BookingStatus.pending.name,
-          BookingStatus.awaitingDriver.name,      // 待司機確認
-          BookingStatus.matched.name,
-          BookingStatus.onTheWay.name,            // ⭐ 新增：正在路上
-          BookingStatus.inProgress.name,
-          BookingStatus.awaitingBalance.name,     // 待付尾款
+          BookingStatus.pendingPayment.firestoreValue,      // ⭐ 新增：待付訂金
+          BookingStatus.pending.firestoreValue,
+          BookingStatus.awaitingDriver.firestoreValue,      // 待司機確認
+          BookingStatus.matched.firestoreValue,
+          BookingStatus.onTheWay.firestoreValue,            // ⭐ 新增：正在路上
+          BookingStatus.inProgress.firestoreValue,
+          BookingStatus.awaitingBalance.firestoreValue,     // 待付尾款
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -520,12 +520,12 @@ class BookingService {
         .collection('orders_rt')
         .where('driverId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.pending.name,
-          BookingStatus.awaitingDriver.name,      // 待司機確認
-          BookingStatus.matched.name,
-          BookingStatus.onTheWay.name,            // ⭐ 新增：正在路上
-          BookingStatus.inProgress.name,
-          BookingStatus.awaitingBalance.name,     // 待付尾款
+          BookingStatus.pending.firestoreValue,
+          BookingStatus.awaitingDriver.firestoreValue,      // 待司機確認
+          BookingStatus.matched.firestoreValue,
+          BookingStatus.onTheWay.firestoreValue,            // ⭐ 新增：正在路上
+          BookingStatus.inProgress.firestoreValue,
+          BookingStatus.awaitingBalance.firestoreValue,     // 待付尾款
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -551,8 +551,8 @@ class BookingService {
         .collection('orders_rt')
         .where('driverId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.completed.name,
-          BookingStatus.cancelled.name,
+          BookingStatus.completed.firestoreValue,
+          BookingStatus.cancelled.firestoreValue,
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -578,8 +578,8 @@ class BookingService {
         .collection('orders_rt')
         .where('customerId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.completed.name,
-          BookingStatus.cancelled.name,
+          BookingStatus.completed.firestoreValue,
+          BookingStatus.cancelled.firestoreValue,
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
