@@ -11,11 +11,35 @@ import { initializePaymentProviders } from './services/payment';
 // 載入環境變數
 dotenv.config();
 
+// 檢查關鍵環境變數
+console.log('=== 環境變數檢查 ===');
+console.log(`NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
+console.log(`PORT: ${process.env.PORT || 3000}`);
+console.log(`FIREBASE_PROJECT_ID: ${process.env.FIREBASE_PROJECT_ID ? '✅ 已設置' : '❌ 未設置'}`);
+console.log(`FIREBASE_CLIENT_EMAIL: ${process.env.FIREBASE_CLIENT_EMAIL ? '✅ 已設置' : '❌ 未設置'}`);
+console.log(`FIREBASE_PRIVATE_KEY: ${process.env.FIREBASE_PRIVATE_KEY ? `✅ 已設置 (長度: ${process.env.FIREBASE_PRIVATE_KEY.length})` : '❌ 未設置'}`);
+console.log('');
+
 // 初始化 Firebase Admin SDK
+console.log('=== 開始初始化 Firebase Admin SDK ===');
 try {
-  initializeFirebase();
+  const firebaseApp = initializeFirebase();
+  console.log('=== Firebase Admin SDK 初始化完成 ===');
+  console.log(`Firebase App Name: ${firebaseApp.name}`);
+  console.log(`Firebase Project ID: ${firebaseApp.options.projectId}`);
 } catch (error) {
-  console.error('⚠️  Firebase Admin SDK 初始化失敗，聊天室功能可能無法使用');
+  console.error('=== ❌ Firebase Admin SDK 初始化失敗 ===');
+  if (error instanceof Error) {
+    console.error(`錯誤訊息: ${error.message}`);
+    console.error(`錯誤堆棧: ${error.stack}`);
+  } else {
+    console.error(`錯誤: ${String(error)}`);
+  }
+  console.error('⚠️  聊天室功能將無法使用');
+  console.error('請檢查 Railway 環境變數：');
+  console.error('  - FIREBASE_PROJECT_ID');
+  console.error('  - FIREBASE_PRIVATE_KEY');
+  console.error('  - FIREBASE_CLIENT_EMAIL');
 }
 
 // 初始化支付提供者
