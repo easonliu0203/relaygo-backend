@@ -159,6 +159,9 @@ firebase-debug.log
 firebase-service-account*.json
 serviceAccountKey*.json
 railway-env-vars.txt
+convert-firebase-key.js
+test-current-firebase-key.js
+diagnose-firebase-env.js
 
 # Database
 *.db
