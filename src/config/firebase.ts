@@ -12,24 +12,54 @@ let firebaseApp: admin.app.App | null = null;
 
 /**
  * 處理私鑰格式
- * 支持兩種格式：
- * 1. 包含 \n 字符串的格式（需要替換為實際換行符）
- * 2. 已經包含實際換行符的格式（不需要處理）
+ * 支持三種格式：
+ * 1. 包含 \\n 字符串的格式（雙反斜杠，需要替換為實際換行符）
+ * 2. 包含 \n 字符串的格式（單反斜杠，需要替換為實際換行符）
+ * 3. 已經包含實際換行符的格式（不需要處理）
  */
 function processPrivateKey(privateKey: string | undefined): string | undefined {
   if (!privateKey) {
     return undefined;
   }
 
-  // 如果私鑰包含 \n 字符串（而不是實際換行符），則替換
-  if (privateKey.includes('\\n')) {
-    console.log('[Firebase] 檢測到私鑰包含 \\n 字符串，正在轉換為實際換行符...');
-    return privateKey.replace(/\\n/g, '\n');
+  // 檢查私鑰格式
+  const hasDoubleBackslash = privateKey.includes('\\\\n');
+  const hasSingleBackslash = privateKey.includes('\\n');
+  const hasActualNewline = privateKey.includes('\n');
+
+  console.log('[Firebase] 私鑰格式檢查:');
+  console.log(`  - 包含 \\\\n (雙反斜杠): ${hasDoubleBackslash}`);
+  console.log(`  - 包含 \\n (單反斜杠): ${hasSingleBackslash}`);
+  console.log(`  - 包含實際換行符: ${hasActualNewline}`);
+
+  // 如果私鑰包含 \\n（雙反斜杠），先替換為單反斜杠
+  let processedKey = privateKey;
+  if (hasDoubleBackslash) {
+    console.log('[Firebase] 檢測到私鑰包含 \\\\n，正在轉換...');
+    processedKey = processedKey.replace(/\\\\n/g, '\\n');
   }
 
-  // 如果私鑰已經包含實際換行符，直接返回
-  console.log('[Firebase] 私鑰已包含實際換行符，無需轉換');
-  return privateKey;
+  // 如果私鑰包含 \n 字符串（而不是實際換行符），則替換
+  if (processedKey.includes('\\n') && !processedKey.includes('\n')) {
+    console.log('[Firebase] 檢測到私鑰包含 \\n 字符串，正在轉換為實際換行符...');
+    processedKey = processedKey.replace(/\\n/g, '\n');
+  }
+
+  // 驗證轉換後的私鑰格式
+  const finalHasNewline = processedKey.includes('\n');
+  const finalHasBegin = processedKey.includes('BEGIN PRIVATE KEY');
+  const finalHasEnd = processedKey.includes('END PRIVATE KEY');
+
+  console.log('[Firebase] 轉換後的私鑰格式:');
+  console.log(`  - 包含實際換行符: ${finalHasNewline}`);
+  console.log(`  - 包含 BEGIN PRIVATE KEY: ${finalHasBegin}`);
+  console.log(`  - 包含 END PRIVATE KEY: ${finalHasEnd}`);
+
+  if (!finalHasNewline || !finalHasBegin || !finalHasEnd) {
+    console.error('[Firebase] ⚠️  私鑰格式可能不正確！');
+  }
+
+  return processedKey;
 }
 
 export function initializeFirebase(): admin.app.App {
