@@ -54,9 +54,12 @@ class PricingService {
   factory PricingService() => _instance;
   PricingService._internal();
 
-  // 管理後台 API 基礎 URL
-  // Android 模擬器使用 10.0.2.2 訪問主機的 localhost
-  static const String _baseUrl = 'http://10.0.2.2:3001/api';
+  // Backend API 基礎 URL
+  // 開發環境：Android 模擬器使用 10.0.2.2 訪問主機的 localhost (port 8080)
+  // 生產環境：使用 Railway 部署的 Backend API
+  static const String _baseUrl = kDebugMode
+      ? 'http://10.0.2.2:8080/api'  // 開發環境（本地 Backend）
+      : 'https://api.relaygo.pro/api';  // 生產環境（Railway Backend）
 
   /// 獲取所有可用的車型套餐
   Future<List<VehiclePackage>> getAvailablePackages() async {

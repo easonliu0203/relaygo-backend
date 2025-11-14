@@ -16,9 +16,11 @@ class BookingService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // Backend API 基礎 URL
-  // Android 模擬器使用 10.0.2.2 訪問主機的 localhost
-  // Backend API 運行在 3000 端口，web-admin 運行在 3001 端口
-  static const String _baseUrl = 'http://10.0.2.2:3000/api';
+  // 開發環境：Android 模擬器使用 10.0.2.2 訪問主機的 localhost (port 8080)
+  // 生產環境：使用 Railway 部署的 Backend API
+  static const String _baseUrl = kDebugMode
+      ? 'http://10.0.2.2:8080/api'  // 開發環境（本地 Backend）
+      : 'https://api.relaygo.pro/api';  // 生產環境（Railway Backend）
 
   /// 獲取當前用戶 ID
   String? get currentUserId => _auth.currentUser?.uid;
