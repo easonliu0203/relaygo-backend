@@ -794,7 +794,11 @@ class BookingService {
   /// - 訂單狀態不正確（需要 trip_ended）
   /// - 尾款金額錯誤
   /// - API 調用失敗
-  Future<Map<String, dynamic>> payBalance(String bookingId, String paymentMethod) async {
+  Future<Map<String, dynamic>> payBalance(
+    String bookingId,
+    String paymentMethod,
+    {double tipAmount = 0.0}
+  ) async {
     try {
       final user = _auth.currentUser;
       if (user == null) {
@@ -803,11 +807,13 @@ class BookingService {
 
       debugPrint('[BookingService] 開始支付尾款: bookingId=$bookingId');
       debugPrint('[BookingService] 支付方式: $paymentMethod');
+      debugPrint('[BookingService] 小費金額: $tipAmount');
 
       final url = '$_baseUrl/booking-flow/bookings/$bookingId/pay-balance';
       final requestBody = {
         'paymentMethod': paymentMethod,
         'customerUid': user.uid,
+        'tipAmount': tipAmount,
       };
 
       debugPrint('[BookingService] 請求 URL: $url');

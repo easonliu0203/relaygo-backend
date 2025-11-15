@@ -740,9 +740,9 @@ router.post('/bookings/:bookingId/end-trip', async (req: Request, res: Response)
 router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Response): Promise<void> => {
   try {
     const { bookingId } = req.params;
-    const { paymentMethod, customerUid } = req.body;
+    const { paymentMethod, customerUid, tipAmount = 0 } = req.body;
 
-    console.log(`[API] 支付尾款: bookingId=${bookingId}, paymentMethod=${paymentMethod}, customerUid=${customerUid}`);
+    console.log(`[API] 支付尾款: bookingId=${bookingId}, paymentMethod=${paymentMethod}, customerUid=${customerUid}, tipAmount=${tipAmount}`);
 
     // 1. 查詢訂單資料
     const { data: booking, error: bookingError } = await supabase
@@ -803,8 +803,9 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       return;
     }
 
-    // 5. 計算尾款金額
+    // 5. 計算尾款金額（包含小費）
     const balanceAmount = booking.total_amount - booking.deposit_amount;
+    const totalPayable = balanceAmount + Number(tipAmount);
 
     if (balanceAmount <= 0) {
       console.error('[API] 尾款金額錯誤:', balanceAmount);
@@ -816,6 +817,8 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
     }
 
     console.log('[API] 尾款金額:', balanceAmount);
+    console.log('[API] 小費金額:', tipAmount);
+    console.log('[API] 總支付金額:', totalPayable);
 
     // 6. 構建客戶資料（從 user_profiles 獲取完整資料）
     const userProfile = Array.isArray(customer.user_profiles) ? customer.user_profiles[0] : customer.user_profiles;
@@ -854,9 +857,11 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
     // 尾款: BK1763186275643-BALANCE
     const paymentRequest = {
       orderId: `${booking.booking_number}-BALANCE`,  // ✅ 添加 -BALANCE 後綴
-      amount: balanceAmount,
+      amount: totalPayable,  // ✅ 使用包含小費的總金額
       currency: 'TWD',
-      description: `RelayGo 訂單尾款 - ${booking.booking_number}`,
+      description: tipAmount > 0
+        ? `RelayGo 訂單尾款 + 小費 - ${booking.booking_number}`
+        : `RelayGo 訂單尾款 - ${booking.booking_number}`,
       customerInfo: {
         id: customer.id,
         name: customerName,      // ✅ 使用從 user_profiles 構建的姓名
@@ -865,7 +870,8 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       },
       metadata: {
         bookingId: booking.id,
-        paymentType: 'balance'
+        paymentType: 'balance',
+        tipAmount: tipAmount
       }
     };
 
@@ -899,7 +905,7 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       customer_id: customer.id,
       transaction_id: paymentResponse.transactionId,
       type: 'balance',  // 尾款類型
-      amount: balanceAmount,
+      amount: totalPayable,  // ✅ 使用包含小費的總金額
       currency: 'TWD',
       status: 'pending', // 等待支付完成
       payment_provider: paymentProviderType,
@@ -943,12 +949,13 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       });
     } else {
       // Mock 或其他自動完成的支付方式
-      // 更新訂單狀態為已完成
+      // 更新訂單狀態為已完成，並保存小費金額
       const now = new Date().toISOString();
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
           status: 'completed',
+          tip_amount: tipAmount,  // ✅ 保存小費金額
           updated_at: now
         })
         .eq('id', bookingId);

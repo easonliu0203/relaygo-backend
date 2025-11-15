@@ -25,21 +25,32 @@ class PaymentBalancePage extends ConsumerStatefulWidget {
 
 class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
   final BookingService _bookingService = BookingService();
-  
+  final TextEditingController _customTipController = TextEditingController();
+
   String _selectedPaymentMethod = 'credit_card';
   bool _isProcessing = false;
   bool _isLoading = true;
-  
+
   // 訂單資訊
   double _totalAmount = 0.0;
   double _depositAmount = 0.0;
   double _balanceAmount = 0.0;
   String _bookingNumber = '';
 
+  // 小費相關
+  double _tipAmount = 0.0;
+  String _selectedTipOption = 'none'; // 'none', '300', '500', '1000', 'custom'
+
   @override
   void initState() {
     super.initState();
     _loadBookingInfo();
+  }
+
+  @override
+  void dispose() {
+    _customTipController.dispose();
+    super.dispose();
   }
 
   /// 載入訂單資訊
@@ -93,6 +104,10 @@ class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
 
             // 費用明細卡片
             _buildPriceBreakdownCard(),
+            const SizedBox(height: 24),
+
+            // 小費選擇
+            _buildTipSection(),
             const SizedBox(height: 24),
 
             // 支付方式選擇
@@ -151,6 +166,8 @@ class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
   }
 
   Widget _buildPriceBreakdownCard() {
+    final totalPayable = _balanceAmount + _tipAmount;
+
     return Card(
       elevation: 2,
       child: Padding(
@@ -167,14 +184,18 @@ class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             _buildPriceRow('總費用', _totalAmount, Colors.black),
             const SizedBox(height: 8),
             _buildPriceRow('已付訂金', _depositAmount, const Color(0xFF4CAF50)),
+            if (_tipAmount > 0) ...[
+              const SizedBox(height: 8),
+              _buildPriceRow('小費', _tipAmount, const Color(0xFFFFB74D)),
+            ],
             const Divider(height: 24),
             _buildPriceRow(
               '應付尾款',
-              _balanceAmount,
+              totalPayable,
               const Color(0xFFFF9800),
               isLarge: true,
             ),
@@ -335,6 +356,7 @@ class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
       final paymentResult = await _bookingService.payBalance(
         widget.bookingId,
         _selectedPaymentMethod,
+        tipAmount: _tipAmount,
       );
 
       if (!mounted) return;
@@ -379,6 +401,134 @@ class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
             child: const Text('確定'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTipSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.volunteer_activism, color: Color(0xFFFFB74D)),
+                SizedBox(width: 8),
+                Text(
+                  '支付小費 (選填)',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2196F3),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // 快速選擇按鈕
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTipButton('300', 300),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildTipButton('500', 500),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildTipButton('1000', 1000),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildTipButton('自填', 0, isCustom: true),
+                ),
+              ],
+            ),
+
+            // 自訂金額輸入框
+            if (_selectedTipOption == 'custom') ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _customTipController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: '自訂小費金額',
+                  prefixText: 'NT\$ ',
+                  border: OutlineInputBorder(),
+                  hintText: '請輸入金額',
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _tipAmount = double.tryParse(value) ?? 0.0;
+                  });
+                },
+              ),
+            ],
+
+            // 清除小費按鈕
+            if (_tipAmount > 0) ...[
+              const SizedBox(height: 12),
+              Center(
+                child: TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _tipAmount = 0.0;
+                      _selectedTipOption = 'none';
+                      _customTipController.clear();
+                    });
+                  },
+                  icon: const Icon(Icons.clear),
+                  label: const Text('清除小費'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTipButton(String label, double amount, {bool isCustom = false}) {
+    final isSelected = isCustom
+        ? _selectedTipOption == 'custom'
+        : _selectedTipOption == amount.toString();
+
+    return OutlinedButton(
+      onPressed: () {
+        setState(() {
+          if (isCustom) {
+            _selectedTipOption = 'custom';
+            _tipAmount = 0.0;
+            _customTipController.clear();
+          } else {
+            _selectedTipOption = amount.toString();
+            _tipAmount = amount;
+            _customTipController.clear();
+          }
+        });
+      },
+      style: OutlinedButton.styleFrom(
+        backgroundColor: isSelected ? const Color(0xFFFFB74D).withOpacity(0.1) : null,
+        side: BorderSide(
+          color: isSelected ? const Color(0xFFFFB74D) : Colors.grey,
+          width: isSelected ? 2 : 1,
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+      child: Text(
+        isCustom ? label : 'NT\$ $label',
+        style: TextStyle(
+          color: isSelected ? const Color(0xFFFFB74D) : Colors.black87,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
       ),
     );
   }

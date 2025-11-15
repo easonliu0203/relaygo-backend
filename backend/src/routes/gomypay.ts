@@ -665,6 +665,24 @@ async function handlePaymentSuccess(params: {
     newStatus = 'completed';
     updateData.status = newStatus;
     updateData.completed_at = now;  // 設置完成時間
+
+    // ✅ 計算小費金額：支付金額 - 原始尾款金額
+    // 需要先查詢訂單資料以獲取原始尾款金額
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('total_amount, deposit_amount')
+      .eq('id', bookingId)
+      .single();
+
+    if (booking) {
+      const originalBalance = booking.total_amount - booking.deposit_amount;
+      const tipAmount = amount - originalBalance;
+
+      if (tipAmount > 0) {
+        updateData.tip_amount = tipAmount;
+        console.log('[GOMYPAY Callback] 小費金額:', tipAmount);
+      }
+    }
   } else {
     console.error('[GOMYPAY Callback] 未知的支付類型:', paymentType);
     return;
