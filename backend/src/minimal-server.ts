@@ -5,6 +5,7 @@ import bookingFlowRoutes from './routes/bookingFlow-minimal';
 import bookingsRoutes from './routes/bookings';
 import gomypayRoutes from './routes/gomypay';
 import pricingRoutes from './routes/pricing';
+import profileRoutes from './routes/profile';
 import { initializeFirebase } from './config/firebase';
 import { initializePaymentProviders } from './services/payment';
 
@@ -52,6 +53,7 @@ app.use('/api/bookings', bookingsRoutes);
 app.use('/api/booking-flow', bookingFlowRoutes);
 app.use('/api/payment', gomypayRoutes); // GoMyPay 回調路由（公開，不需要認證）
 app.use('/api/pricing', pricingRoutes); // 價格路由（公開）
+app.use('/api/profile', profileRoutes); // 個人資料路由（公開）
 
 // 404 處理
 app.use((_req, res) => {
