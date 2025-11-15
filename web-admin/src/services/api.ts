@@ -406,11 +406,11 @@ export class ApiService {
   }
 
   static async assignDriver(bookingId: string, driverId: string) {
-    return this.post(`/api/booking-flow/admin/bookings/${bookingId}/assign`, { driverId });
+    return this.internalPost(`/api/admin/bookings/${bookingId}/assign-driver`, { driverId });
   }
 
-  static async autoDispatch(bookingId: string) {
-    return this.post(`/api/booking-flow/admin/bookings/${bookingId}/auto-dispatch`);
+  static async autoDispatch(bookingIds?: string[]) {
+    return this.internalPost('/api/admin/bookings/auto-assign', { bookingIds });
   }
 
   // 司機管理
