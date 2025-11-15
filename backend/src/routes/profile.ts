@@ -1,19 +1,22 @@
 import express, { Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const router = express.Router();
 
-// Supabase 配置 - 使用 service_role key
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-// 創建 Supabase Admin 客戶端（繞過 RLS）
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
+// 初始化 Supabase Admin 客戶端（使用 service_role key 繞過 RLS）
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
 
 /**
  * GET /api/profile/upsert?firebaseUid=xxx
