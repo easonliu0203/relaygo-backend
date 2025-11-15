@@ -872,6 +872,8 @@ class OrderDetailPage extends ConsumerWidget {
 
   IconData _getStatusIcon(BookingStatus status) {
     switch (status) {
+      case BookingStatus.pendingPayment:
+        return Icons.payment;
       case BookingStatus.pending:
         return Icons.hourglass_empty;
       case BookingStatus.awaitingDriver:
@@ -893,6 +895,8 @@ class OrderDetailPage extends ConsumerWidget {
 
   String _getStatusDescription(BookingStatus status) {
     switch (status) {
+      case BookingStatus.pendingPayment:
+        return '請支付訂金以完成預約';
       case BookingStatus.pending:
         return '正在為您尋找合適的司機';
       case BookingStatus.awaitingDriver:

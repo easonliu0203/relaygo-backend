@@ -92,6 +92,7 @@ Map<String, dynamic> _$$BookingOrderImplToJson(_$BookingOrderImpl instance) =>
     };
 
 const _$BookingStatusEnumMap = {
+  BookingStatus.pendingPayment: 'PENDING_PAYMENT',
   BookingStatus.pending: 'pending',
   BookingStatus.awaitingDriver: 'awaitingDriver',
   BookingStatus.matched: 'matched',

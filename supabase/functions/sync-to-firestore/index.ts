@@ -334,7 +334,7 @@ async function syncBookingToFirestore(event: OutboxEvent): Promise<void> {
 
       const statusMapping: { [key: string]: string } = {
         // === 階段 I: 付款與搜尋 ===
-        'pending_payment': 'pending',           // 待付訂金 → 待配對（顯示在進行中列表）
+        'pending_payment': 'PENDING_PAYMENT',   // 待付訂金 → 待付訂金（客戶尚未支付訂金）
         'paid_deposit': 'pending',              // 已付訂金 → 待配對（等待派單）
         'assigned': 'awaitingDriver',           // 已分配司機 → 待司機確認
         'matched': 'awaitingDriver',            // 手動派單 → 待司機確認

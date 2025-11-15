@@ -360,10 +360,11 @@ class BookingService {
         .collection('orders_rt')
         .where('customerId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.pending.firestoreValue,
-          BookingStatus.awaitingDriver.firestoreValue,      // 待司機確認
+          BookingStatus.pendingPayment.firestoreValue,       // ✅ 待付訂金
+          BookingStatus.pending.firestoreValue,              // 待配對
+          BookingStatus.awaitingDriver.firestoreValue,       // 待司機確認
           BookingStatus.matched.firestoreValue,              // 已配對
-          BookingStatus.onTheWay.firestoreValue,             // ⭐ 新增：正在路上
+          BookingStatus.onTheWay.firestoreValue,             // 正在路上
           BookingStatus.inProgress.firestoreValue,           // 進行中
           BookingStatus.awaitingBalance.firestoreValue,      // 待付尾款
         ])

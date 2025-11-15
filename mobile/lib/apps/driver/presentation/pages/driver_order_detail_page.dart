@@ -133,6 +133,8 @@ class DriverOrderDetailPage extends ConsumerWidget {
 
   IconData _getStatusIcon(BookingStatus status) {
     switch (status) {
+      case BookingStatus.pendingPayment:
+        return Icons.payment;
       case BookingStatus.pending:
         return Icons.schedule;
       case BookingStatus.awaitingDriver:

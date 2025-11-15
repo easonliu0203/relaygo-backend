@@ -7,8 +7,11 @@ part 'booking_order.g.dart';
 
 /// 訂單狀態枚舉
 enum BookingStatus {
+  @JsonValue('PENDING_PAYMENT')
+  pendingPayment, // 待付訂金（客戶尚未支付訂金）
+
   @JsonValue('pending')
-  pending,        // 待配對（待付訂金或待派單）
+  pending,        // 待配對（已付訂金，等待派單）
 
   @JsonValue('awaitingDriver')
   awaitingDriver, // 待司機確認
@@ -37,6 +40,8 @@ extension BookingStatusExtension on BookingStatus {
   /// 獲取 Firestore 存儲的狀態值（對應 @JsonValue）
   String get firestoreValue {
     switch (this) {
+      case BookingStatus.pendingPayment:
+        return 'PENDING_PAYMENT';
       case BookingStatus.pending:
         return 'pending';
       case BookingStatus.awaitingDriver:
@@ -58,6 +63,8 @@ extension BookingStatusExtension on BookingStatus {
 
   String get displayName {
     switch (this) {
+      case BookingStatus.pendingPayment:
+        return '待付訂金';
       case BookingStatus.pending:
         return '待配對';
       case BookingStatus.awaitingDriver:
@@ -79,6 +86,8 @@ extension BookingStatusExtension on BookingStatus {
 
   Color get color {
     switch (this) {
+      case BookingStatus.pendingPayment:
+        return const Color(0xFFFF5252); // 紅色（待付訂金，需要立即處理）
       case BookingStatus.pending:
         return const Color(0xFFFF9800); // 橙色
       case BookingStatus.awaitingDriver:
