@@ -22,6 +22,8 @@ UserProfile _$UserProfileFromJson(Map<String, dynamic> json) {
 mixin _$UserProfile {
   String get id => throw _privateConstructorUsedError;
   String get userId => throw _privateConstructorUsedError;
+  String? get email =>
+      throw _privateConstructorUsedError; // ✅ 添加 email 欄位（從 users 表獲取，唯讀）
   String? get firstName => throw _privateConstructorUsedError;
   String? get lastName => throw _privateConstructorUsedError;
   String? get phone => throw _privateConstructorUsedError;
@@ -57,6 +59,7 @@ abstract class $UserProfileCopyWith<$Res> {
   $Res call(
       {String id,
       String userId,
+      String? email,
       String? firstName,
       String? lastName,
       String? phone,
@@ -90,6 +93,7 @@ class _$UserProfileCopyWithImpl<$Res, $Val extends UserProfile>
   $Res call({
     Object? id = null,
     Object? userId = null,
+    Object? email = freezed,
     Object? firstName = freezed,
     Object? lastName = freezed,
     Object? phone = freezed,
@@ -114,6 +118,10 @@ class _$UserProfileCopyWithImpl<$Res, $Val extends UserProfile>
           ? _value.userId
           : userId // ignore: cast_nullable_to_non_nullable
               as String,
+      email: freezed == email
+          ? _value.email
+          : email // ignore: cast_nullable_to_non_nullable
+              as String?,
       firstName: freezed == firstName
           ? _value.firstName
           : firstName // ignore: cast_nullable_to_non_nullable
@@ -185,6 +193,7 @@ abstract class _$$UserProfileImplCopyWith<$Res>
   $Res call(
       {String id,
       String userId,
+      String? email,
       String? firstName,
       String? lastName,
       String? phone,
@@ -216,6 +225,7 @@ class __$$UserProfileImplCopyWithImpl<$Res>
   $Res call({
     Object? id = null,
     Object? userId = null,
+    Object? email = freezed,
     Object? firstName = freezed,
     Object? lastName = freezed,
     Object? phone = freezed,
@@ -240,6 +250,10 @@ class __$$UserProfileImplCopyWithImpl<$Res>
           ? _value.userId
           : userId // ignore: cast_nullable_to_non_nullable
               as String,
+      email: freezed == email
+          ? _value.email
+          : email // ignore: cast_nullable_to_non_nullable
+              as String?,
       firstName: freezed == firstName
           ? _value.firstName
           : firstName // ignore: cast_nullable_to_non_nullable
@@ -306,6 +320,7 @@ class _$UserProfileImpl implements _UserProfile {
   const _$UserProfileImpl(
       {required this.id,
       required this.userId,
+      this.email,
       this.firstName,
       this.lastName,
       this.phone,
@@ -328,6 +343,9 @@ class _$UserProfileImpl implements _UserProfile {
   final String id;
   @override
   final String userId;
+  @override
+  final String? email;
+// ✅ 添加 email 欄位（從 users 表獲取，唯讀）
   @override
   final String? firstName;
   @override
@@ -365,7 +383,7 @@ class _$UserProfileImpl implements _UserProfile {
 
   @override
   String toString() {
-    return 'UserProfile(id: $id, userId: $userId, firstName: $firstName, lastName: $lastName, phone: $phone, avatarUrl: $avatarUrl, dateOfBirth: $dateOfBirth, gender: $gender, address: $address, emergencyContactName: $emergencyContactName, emergencyContactPhone: $emergencyContactPhone, createdAt: $createdAt, updatedAt: $updatedAt, preferredLang: $preferredLang, inputLangHint: $inputLangHint, hasCompletedLanguageWizard: $hasCompletedLanguageWizard)';
+    return 'UserProfile(id: $id, userId: $userId, email: $email, firstName: $firstName, lastName: $lastName, phone: $phone, avatarUrl: $avatarUrl, dateOfBirth: $dateOfBirth, gender: $gender, address: $address, emergencyContactName: $emergencyContactName, emergencyContactPhone: $emergencyContactPhone, createdAt: $createdAt, updatedAt: $updatedAt, preferredLang: $preferredLang, inputLangHint: $inputLangHint, hasCompletedLanguageWizard: $hasCompletedLanguageWizard)';
   }
 
   @override
@@ -375,6 +393,7 @@ class _$UserProfileImpl implements _UserProfile {
             other is _$UserProfileImpl &&
             (identical(other.id, id) || other.id == id) &&
             (identical(other.userId, userId) || other.userId == userId) &&
+            (identical(other.email, email) || other.email == email) &&
             (identical(other.firstName, firstName) ||
                 other.firstName == firstName) &&
             (identical(other.lastName, lastName) ||
@@ -410,6 +429,7 @@ class _$UserProfileImpl implements _UserProfile {
       runtimeType,
       id,
       userId,
+      email,
       firstName,
       lastName,
       phone,
@@ -445,6 +465,7 @@ abstract class _UserProfile implements UserProfile {
   const factory _UserProfile(
       {required final String id,
       required final String userId,
+      final String? email,
       final String? firstName,
       final String? lastName,
       final String? phone,
@@ -467,6 +488,8 @@ abstract class _UserProfile implements UserProfile {
   String get id;
   @override
   String get userId;
+  @override
+  String? get email; // ✅ 添加 email 欄位（從 users 表獲取，唯讀）
   @override
   String? get firstName;
   @override

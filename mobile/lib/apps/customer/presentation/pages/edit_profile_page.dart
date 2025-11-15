@@ -16,6 +16,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();  // ✅ 添加 email 控制器
   final _addressController = TextEditingController();
   final _emergencyContactNameController = TextEditingController();
   final _emergencyContactPhoneController = TextEditingController();
@@ -40,6 +41,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
         _firstNameController.text = profile.firstName ?? '';
         _lastNameController.text = profile.lastName ?? '';
         _phoneController.text = profile.phone ?? '';
+        _emailController.text = profile.email ?? '';  // ✅ 載入 email
         _addressController.text = profile.address ?? '';
         _emergencyContactNameController.text =
             profile.emergencyContactName ?? '';
@@ -56,6 +58,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     _firstNameController.dispose();
     _lastNameController.dispose();
     _phoneController.dispose();
+    _emailController.dispose();  // ✅ 釋放 email 控制器
     _addressController.dispose();
     _emergencyContactNameController.dispose();
     _emergencyContactPhoneController.dispose();
@@ -225,6 +228,28 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                 // 簡單的電話號碼驗證
                 if (!RegExp(r'^[0-9]{10}$').hasMatch(value.trim())) {
                   return '請輸入有效的電話號碼（10位數字）';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // ✅ 信箱（唯讀）
+            TextFormField(
+              controller: _emailController,
+              decoration: const InputDecoration(
+                labelText: '信箱',
+                hintText: '來自 Google/Apple 登入',
+                prefixIcon: Icon(Icons.email),
+                border: OutlineInputBorder(),
+                filled: true,
+                fillColor: Color(0xFFF5F5F5),  // 灰色背景表示唯讀
+              ),
+              enabled: false,  // 設為唯讀
+              keyboardType: TextInputType.emailAddress,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return '信箱為必填（來自第三方登入）';
                 }
                 return null;
               },

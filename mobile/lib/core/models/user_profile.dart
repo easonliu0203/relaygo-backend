@@ -9,6 +9,7 @@ class UserProfile with _$UserProfile {
   const factory UserProfile({
     required String id,
     required String userId,
+    String? email,  // ✅ 添加 email 欄位（從 users 表獲取，唯讀）
     String? firstName,
     String? lastName,
     String? phone,
