@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../../../../core/models/booking_order.dart';
 import '../../../../core/services/booking_service.dart';
 import '../../../../shared/providers/booking_provider.dart';
+import '../widgets/rating_dialog.dart';
 
 class OrderDetailPage extends ConsumerWidget {
   final String orderId;
@@ -703,6 +706,93 @@ class OrderDetailPage extends ConsumerWidget {
                 textAlign: TextAlign.center,
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // 評價司機按鈕（訂單完成後可用）
+        if (order.status == BookingStatus.completed) ...[
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: () async {
+                // 先檢查是否已評價過
+                try {
+                  final checkResponse = await http.get(
+                    Uri.parse('https://api.relaygo.pro/api/bookings/${order.id}/rating'),
+                  );
+
+                  if (checkResponse.statusCode == 200) {
+                    // 已評價過，顯示提示
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('您已經評價過此訂單了'),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                    return;
+                  }
+                } catch (e) {
+                  // 404 表示未評價，繼續顯示對話框
+                  debugPrint('[OrderDetail] 訂單尚未評價，顯示評價對話框');
+                }
+
+                // 顯示評價對話框
+                if (!context.mounted) return;
+
+                // 獲取訂單編號
+                String? bookingNumber;
+                try {
+                  final response = await http.get(
+                    Uri.parse('https://api.relaygo.pro/api/bookings/${order.id}'),
+                  );
+                  if (response.statusCode == 200) {
+                    final data = jsonDecode(response.body);
+                    bookingNumber = data['data']['booking_number'];
+                  }
+                } catch (e) {
+                  debugPrint('[OrderDetail] 獲取訂單編號失敗: $e');
+                }
+
+                if (!context.mounted) return;
+
+                await showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => RatingDialog(
+                    bookingId: order.id,
+                    bookingNumber: bookingNumber ?? order.id,
+                    onRatingSubmitted: () {
+                      // 刷新訂單資料
+                      ref.invalidate(bookingProvider(order.id));
+                    },
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFB74D),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.star, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    '評價司機服務',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 12),
         ],
