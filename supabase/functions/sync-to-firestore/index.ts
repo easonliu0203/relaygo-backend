@@ -322,6 +322,7 @@ async function syncBookingToFirestore(event: OutboxEvent): Promise<void> {
     // 費用資訊
     estimatedFare: bookingData.totalAmount || 0,
     depositAmount: bookingData.depositAmount || 0,
+    tipAmount: bookingData.tipAmount || 0,  // ✅ 添加小費金額
     depositPaid: false,
 
     // 狀態映射：將 Supabase 狀態轉換為 Flutter APP 期望的狀態
