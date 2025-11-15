@@ -14,13 +14,29 @@ const nextConfig = {
   },
 
   // 重寫規則 (僅在有 API_URL 時啟用)
+  // ⚠️ 重要：不要重寫 /api/admin/* 路由，這些是 Next.js 內部 API 路由
   async rewrites() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
     if (apiUrl) {
       return [
+        // 只重寫非 admin 的 API 路由到外部 API
+        // 例如：/api/bookings/* → 外部 API
+        // 但保留：/api/admin/* → Next.js 內部 API
         {
-          source: '/api/:path*',
-          destination: `${apiUrl}/api/:path*`,
+          source: '/api/bookings/:path*',
+          destination: `${apiUrl}/api/bookings/:path*`,
+        },
+        {
+          source: '/api/booking-flow/:path*',
+          destination: `${apiUrl}/api/booking-flow/:path*`,
+        },
+        {
+          source: '/api/drivers/:path*',
+          destination: `${apiUrl}/api/drivers/:path*`,
+        },
+        {
+          source: '/api/payment/:path*',
+          destination: `${apiUrl}/api/payment/:path*`,
         },
       ];
     }
