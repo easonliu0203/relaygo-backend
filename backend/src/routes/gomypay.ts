@@ -41,9 +41,13 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
   console.log('[GoMyPay Return] 用戶返回:', req.query);
 
   // 解析訂單編號（從 query 參數中）
-  const { e_orderno, result, ret_msg } = req.query;
+  // ✅ 修復：確保 e_orderno 正確解析，即使是錯誤情況
+  const { e_orderno, result, ret_msg, Order_No } = req.query;
 
-  console.log('[GoMyPay Return] 訂單編號:', e_orderno);
+  // GOMYPAY 可能使用 e_orderno 或 Order_No 參數
+  const orderNo = (e_orderno || Order_No || '') as string;
+
+  console.log('[GoMyPay Return] 訂單編號:', orderNo);
   console.log('[GoMyPay Return] 支付結果:', result);
   console.log('[GoMyPay Return] 返回訊息:', ret_msg);
 
@@ -104,17 +108,30 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
         // 支付結果
         const paymentResult = '${result || ''}';
         const paymentMessage = '${ret_msg || ''}';
-        const orderNo = '${e_orderno || ''}';
+        // ✅ 修復：使用解析後的 orderNo 變數，確保不為空
+        const orderNo = '${orderNo}';
 
         console.log('[Return Page] 支付結果:', paymentResult);
         console.log('[Return Page] 訂單編號:', orderNo);
+        console.log('[Return Page] 支付訊息:', paymentMessage);
 
         // 立即通知 Flutter WebView（不等待回調）
         function notifyFlutter(status) {
           try {
+            // ✅ 修復：移除 -DEPOSIT 或 -BALANCE 後綴，只傳遞 booking_number
+            // 例如：BK1763186275643-BALANCE → BK1763186275643
+            let bookingNumber = orderNo;
+            if (orderNo.endsWith('-DEPOSIT')) {
+              bookingNumber = orderNo.replace('-DEPOSIT', '');
+            } else if (orderNo.endsWith('-BALANCE')) {
+              bookingNumber = orderNo.replace('-BALANCE', '');
+            }
+
             // 方法 1: 使用 Deep Link
-            const deepLink = 'ridebooking://payment-result?status=' + status + '&orderNo=' + orderNo;
+            const deepLink = 'ridebooking://payment-result?status=' + status + '&orderNo=' + bookingNumber;
             console.log('[Return Page] 觸發 Deep Link:', deepLink);
+            console.log('[Return Page] 原始訂單號:', orderNo);
+            console.log('[Return Page] 訂單編號:', bookingNumber);
             window.location.href = deepLink;
           } catch (e) {
             console.error('[Return Page] Deep Link 失敗:', e);
@@ -240,18 +257,31 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
     let paymentType: string;
 
     if (e_orderno.startsWith('BK')) {
-      // BK 格式：BK{timestamp}
-      // 這是 booking_number 的實際格式
-      // 需要從資料庫查詢 booking_number 來獲取 booking.id
+      // ✅ 修復：支持 BK 格式的訂單編號，包含 -DEPOSIT 和 -BALANCE 後綴
+      // 格式：
+      // - 訂金: BK1763186275643-DEPOSIT
+      // - 尾款: BK1763186275643-BALANCE
+      // - 舊格式（向後兼容）: BK1763186275643
       console.log('[GOMYPAY Callback] 檢測到 BK 格式訂單編號:', e_orderno);
 
-      // 暫時將整個 booking_number 作為查詢條件
-      // 稍後會用 booking_number 查詢資料庫獲取真實的 booking.id
-      bookingId = e_orderno; // 使用 booking_number 作為臨時 ID
-      paymentType = 'deposit'; // 預設為訂金支付（目前只支持訂金）
+      // 檢查是否有後綴
+      if (e_orderno.endsWith('-DEPOSIT')) {
+        // 訂金支付
+        bookingId = e_orderno.replace('-DEPOSIT', ''); // 移除後綴，獲取 booking_number
+        paymentType = 'deposit';
+      } else if (e_orderno.endsWith('-BALANCE')) {
+        // 尾款支付
+        bookingId = e_orderno.replace('-BALANCE', ''); // 移除後綴，獲取 booking_number
+        paymentType = 'balance';
+      } else {
+        // 舊格式（向後兼容）：沒有後綴，預設為訂金
+        bookingId = e_orderno;
+        paymentType = 'deposit';
+      }
 
       console.log('[GOMYPAY Callback] BK 格式解析:', {
-        bookingNumber: e_orderno,
+        originalOrderNo: e_orderno,
+        bookingNumber: bookingId,
         paymentType
       });
     } else if (e_orderno.startsWith('BOOKING_')) {
