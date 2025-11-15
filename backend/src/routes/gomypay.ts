@@ -207,6 +207,7 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
       ret_msg,       // 返回訊息 - GOMYPAY 實際返回的參數
       OrderID,       // GOMYPAY 訂單編號
       e_orderno,     // 我們的訂單編號
+      e_money,       // 實際支付金額 - GOMYPAY 實際返回的參數
       AvCode,        // 授權碼
       str_check,     // 檢查碼 - GOMYPAY 實際返回的參數名稱
       Send_Type,     // 交易類型
@@ -217,6 +218,7 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
       ret_msg,
       OrderID,
       e_orderno,
+      e_money,
       AvCode,
       str_check,
       Send_Type
@@ -464,20 +466,27 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
       // 支付成功
       console.log('[GOMYPAY Callback] 支付成功');
 
-      // 計算支付金額
+      // ✅ 使用 GOMYPAY 回調傳來的實際支付金額（包含小費）
+      // 如果沒有 e_money，則從資料庫計算（向後兼容）
       let amount: number;
-      if (paymentType === 'deposit') {
-        amount = booking.deposit_amount || 0;
-      } else if (paymentType === 'balance') {
-        // 尾款金額 = 總金額 - 訂金金額
-        // 如果沒有 total_price，使用 balance_amount
-        // 如果都沒有，使用 deposit_amount（測試訂單）
-        amount = booking.balance_amount ||
-                 (booking.total_price ? booking.total_price - (booking.deposit_amount || 0) : 0) ||
-                 booking.deposit_amount ||
-                 0;
+      if (e_money) {
+        // 優先使用 GOMYPAY 回調傳來的實際支付金額
+        amount = parseFloat(e_money);
+        console.log('[GOMYPAY Callback] 使用 GOMYPAY 回調金額:', amount);
       } else {
-        amount = 0;
+        // 向後兼容：從資料庫計算支付金額
+        console.log('[GOMYPAY Callback] ⚠️  未收到 e_money，從資料庫計算金額');
+        if (paymentType === 'deposit') {
+          amount = booking.deposit_amount || 0;
+        } else if (paymentType === 'balance') {
+          // 尾款金額 = 總金額 - 訂金金額
+          amount = booking.balance_amount ||
+                   (booking.total_price ? booking.total_price - (booking.deposit_amount || 0) : 0) ||
+                   booking.deposit_amount ||
+                   0;
+        } else {
+          amount = 0;
+        }
       }
 
       console.log('[GOMYPAY Callback] 支付金額:', amount);
