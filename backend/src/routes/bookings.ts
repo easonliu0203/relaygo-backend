@@ -451,6 +451,121 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
 });
 
 /**
+ * @route GET /api/bookings/:bookingId
+ * @desc 獲取訂單詳情（用於訂單完成頁面）
+ * @access Public
+ */
+router.get('/:bookingId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { bookingId } = req.params;
+
+    console.log('[API] 查詢訂單詳情:', bookingId);
+
+    // 查詢訂單資料
+    const { data: booking, error: bookingError } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', bookingId)
+      .single();
+
+    if (bookingError || !booking) {
+      console.error('[API] 查詢訂單失敗:', bookingError);
+      res.status(404).json({
+        success: false,
+        error: '訂單不存在'
+      });
+      return;
+    }
+
+    console.log('[API] ✅ 訂單查詢成功:', {
+      booking_number: booking.booking_number,
+      status: booking.status
+    });
+
+    // 返回訂單資料
+    res.json({
+      success: true,
+      data: {
+        id: booking.id,
+        booking_number: booking.booking_number,
+        status: booking.status,
+        customer_id: booking.customer_id,
+        driver_id: booking.driver_id,
+        total_amount: booking.total_amount,
+        deposit_amount: booking.deposit_amount,
+        tip_amount: booking.tip_amount,
+        created_at: booking.created_at,
+        updated_at: booking.updated_at,
+        completed_at: booking.completed_at
+      }
+    });
+
+  } catch (error: any) {
+    console.error('[API] 查詢訂單詳情失敗:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '查詢訂單詳情失敗'
+    });
+  }
+});
+
+/**
+ * @route GET /api/bookings/:bookingId/rating
+ * @desc 檢查訂單是否已評價
+ * @access Public
+ */
+router.get('/:bookingId/rating', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { bookingId } = req.params;
+
+    console.log('[API] 查詢訂單評價:', bookingId);
+
+    // 查詢評價資料
+    const { data: rating, error: ratingError } = await supabase
+      .from('ratings')
+      .select('*')
+      .eq('booking_id', bookingId)
+      .single();
+
+    if (ratingError && ratingError.code !== 'PGRST116') {
+      // PGRST116 = 沒有找到資料（正常情況）
+      console.error('[API] 查詢評價失敗:', ratingError);
+      res.status(500).json({
+        success: false,
+        error: '查詢評價失敗'
+      });
+      return;
+    }
+
+    if (rating) {
+      console.log('[API] ✅ 訂單已評價');
+      res.json({
+        success: true,
+        data: {
+          hasRating: true,
+          rating: rating
+        }
+      });
+    } else {
+      console.log('[API] ⚠️  訂單尚未評價');
+      res.json({
+        success: true,
+        data: {
+          hasRating: false
+        }
+      });
+    }
+
+  } catch (error: any) {
+    console.error('[API] 查詢訂單評價失敗:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '查詢訂單評價失敗'
+    });
+  }
+});
+
+/**
  * @route GET /api/bookings/test
  * @desc 測試路由
  */
