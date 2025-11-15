@@ -951,11 +951,17 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       // Mock 或其他自動完成的支付方式
       // 更新訂單狀態為已完成，並保存小費金額
       const now = new Date().toISOString();
+
+      console.log('[API] Mock 支付 - 準備更新訂單狀態');
+      console.log('[API] Mock 支付 - 小費金額:', tipAmount);
+      console.log('[API] Mock 支付 - 小費金額類型:', typeof tipAmount);
+
       const { error: updateError } = await supabase
         .from('bookings')
         .update({
           status: 'completed',
-          tip_amount: tipAmount,  // ✅ 保存小費金額
+          tip_amount: Number(tipAmount),  // ✅ 確保轉換為數字
+          completed_at: now,  // ✅ 添加完成時間
           updated_at: now
         })
         .eq('id', bookingId);
@@ -963,7 +969,7 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       if (updateError) {
         console.error('[API] 更新訂單狀態失敗:', updateError);
       } else {
-        console.log('[API] ✅ 訂單狀態已更新為 completed');
+        console.log('[API] ✅ 訂單狀態已更新為 completed，小費金額:', tipAmount);
       }
 
       // 發送系統訊息到聊天室

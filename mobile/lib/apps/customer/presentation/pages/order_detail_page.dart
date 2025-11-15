@@ -325,6 +325,17 @@ class OrderDetailPage extends ConsumerWidget {
                 valueColor: const Color(0xFF4CAF50),
               ),
               const SizedBox(height: 8),
+
+              // 只有當小費 > 0 時才顯示小費欄位
+              if (order.tipAmount > 0) ...[
+                _buildInfoRow(
+                  '已付小費',
+                  'NT\$ ${order.tipAmount.toStringAsFixed(0)}',
+                  valueColor: const Color(0xFFFFB74D),
+                ),
+                const SizedBox(height: 8),
+              ],
+
               _buildInfoRow(
                 '已付總額',
                 'NT\$ ${order.totalPaid.toStringAsFixed(0)}',

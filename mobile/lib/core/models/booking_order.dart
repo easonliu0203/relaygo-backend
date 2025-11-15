@@ -149,6 +149,7 @@ class BookingOrder with _$BookingOrder {
     required double estimatedFare,         // 預估費用
     required double depositAmount,         // 訂金金額
     @Default(false) bool depositPaid,      // 訂金是否已支付
+    @Default(0.0) double tipAmount,        // 小費金額
     @Default(BookingStatus.pending) BookingStatus status, // 訂單狀態
     required DateTime createdAt,           // 建立時間
     DateTime? matchedAt,                   // 配對時間
@@ -167,10 +168,10 @@ class BookingOrder with _$BookingOrder {
   /// 當訂單狀態為 completed 時，表示尾款已支付
   bool get balancePaid => status == BookingStatus.completed;
 
-  /// 計算已支付總額
+  /// 計算已支付總額（包含小費）
   double get totalPaid {
     if (balancePaid) {
-      return estimatedFare; // 訂金 + 尾款 = 總額
+      return estimatedFare + tipAmount; // 訂金 + 尾款 + 小費 = 總額
     } else if (depositPaid) {
       return depositAmount; // 只支付了訂金
     } else {
@@ -213,6 +214,7 @@ class BookingOrder with _$BookingOrder {
       estimatedFare: (data['estimatedFare'] ?? 0.0).toDouble(),
       depositAmount: (data['depositAmount'] ?? 0.0).toDouble(),
       depositPaid: data['depositPaid'] ?? false,
+      tipAmount: (data['tipAmount'] ?? 0.0).toDouble(),
       status: BookingStatus.values.firstWhere(
         (status) => status.firestoreValue == data['status'],
         orElse: () => BookingStatus.pending,

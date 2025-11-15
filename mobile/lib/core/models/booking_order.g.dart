@@ -47,6 +47,7 @@ _$BookingOrderImpl _$$BookingOrderImplFromJson(Map<String, dynamic> json) =>
       estimatedFare: (json['estimatedFare'] as num).toDouble(),
       depositAmount: (json['depositAmount'] as num).toDouble(),
       depositPaid: json['depositPaid'] as bool? ?? false,
+      tipAmount: (json['tipAmount'] as num?)?.toDouble() ?? 0.0,
       status: $enumDecodeNullable(_$BookingStatusEnumMap, json['status']) ??
           BookingStatus.pending,
       createdAt: DateTime.parse(json['createdAt'] as String),
@@ -81,6 +82,7 @@ Map<String, dynamic> _$$BookingOrderImplToJson(_$BookingOrderImpl instance) =>
       'estimatedFare': instance.estimatedFare,
       'depositAmount': instance.depositAmount,
       'depositPaid': instance.depositPaid,
+      'tipAmount': instance.tipAmount,
       'status': _$BookingStatusEnumMap[instance.status]!,
       'createdAt': instance.createdAt.toIso8601String(),
       'matchedAt': instance.matchedAt?.toIso8601String(),
@@ -91,6 +93,7 @@ const _$BookingStatusEnumMap = {
   BookingStatus.pending: 'pending',
   BookingStatus.awaitingDriver: 'awaitingDriver',
   BookingStatus.matched: 'matched',
+  BookingStatus.onTheWay: 'ON_THE_WAY',
   BookingStatus.inProgress: 'inProgress',
   BookingStatus.awaitingBalance: 'awaitingBalance',
   BookingStatus.completed: 'completed',

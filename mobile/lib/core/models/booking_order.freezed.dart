@@ -214,6 +214,7 @@ mixin _$BookingOrder {
   double get estimatedFare => throw _privateConstructorUsedError; // 預估費用
   double get depositAmount => throw _privateConstructorUsedError; // 訂金金額
   bool get depositPaid => throw _privateConstructorUsedError; // 訂金是否已支付
+  double get tipAmount => throw _privateConstructorUsedError; // 小費金額
   BookingStatus get status => throw _privateConstructorUsedError; // 訂單狀態
   DateTime get createdAt => throw _privateConstructorUsedError; // 建立時間
   DateTime? get matchedAt => throw _privateConstructorUsedError; // 配對時間
@@ -257,6 +258,7 @@ abstract class $BookingOrderCopyWith<$Res> {
       double estimatedFare,
       double depositAmount,
       bool depositPaid,
+      double tipAmount,
       BookingStatus status,
       DateTime createdAt,
       DateTime? matchedAt,
@@ -302,6 +304,7 @@ class _$BookingOrderCopyWithImpl<$Res, $Val extends BookingOrder>
     Object? estimatedFare = null,
     Object? depositAmount = null,
     Object? depositPaid = null,
+    Object? tipAmount = null,
     Object? status = null,
     Object? createdAt = null,
     Object? matchedAt = freezed,
@@ -392,6 +395,10 @@ class _$BookingOrderCopyWithImpl<$Res, $Val extends BookingOrder>
           ? _value.depositPaid
           : depositPaid // ignore: cast_nullable_to_non_nullable
               as bool,
+      tipAmount: null == tipAmount
+          ? _value.tipAmount
+          : tipAmount // ignore: cast_nullable_to_non_nullable
+              as double,
       status: null == status
           ? _value.status
           : status // ignore: cast_nullable_to_non_nullable
@@ -470,6 +477,7 @@ abstract class _$$BookingOrderImplCopyWith<$Res>
       double estimatedFare,
       double depositAmount,
       bool depositPaid,
+      double tipAmount,
       BookingStatus status,
       DateTime createdAt,
       DateTime? matchedAt,
@@ -515,6 +523,7 @@ class __$$BookingOrderImplCopyWithImpl<$Res>
     Object? estimatedFare = null,
     Object? depositAmount = null,
     Object? depositPaid = null,
+    Object? tipAmount = null,
     Object? status = null,
     Object? createdAt = null,
     Object? matchedAt = freezed,
@@ -605,6 +614,10 @@ class __$$BookingOrderImplCopyWithImpl<$Res>
           ? _value.depositPaid
           : depositPaid // ignore: cast_nullable_to_non_nullable
               as bool,
+      tipAmount: null == tipAmount
+          ? _value.tipAmount
+          : tipAmount // ignore: cast_nullable_to_non_nullable
+              as double,
       status: null == status
           ? _value.status
           : status // ignore: cast_nullable_to_non_nullable
@@ -650,6 +663,7 @@ class _$BookingOrderImpl extends _BookingOrder {
       required this.estimatedFare,
       required this.depositAmount,
       this.depositPaid = false,
+      this.tipAmount = 0.0,
       this.status = BookingStatus.pending,
       required this.createdAt,
       this.matchedAt,
@@ -725,6 +739,10 @@ class _$BookingOrderImpl extends _BookingOrder {
 // 訂金是否已支付
   @override
   @JsonKey()
+  final double tipAmount;
+// 小費金額
+  @override
+  @JsonKey()
   final BookingStatus status;
 // 訂單狀態
   @override
@@ -738,7 +756,7 @@ class _$BookingOrderImpl extends _BookingOrder {
 
   @override
   String toString() {
-    return 'BookingOrder(id: $id, customerId: $customerId, driverId: $driverId, customerName: $customerName, customerPhone: $customerPhone, driverName: $driverName, driverPhone: $driverPhone, driverVehiclePlate: $driverVehiclePlate, driverVehicleModel: $driverVehicleModel, driverRating: $driverRating, pickupAddress: $pickupAddress, pickupLocation: $pickupLocation, dropoffAddress: $dropoffAddress, dropoffLocation: $dropoffLocation, bookingTime: $bookingTime, passengerCount: $passengerCount, luggageCount: $luggageCount, notes: $notes, estimatedFare: $estimatedFare, depositAmount: $depositAmount, depositPaid: $depositPaid, status: $status, createdAt: $createdAt, matchedAt: $matchedAt, completedAt: $completedAt)';
+    return 'BookingOrder(id: $id, customerId: $customerId, driverId: $driverId, customerName: $customerName, customerPhone: $customerPhone, driverName: $driverName, driverPhone: $driverPhone, driverVehiclePlate: $driverVehiclePlate, driverVehicleModel: $driverVehicleModel, driverRating: $driverRating, pickupAddress: $pickupAddress, pickupLocation: $pickupLocation, dropoffAddress: $dropoffAddress, dropoffLocation: $dropoffLocation, bookingTime: $bookingTime, passengerCount: $passengerCount, luggageCount: $luggageCount, notes: $notes, estimatedFare: $estimatedFare, depositAmount: $depositAmount, depositPaid: $depositPaid, tipAmount: $tipAmount, status: $status, createdAt: $createdAt, matchedAt: $matchedAt, completedAt: $completedAt)';
   }
 
   @override
@@ -786,6 +804,8 @@ class _$BookingOrderImpl extends _BookingOrder {
                 other.depositAmount == depositAmount) &&
             (identical(other.depositPaid, depositPaid) ||
                 other.depositPaid == depositPaid) &&
+            (identical(other.tipAmount, tipAmount) ||
+                other.tipAmount == tipAmount) &&
             (identical(other.status, status) || other.status == status) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
@@ -820,6 +840,7 @@ class _$BookingOrderImpl extends _BookingOrder {
         estimatedFare,
         depositAmount,
         depositPaid,
+        tipAmount,
         status,
         createdAt,
         matchedAt,
@@ -865,6 +886,7 @@ abstract class _BookingOrder extends BookingOrder {
       required final double estimatedFare,
       required final double depositAmount,
       final bool depositPaid,
+      final double tipAmount,
       final BookingStatus status,
       required final DateTime createdAt,
       final DateTime? matchedAt,
@@ -916,6 +938,8 @@ abstract class _BookingOrder extends BookingOrder {
   double get depositAmount; // 訂金金額
   @override
   bool get depositPaid; // 訂金是否已支付
+  @override
+  double get tipAmount; // 小費金額
   @override
   BookingStatus get status; // 訂單狀態
   @override
