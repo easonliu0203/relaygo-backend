@@ -290,6 +290,8 @@ class BookingRequestState {
       throw Exception('預約資訊不完整');
     }
 
+    // ✅ 修復：包含套餐資訊（packageId, packageName, estimatedFare）
+    // 確保客戶選擇的套餐價格正確傳遞到 Backend
     return BookingRequest(
       pickupAddress: pickupAddress!,
       pickupLocation: pickupLocation!,
@@ -299,6 +301,9 @@ class BookingRequestState {
       passengerCount: passengerCount,
       luggageCount: luggageCount,
       notes: notes,
+      packageId: packageId,           // ✅ 添加套餐 ID
+      packageName: packageName,       // ✅ 添加套餐名稱
+      estimatedFare: estimatedFare,   // ✅ 添加套餐價格
     );
   }
 }
