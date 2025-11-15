@@ -252,10 +252,15 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
       return;
     }
 
-    // 2. 驗證客戶權限（需要查詢 users 表獲取 user.id）
+    // 2. 驗證客戶權限並獲取完整用戶資料（包含 user_profiles）
     const { data: user } = await supabase
       .from('users')
-      .select('id, email, phone')
+      .select(`
+        id,
+        email,
+        phone,
+        user_profiles:user_profiles(first_name, last_name, phone)
+      `)
       .eq('firebase_uid', customerUid)
       .single();
 
@@ -267,7 +272,19 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
       return;
     }
 
-    // 3. 檢查訂單狀態
+    // 3. 構建客戶姓名（優先使用 user_profiles，否則使用 booking.customer_name）
+    const userProfile = Array.isArray(user.user_profiles) ? user.user_profiles[0] : user.user_profiles;
+    const customerName = userProfile?.first_name && userProfile?.last_name
+      ? `${userProfile.last_name}${userProfile.first_name}`
+      : booking.customer_name || '客戶';
+
+    // 4. 構建客戶電話（優先使用 users.phone，否則使用 user_profiles.phone 或 booking.customer_phone）
+    const customerPhone = user.phone || userProfile?.phone || booking.customer_phone || '';
+
+    // 5. 構建客戶信箱（從 users.email 獲取）
+    const customerEmail = user.email || '';
+
+    // 6. 檢查訂單狀態
     if (booking.status !== 'pending_payment') {
       res.status(400).json({
         success: false,
@@ -276,7 +293,7 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
       return;
     }
 
-    // 4. 使用 PaymentProviderFactory 發起支付
+    // 7. 使用 PaymentProviderFactory 發起支付
     const { PaymentProviderFactory, PaymentProviderType } = await import('../services/payment/PaymentProvider');
 
     // 根據環境變數決定使用哪個支付提供者
@@ -292,7 +309,7 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
       config: {}
     });
 
-    // 5. 發起支付
+    // 8. 發起支付（使用從 user_profiles 獲取的完整客戶資料）
     const paymentRequest = {
       orderId: booking.booking_number,
       amount: booking.deposit_amount,
@@ -300,9 +317,9 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
       description: `RelayGo 訂單訂金 - ${booking.booking_number}`,
       customerInfo: {
         id: user.id,
-        name: booking.customer_name || '客戶',
-        email: user.email || '',
-        phone: user.phone || booking.customer_phone || ''
+        name: customerName,      // ✅ 使用從 user_profiles 構建的姓名
+        email: customerEmail,    // ✅ 使用從 users 獲取的信箱
+        phone: customerPhone     // ✅ 使用從 users/user_profiles 獲取的電話
       },
       metadata: {
         bookingId: booking.id,
@@ -313,7 +330,10 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
     console.log('[API] 發起支付請求:', {
       provider: paymentProviderType,
       orderId: paymentRequest.orderId,
-      amount: paymentRequest.amount
+      amount: paymentRequest.amount,
+      customerName: customerName,
+      customerEmail: customerEmail,
+      customerPhone: customerPhone
     });
 
     const paymentResponse = await provider.initiatePayment(paymentRequest);
@@ -331,7 +351,7 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
       hasPaymentUrl: !!paymentResponse.paymentUrl
     });
 
-    // 6. 創建支付記錄（狀態為 pending，等待回調確認）
+    // 9. 創建支付記錄（狀態為 pending，等待回調確認）
     const paymentData = {
       booking_id: bookingId,
       customer_id: booking.customer_id,

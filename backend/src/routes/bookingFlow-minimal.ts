@@ -760,10 +760,16 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       return;
     }
 
-    // 2. 查詢客戶資料並驗證權限
+    // 2. 查詢客戶資料並驗證權限（包含 user_profiles 以獲取完整資料）
     const { data: customer, error: customerError } = await supabase
       .from('users')
-      .select('id, firebase_uid')
+      .select(`
+        id,
+        firebase_uid,
+        email,
+        phone,
+        user_profiles:user_profiles(first_name, last_name, phone)
+      `)
       .eq('firebase_uid', customerUid)
       .eq('role', 'customer')
       .single();
@@ -811,7 +817,21 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
 
     console.log('[API] 尾款金額:', balanceAmount);
 
-    // 6. 使用 PaymentProviderFactory 創建支付提供者（與支付訂金相同的邏輯）
+    // 6. 構建客戶資料（從 user_profiles 獲取完整資料）
+    const userProfile = Array.isArray(customer.user_profiles) ? customer.user_profiles[0] : customer.user_profiles;
+    const customerName = userProfile?.first_name && userProfile?.last_name
+      ? `${userProfile.last_name}${userProfile.first_name}`
+      : booking.customer_name || '客戶';
+    const customerPhone = customer.phone || userProfile?.phone || booking.customer_phone || '';
+    const customerEmail = customer.email || '';
+
+    console.log('[API] 客戶資料:', {
+      name: customerName,
+      email: customerEmail,
+      phone: customerPhone
+    });
+
+    // 7. 使用 PaymentProviderFactory 創建支付提供者（與支付訂金相同的邏輯）
     const { PaymentProviderFactory, PaymentProviderType } = await import('../services/payment/PaymentProvider');
 
     // 決定使用哪個支付提供者
@@ -827,7 +847,7 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       config: {}
     });
 
-    // 7. 發起支付
+    // 8. 發起支付（使用從 user_profiles 獲取的完整客戶資料）
     const paymentRequest = {
       orderId: booking.booking_number,
       amount: balanceAmount,
@@ -835,9 +855,9 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       description: `RelayGo 訂單尾款 - ${booking.booking_number}`,
       customerInfo: {
         id: customer.id,
-        name: booking.customer_name || '客戶',
-        email: '', // 可以從 users 表查詢
-        phone: booking.customer_phone || ''
+        name: customerName,      // ✅ 使用從 user_profiles 構建的姓名
+        email: customerEmail,    // ✅ 使用從 users 獲取的信箱
+        phone: customerPhone     // ✅ 使用從 users/user_profiles 獲取的電話
       },
       metadata: {
         bookingId: booking.id,
@@ -848,7 +868,10 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
     console.log('[API] 發起支付請求:', {
       provider: paymentProviderType,
       orderId: paymentRequest.orderId,
-      amount: paymentRequest.amount
+      amount: paymentRequest.amount,
+      customerName: customerName,
+      customerEmail: customerEmail,
+      customerPhone: customerPhone
     });
 
     const paymentResponse = await provider.initiatePayment(paymentRequest);
@@ -866,7 +889,7 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       hasPaymentUrl: !!paymentResponse.paymentUrl
     });
 
-    // 8. 創建支付記錄（狀態為 pending，等待回調確認）
+    // 9. 創建支付記錄（狀態為 pending，等待回調確認）
     const paymentData = {
       booking_id: bookingId,
       customer_id: customer.id,
