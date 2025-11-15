@@ -277,7 +277,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
 
       try {
         // 從 Supabase 直接獲取最新訂單狀態
-        final booking = await _bookingService.getBookingFromSupabase(widget.bookingId);
+        final booking = await _bookingService.getBooking(widget.bookingId);
 
         if (booking != null) {
           debugPrint('   訂單狀態: ${booking.status.name}');
@@ -397,7 +397,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
 
       try {
         // 直接從 Supabase 讀取訂單狀態
-        final booking = await _bookingService.getBookingFromSupabase(widget.bookingId);
+        final booking = await _bookingService.getBooking(widget.bookingId);
 
         if (booking == null) {
           debugPrint('❌ 訂單不存在');
@@ -428,7 +428,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
     // 如果 10 秒後還沒有更新，返回最後一次獲取的訂單
     debugPrint('⚠️  訂單狀態未在 10 秒內更新為 completed');
     try {
-      return await _bookingService.getBookingFromSupabase(widget.bookingId);
+      return await _bookingService.getBooking(widget.bookingId);
     } catch (e) {
       debugPrint('❌ 最後一次查詢訂單失敗: $e');
       return null;
@@ -545,16 +545,14 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
         appBar: AppBar(
           title: Text(
             widget.paymentType == PaymentType.deposit
-                ? l10n.payDeposit
-                : l10n.payBalance,
+                ? '支付訂金'
+                : '支付尾款',
           ),
           backgroundColor: const Color(0xFF2196F3),
           foregroundColor: Colors.white,
