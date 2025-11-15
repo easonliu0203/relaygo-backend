@@ -47,6 +47,7 @@ _$BookingOrderImpl _$$BookingOrderImplFromJson(Map<String, dynamic> json) =>
       estimatedFare: (json['estimatedFare'] as num).toDouble(),
       depositAmount: (json['depositAmount'] as num).toDouble(),
       depositPaid: json['depositPaid'] as bool? ?? false,
+      overtimeFee: (json['overtimeFee'] as num?)?.toDouble() ?? 0.0,
       tipAmount: (json['tipAmount'] as num?)?.toDouble() ?? 0.0,
       status: $enumDecodeNullable(_$BookingStatusEnumMap, json['status']) ??
           BookingStatus.pending,
@@ -82,6 +83,7 @@ Map<String, dynamic> _$$BookingOrderImplToJson(_$BookingOrderImpl instance) =>
       'estimatedFare': instance.estimatedFare,
       'depositAmount': instance.depositAmount,
       'depositPaid': instance.depositPaid,
+      'overtimeFee': instance.overtimeFee,
       'tipAmount': instance.tipAmount,
       'status': _$BookingStatusEnumMap[instance.status]!,
       'createdAt': instance.createdAt.toIso8601String(),
