@@ -326,6 +326,16 @@ class OrderDetailPage extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
 
+              // 只有當超時費 > 0 時才顯示超時費欄位
+              if (order.overtimeFee > 0) ...[
+                _buildInfoRow(
+                  '已付超時費',
+                  'NT\$ ${order.overtimeFee.toStringAsFixed(0)}',
+                  valueColor: const Color(0xFFFF5252),
+                ),
+                const SizedBox(height: 8),
+              ],
+
               // 只有當小費 > 0 時才顯示小費欄位
               if (order.tipAmount > 0) ...[
                 _buildInfoRow(

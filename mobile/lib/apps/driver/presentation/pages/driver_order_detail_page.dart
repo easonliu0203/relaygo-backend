@@ -315,6 +315,27 @@ class DriverOrderDetailPage extends ConsumerWidget {
                 const Color(0xFF4CAF50),
               ),
               const SizedBox(height: 8),
+
+              // 只有當超時費 > 0 時才顯示超時費欄位
+              if (order.overtimeFee > 0) ...[
+                _buildPaymentRow(
+                  '已付超時費',
+                  'NT\$ ${order.overtimeFee.toStringAsFixed(0)}',
+                  const Color(0xFFFF5252),
+                ),
+                const SizedBox(height: 8),
+              ],
+
+              // 只有當小費 > 0 時才顯示小費欄位
+              if (order.tipAmount > 0) ...[
+                _buildPaymentRow(
+                  '已付小費',
+                  'NT\$ ${order.tipAmount.toStringAsFixed(0)}',
+                  const Color(0xFFFFB74D),
+                ),
+                const SizedBox(height: 8),
+              ],
+
               _buildPaymentRow(
                 '已付總額',
                 'NT\$ ${order.totalPaid.toStringAsFixed(0)}',
