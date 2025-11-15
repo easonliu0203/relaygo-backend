@@ -347,6 +347,7 @@ class BookingService {
   /// - pending: 待配對（待付訂金或待派單）
   /// - awaitingDriver: 待司機確認（已分配司機，等待司機確認接單）
   /// - matched: 已配對（司機已確認接單）
+  /// - onTheWay: 正在路上（司機已出發或已到達）
   /// - inProgress: 行程進行中
   /// - awaitingBalance: 待付尾款（行程已結束，等待支付尾款）
   Stream<List<BookingOrder>> getActiveBookings() {
@@ -359,11 +360,12 @@ class BookingService {
         .collection('orders_rt')
         .where('customerId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.pending.name,
-          BookingStatus.awaitingDriver.name,      // ⭐ 新增：待司機確認
-          BookingStatus.matched.name,
-          BookingStatus.inProgress.name,
-          BookingStatus.awaitingBalance.name,     // ⭐ 新增：待付尾款
+          BookingStatus.pending.firestoreValue,
+          BookingStatus.awaitingDriver.firestoreValue,      // 待司機確認
+          BookingStatus.matched.firestoreValue,              // 已配對
+          BookingStatus.onTheWay.firestoreValue,             // ⭐ 新增：正在路上
+          BookingStatus.inProgress.firestoreValue,           // 進行中
+          BookingStatus.awaitingBalance.firestoreValue,      // 待付尾款
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -398,6 +400,7 @@ class BookingService {
   /// - pending: 待配對（司機可以看到待接單的訂單）
   /// - awaitingDriver: 待司機確認（已分配司機，等待司機確認接單）
   /// - matched: 已配對（司機已確認接單）
+  /// - onTheWay: 正在路上（司機已出發或已到達）
   /// - inProgress: 行程進行中
   /// - awaitingBalance: 待付尾款（行程已結束，等待客戶支付尾款）
   ///
@@ -416,11 +419,12 @@ class BookingService {
         .collection('orders_rt')
         .where('driverId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.pending.name,
-          BookingStatus.awaitingDriver.name,      // ⭐ 新增：待司機確認
-          BookingStatus.matched.name,
-          BookingStatus.inProgress.name,
-          BookingStatus.awaitingBalance.name,     // ⭐ 新增：待付尾款
+          BookingStatus.pending.firestoreValue,
+          BookingStatus.awaitingDriver.firestoreValue,      // 待司機確認
+          BookingStatus.matched.firestoreValue,              // 已配對
+          BookingStatus.onTheWay.firestoreValue,             // ⭐ 新增：正在路上
+          BookingStatus.inProgress.firestoreValue,           // 進行中
+          BookingStatus.awaitingBalance.firestoreValue,      // 待付尾款
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -446,8 +450,8 @@ class BookingService {
         .collection('orders_rt')
         .where('driverId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.completed.name,
-          BookingStatus.cancelled.name,
+          BookingStatus.completed.firestoreValue,
+          BookingStatus.cancelled.firestoreValue,
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -473,8 +477,8 @@ class BookingService {
         .collection('orders_rt')
         .where('customerId', isEqualTo: currentUserId)
         .where('status', whereIn: [
-          BookingStatus.completed.name,
-          BookingStatus.cancelled.name,
+          BookingStatus.completed.firestoreValue,
+          BookingStatus.cancelled.firestoreValue,
         ])
         .orderBy('createdAt', descending: true)
         .snapshots()

@@ -46,6 +46,7 @@ class OrderDetailPage extends ConsumerWidget {
 
                 // 司機資訊（如果已配對）
                 if (order.status == BookingStatus.matched ||
+                    order.status == BookingStatus.onTheWay ||
                     order.status == BookingStatus.inProgress ||
                     order.status == BookingStatus.awaitingBalance ||
                     order.status == BookingStatus.completed)
@@ -386,11 +387,10 @@ class OrderDetailPage extends ConsumerWidget {
         // 開始行程按鈕（司機已確認或已到達時顯示）
         // 邏輯說明：
         // 1. 司機確認接單後，Firestore 狀態為 'matched'
-        // 2. 司機到達後，Firestore 狀態為 'inProgress'
-        // 3. 客戶點擊「開始行程」後，Supabase 狀態變為 'trip_started'
+        // 2. 司機出發或到達後，Firestore 狀態為 'ON_THE_WAY'
+        // 3. 客戶點擊「開始行程」後，Supabase 狀態變為 'trip_started'，Firestore 狀態變為 'inProgress'
         if (order.status == BookingStatus.matched ||
-            order.status == BookingStatus.inProgress ||
-            order.status == BookingStatus.awaitingBalance) ...[
+            order.status == BookingStatus.onTheWay) ...[
           Column(
             children: [
               SizedBox(
@@ -811,6 +811,8 @@ class OrderDetailPage extends ConsumerWidget {
         return Icons.person_search;
       case BookingStatus.matched:
         return Icons.person_pin;
+      case BookingStatus.onTheWay:
+        return Icons.local_shipping;
       case BookingStatus.inProgress:
         return Icons.directions_car;
       case BookingStatus.awaitingBalance:
@@ -830,6 +832,8 @@ class OrderDetailPage extends ConsumerWidget {
         return '已為您分配司機，等待司機確認接單';
       case BookingStatus.matched:
         return '已為您配對司機，請準備上車';
+      case BookingStatus.onTheWay:
+        return '司機正在前往接您的路上';
       case BookingStatus.inProgress:
         return '行程進行中';
       case BookingStatus.awaitingBalance:

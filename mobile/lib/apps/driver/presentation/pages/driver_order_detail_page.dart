@@ -139,6 +139,8 @@ class DriverOrderDetailPage extends ConsumerWidget {
         return Icons.person_search;
       case BookingStatus.matched:
         return Icons.check_circle;
+      case BookingStatus.onTheWay:
+        return Icons.local_shipping;
       case BookingStatus.inProgress:
         return Icons.directions_car;
       case BookingStatus.awaitingBalance:

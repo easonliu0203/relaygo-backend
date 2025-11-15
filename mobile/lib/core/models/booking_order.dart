@@ -16,6 +16,9 @@ enum BookingStatus {
   @JsonValue('matched')
   matched,        // 已配對
 
+  @JsonValue('ON_THE_WAY')
+  onTheWay,       // 正在路上（司機已出發或已到達）
+
   @JsonValue('inProgress')
   inProgress,     // 進行中
 
@@ -31,6 +34,28 @@ enum BookingStatus {
 
 /// 訂單狀態擴展方法
 extension BookingStatusExtension on BookingStatus {
+  /// 獲取 Firestore 存儲的狀態值（對應 @JsonValue）
+  String get firestoreValue {
+    switch (this) {
+      case BookingStatus.pending:
+        return 'pending';
+      case BookingStatus.awaitingDriver:
+        return 'awaitingDriver';
+      case BookingStatus.matched:
+        return 'matched';
+      case BookingStatus.onTheWay:
+        return 'ON_THE_WAY';
+      case BookingStatus.inProgress:
+        return 'inProgress';
+      case BookingStatus.awaitingBalance:
+        return 'awaitingBalance';
+      case BookingStatus.completed:
+        return 'completed';
+      case BookingStatus.cancelled:
+        return 'cancelled';
+    }
+  }
+
   String get displayName {
     switch (this) {
       case BookingStatus.pending:
@@ -39,6 +64,8 @@ extension BookingStatusExtension on BookingStatus {
         return '待司機確認';
       case BookingStatus.matched:
         return '已配對';
+      case BookingStatus.onTheWay:
+        return '正在路上';
       case BookingStatus.inProgress:
         return '進行中';
       case BookingStatus.awaitingBalance:
@@ -58,6 +85,8 @@ extension BookingStatusExtension on BookingStatus {
         return const Color(0xFFFFA726); // 淺橙色
       case BookingStatus.matched:
         return const Color(0xFF2196F3); // 藍色
+      case BookingStatus.onTheWay:
+        return const Color(0xFF03A9F4); // 淺藍色
       case BookingStatus.inProgress:
         return const Color(0xFF4CAF50); // 綠色
       case BookingStatus.awaitingBalance:
@@ -185,7 +214,7 @@ class BookingOrder with _$BookingOrder {
       depositAmount: (data['depositAmount'] ?? 0.0).toDouble(),
       depositPaid: data['depositPaid'] ?? false,
       status: BookingStatus.values.firstWhere(
-        (status) => status.name == data['status'],
+        (status) => status.firestoreValue == data['status'],
         orElse: () => BookingStatus.pending,
       ),
       createdAt: createdAt,
