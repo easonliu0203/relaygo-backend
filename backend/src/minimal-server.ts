@@ -6,6 +6,7 @@ import bookingsRoutes from './routes/bookings';
 import gomypayRoutes from './routes/gomypay';
 import pricingRoutes from './routes/pricing';
 import profileRoutes from './routes/profile';
+import ratingsRoutes from './routes/ratings';
 import { initializeFirebase } from './config/firebase';
 import { initializePaymentProviders } from './services/payment';
 
@@ -49,11 +50,13 @@ app.get('/health', (_req, res) => {
 });
 
 // API 路由
+app.use('/api/bookings', ratingsRoutes); // 評價路由（包含 /api/bookings/:bookingId/rating）
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/booking-flow', bookingFlowRoutes);
 app.use('/api/payment', gomypayRoutes); // GoMyPay 回調路由（公開，不需要認證）
 app.use('/api/pricing', pricingRoutes); // 價格路由（公開）
 app.use('/api/profile', profileRoutes); // 個人資料路由（公開）
+app.use('/api', ratingsRoutes); // 司機評價路由（/api/drivers/:driverId/ratings）
 
 // 404 處理
 app.use((_req, res) => {

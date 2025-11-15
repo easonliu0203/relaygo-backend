@@ -1,18 +1,99 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../widgets/rating_dialog.dart';
 
 /// 訂單完成頁面
-/// 
+///
 /// 功能：
 /// 1. 顯示訂單完成的成功訊息
 /// 2. 提供返回首頁或查看訂單詳情的選項
-class BookingCompletePage extends StatelessWidget {
+/// 3. ✅ 新增：彈出評價對話框，讓客戶評價司機服務
+class BookingCompletePage extends ConsumerStatefulWidget {
   final String bookingId;
 
   const BookingCompletePage({
     super.key,
     required this.bookingId,
   });
+
+  @override
+  ConsumerState<BookingCompletePage> createState() => _BookingCompletePageState();
+}
+
+class _BookingCompletePageState extends ConsumerState<BookingCompletePage> {
+  String? _bookingNumber;
+  bool _hasShownRatingDialog = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBookingData();
+  }
+
+  Future<void> _loadBookingData() async {
+    try {
+      // 查詢訂單資料以獲取 booking_number
+      final response = await http.get(
+        Uri.parse('https://api.relaygo.pro/api/bookings/${widget.bookingId}'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _bookingNumber = data['data']['booking_number'];
+        });
+
+        // 延遲 500ms 後顯示評價對話框
+        if (!_hasShownRatingDialog) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (mounted) {
+            _showRatingDialog();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[BookingComplete] 載入訂單資料失敗: $e');
+    }
+  }
+
+  Future<void> _showRatingDialog() async {
+    if (_hasShownRatingDialog || _bookingNumber == null) return;
+
+    setState(() {
+      _hasShownRatingDialog = true;
+    });
+
+    // 先檢查是否已評價過
+    try {
+      final checkResponse = await http.get(
+        Uri.parse('https://api.relaygo.pro/api/bookings/${widget.bookingId}/rating'),
+      );
+
+      if (checkResponse.statusCode == 200) {
+        // 已評價過，不顯示對話框
+        debugPrint('[BookingComplete] 訂單已評價過');
+        return;
+      }
+    } catch (e) {
+      // 404 表示未評價，繼續顯示對話框
+      debugPrint('[BookingComplete] 訂單尚未評價，顯示評價對話框');
+    }
+
+    // 顯示評價對話框
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false, // 不允許點擊外部關閉
+      builder: (context) => RatingDialog(
+        bookingId: widget.bookingId,
+        bookingNumber: _bookingNumber!,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +154,7 @@ class BookingCompletePage extends StatelessWidget {
                 height: 50,
                 child: ElevatedButton(
                   onPressed: () {
-                    context.go('/order-detail/$bookingId');
+                    context.go('/order-detail/${widget.bookingId}');
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2196F3),
