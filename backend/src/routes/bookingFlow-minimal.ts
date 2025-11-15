@@ -890,9 +890,16 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       return;
     }
 
-    // 5. 計算尾款金額（包含小費）
-    const balanceAmount = booking.total_amount - booking.deposit_amount;
+    // 5. 計算尾款金額（包含超時費和小費）
+    // 注意：balance_amount 已經在結束行程時更新為包含超時費的金額
+    const balanceAmount = booking.balance_amount || (booking.total_amount - booking.deposit_amount);
+    const overtimeFee = booking.overtime_fee || 0;
     const totalPayable = balanceAmount + Number(tipAmount);
+
+    console.log('[API] 尾款金額:', balanceAmount);
+    console.log('[API] 超時費用:', overtimeFee);
+    console.log('[API] 小費金額:', tipAmount);
+    console.log('[API] 總支付金額:', totalPayable);
 
     if (balanceAmount <= 0) {
       console.error('[API] 尾款金額錯誤:', balanceAmount);

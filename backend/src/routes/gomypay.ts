@@ -675,24 +675,31 @@ async function handlePaymentSuccess(params: {
     updateData.status = newStatus;
     updateData.completed_at = now;  // 設置完成時間
 
-    // ✅ 計算小費金額：支付金額 - 原始尾款金額
-    // 需要先查詢訂單資料以獲取原始尾款金額
+    // ✅ 計算小費金額：支付金額 - (原始尾款 + 超時費)
+    // 需要先查詢訂單資料以獲取原始尾款金額和超時費用
     console.log('[GOMYPAY Callback] 尾款支付 - 開始計算小費');
     console.log('[GOMYPAY Callback] 支付金額:', amount);
 
     const { data: booking } = await supabase
       .from('bookings')
-      .select('total_amount, deposit_amount')
+      .select('total_amount, deposit_amount, overtime_fee, balance_amount')
       .eq('id', bookingId)
       .single();
 
     if (booking) {
+      // 使用 balance_amount（已包含超時費）或計算原始尾款
+      const balanceWithOvertimeFee = booking.balance_amount || (booking.total_amount - booking.deposit_amount);
+      const overtimeFee = booking.overtime_fee || 0;
       const originalBalance = booking.total_amount - booking.deposit_amount;
-      const tipAmount = amount - originalBalance;
+
+      // 小費 = 實際支付金額 - (原始尾款 + 超時費)
+      const tipAmount = amount - balanceWithOvertimeFee;
 
       console.log('[GOMYPAY Callback] 訂單總金額:', booking.total_amount);
       console.log('[GOMYPAY Callback] 訂金金額:', booking.deposit_amount);
       console.log('[GOMYPAY Callback] 原始尾款:', originalBalance);
+      console.log('[GOMYPAY Callback] 超時費用:', overtimeFee);
+      console.log('[GOMYPAY Callback] 尾款（含超時費）:', balanceWithOvertimeFee);
       console.log('[GOMYPAY Callback] 計算的小費:', tipAmount);
 
       if (tipAmount > 0) {
