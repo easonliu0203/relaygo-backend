@@ -278,18 +278,6 @@ class OrderDetailPage extends ConsumerWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  onPressed: () {
-                    // TODO: 實作聊天功能
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('聊天功能開發中')),
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.chat,
-                    color: Color(0xFF2196F3),
-                  ),
-                ),
               ],
             ),
           ],
@@ -710,8 +698,9 @@ class OrderDetailPage extends ConsumerWidget {
           const SizedBox(height: 12),
         ],
 
-        // 評價司機按鈕（訂單完成後可用）
-        if (order.status == BookingStatus.completed) ...[
+        // 評價司機按鈕（行程結束後可用）
+        if (order.status == BookingStatus.awaitingBalance ||
+            order.status == BookingStatus.completed) ...[
           SizedBox(
             width: double.infinity,
             height: 50,
@@ -791,39 +780,6 @@ class OrderDetailPage extends ConsumerWidget {
                     ),
                   ),
                 ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // 聯絡司機按鈕（配對成功後可用）
-        if (order.status == BookingStatus.matched ||
-            order.status == BookingStatus.inProgress ||
-            order.status == BookingStatus.awaitingBalance) ...[
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: OutlinedButton(
-              onPressed: () {
-                // TODO: 實作聊天功能
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('聊天功能開發中')),
-                );
-              },
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFF4CAF50)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                '聊天聯絡司機',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF4CAF50),
-                  fontWeight: FontWeight.bold,
-                ),
               ),
             ),
           ),

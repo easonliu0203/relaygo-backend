@@ -257,27 +257,15 @@ class DriverOrderDetailPage extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      // ✅ 隱私保護：不顯示客戶電話
-                      // 司機應該通過 App 內聊天功能聯繫客戶
-                      const Text(
-                        '請使用聊天功能聯繫客戶',
+                      Text(
+                        order.customerPhone ?? '未提供',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey,
+                          color: Colors.grey[600],
                         ),
                       ),
                     ],
                   ),
-                ),
-                // ✅ 移除撥打電話按鈕，改為聊天按鈕
-                IconButton(
-                  icon: const Icon(Icons.chat, color: Color(0xFF4CAF50)),
-                  onPressed: () {
-                    // TODO: 導航到聊天頁面
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('請使用聊天功能與客戶溝通')),
-                    );
-                  },
                 ),
               ],
             ),

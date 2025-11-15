@@ -305,6 +305,8 @@ class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
   }
 
   Widget _buildPaymentButton() {
+    final totalPayable = _balanceAmount + _tipAmount;
+
     return SizedBox(
       width: double.infinity,
       height: 50,
@@ -327,7 +329,7 @@ class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
                 ),
               )
             : Text(
-                '支付 NT\$ ${_balanceAmount.toStringAsFixed(0)}',
+                '確認支付 NT\$ ${totalPayable.toStringAsFixed(0)}',
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
