@@ -35,6 +35,7 @@ class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
   double _totalAmount = 0.0;
   double _depositAmount = 0.0;
   double _balanceAmount = 0.0;
+  double _overtimeFee = 0.0;
   String _bookingNumber = '';
 
   // 小費相關
@@ -64,7 +65,8 @@ class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
         setState(() {
           _totalAmount = booking.estimatedFare;
           _depositAmount = booking.depositAmount;
-          _balanceAmount = _totalAmount - _depositAmount;
+          _overtimeFee = booking.overtimeFee;
+          _balanceAmount = _totalAmount - _depositAmount + _overtimeFee;
           _bookingNumber = booking.id;  // 使用 id 而不是 bookingNumber
           _isLoading = false;
         });
@@ -188,6 +190,10 @@ class _PaymentBalancePageState extends ConsumerState<PaymentBalancePage> {
             _buildPriceRow('總費用', _totalAmount, Colors.black),
             const SizedBox(height: 8),
             _buildPriceRow('已付訂金', _depositAmount, const Color(0xFF4CAF50)),
+            if (_overtimeFee > 0) ...[
+              const SizedBox(height: 8),
+              _buildPriceRow('超時費', _overtimeFee, const Color(0xFFFF5252)),
+            ],
             if (_tipAmount > 0) ...[
               const SizedBox(height: 8),
               _buildPriceRow('小費', _tipAmount, const Color(0xFFFFB74D)),
