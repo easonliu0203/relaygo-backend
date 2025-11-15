@@ -257,23 +257,25 @@ class DriverOrderDetailPage extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      if (order.customerPhone != null)
-                        Text(
-                          order.customerPhone!,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                          ),
+                      // ✅ 隱私保護：不顯示客戶電話
+                      // 司機應該通過 App 內聊天功能聯繫客戶
+                      const Text(
+                        '請使用聊天功能聯繫客戶',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
                         ),
+                      ),
                     ],
                   ),
                 ),
+                // ✅ 移除撥打電話按鈕，改為聊天按鈕
                 IconButton(
-                  icon: const Icon(Icons.phone, color: Color(0xFF4CAF50)),
+                  icon: const Icon(Icons.chat, color: Color(0xFF4CAF50)),
                   onPressed: () {
-                    // TODO: 實作撥打電話功能
+                    // TODO: 導航到聊天頁面
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('撥打電話功能開發中')),
+                      const SnackBar(content: Text('請使用聊天功能與客戶溝通')),
                     );
                   },
                 ),
@@ -642,13 +644,13 @@ class DriverOrderDetailPage extends ConsumerWidget {
             ),
           ),
 
-        // 當訂單狀態為 inProgress（進行中）時，根據實際狀態顯示不同按鈕
-        // 注意：由於 Flutter 的 BookingStatus 枚舉較簡化，我們需要通過其他方式判斷
-        // 這裡我們假設 inProgress 包含了 driver_departed 和 driver_arrived 兩個狀態
-        // 實際上需要查看訂單的詳細狀態來決定顯示哪個按鈕
-        if (order.status == BookingStatus.inProgress)
-          // 這裡暫時顯示「抵達上車地點」按鈕
-          // TODO: 需要根據訂單的實際 Supabase 狀態來判斷顯示哪個按鈕
+        // ✅ 修復：當訂單狀態為 onTheWay（司機已出發）時，顯示「抵達上車地址」按鈕
+        // 邏輯說明：
+        // 1. 司機點擊「出發前往載客」後，Supabase 狀態變為 'driver_departed'
+        // 2. Edge Function 同步到 Firestore 時，映射為 'ON_THE_WAY'（正在路上）
+        // 3. 司機點擊「抵達上車地址」後，Supabase 狀態變為 'driver_arrived'
+        // 4. Edge Function 再次同步，Firestore 狀態變為 'inProgress'（進行中）
+        if (order.status == BookingStatus.onTheWay)
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
