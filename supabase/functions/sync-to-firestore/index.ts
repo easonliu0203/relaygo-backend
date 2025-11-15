@@ -322,6 +322,7 @@ async function syncBookingToFirestore(event: OutboxEvent): Promise<void> {
     // 費用資訊
     estimatedFare: bookingData.totalAmount || 0,
     depositAmount: bookingData.depositAmount || 0,
+    overtimeFee: bookingData.overtimeFee || 0,  // ✅ 添加超時費用
     tipAmount: bookingData.tipAmount || 0,  // ✅ 添加小費金額
     depositPaid: false,
 
