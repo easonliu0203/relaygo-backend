@@ -668,6 +668,9 @@ async function handlePaymentSuccess(params: {
 
     // ✅ 計算小費金額：支付金額 - 原始尾款金額
     // 需要先查詢訂單資料以獲取原始尾款金額
+    console.log('[GOMYPAY Callback] 尾款支付 - 開始計算小費');
+    console.log('[GOMYPAY Callback] 支付金額:', amount);
+
     const { data: booking } = await supabase
       .from('bookings')
       .select('total_amount, deposit_amount')
@@ -678,15 +681,26 @@ async function handlePaymentSuccess(params: {
       const originalBalance = booking.total_amount - booking.deposit_amount;
       const tipAmount = amount - originalBalance;
 
+      console.log('[GOMYPAY Callback] 訂單總金額:', booking.total_amount);
+      console.log('[GOMYPAY Callback] 訂金金額:', booking.deposit_amount);
+      console.log('[GOMYPAY Callback] 原始尾款:', originalBalance);
+      console.log('[GOMYPAY Callback] 計算的小費:', tipAmount);
+
       if (tipAmount > 0) {
         updateData.tip_amount = tipAmount;
-        console.log('[GOMYPAY Callback] 小費金額:', tipAmount);
+        console.log('[GOMYPAY Callback] ✅ 小費金額將被儲存:', tipAmount);
+      } else {
+        console.log('[GOMYPAY Callback] ⚠️  小費金額 <= 0，不儲存');
       }
+    } else {
+      console.log('[GOMYPAY Callback] ⚠️  無法查詢訂單資料，無法計算小費');
     }
   } else {
     console.error('[GOMYPAY Callback] 未知的支付類型:', paymentType);
     return;
   }
+
+  console.log('[GOMYPAY Callback] 準備更新訂單，updateData:', JSON.stringify(updateData, null, 2));
 
   const { error: bookingUpdateError } = await supabase
     .from('bookings')
@@ -699,6 +713,17 @@ async function handlePaymentSuccess(params: {
   }
 
   console.log('[GOMYPAY Callback] ✅ 訂單狀態已更新為:', newStatus);
+
+  // 驗證小費是否成功儲存
+  if (paymentType === 'balance' && updateData.tip_amount) {
+    const { data: verifyBooking } = await supabase
+      .from('bookings')
+      .select('tip_amount')
+      .eq('id', bookingId)
+      .single();
+
+    console.log('[GOMYPAY Callback] 驗證小費儲存結果:', verifyBooking?.tip_amount);
+  }
 }
 
 /**

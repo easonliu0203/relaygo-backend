@@ -35,24 +35,38 @@ class _BookingCompletePageState extends ConsumerState<BookingCompletePage> {
 
   Future<void> _loadBookingData() async {
     try {
+      debugPrint('[BookingComplete] 開始載入訂單資料: ${widget.bookingId}');
+
       // 查詢訂單資料以獲取 booking_number
       final response = await http.get(
         Uri.parse('https://api.relaygo.pro/api/bookings/${widget.bookingId}'),
       );
 
+      debugPrint('[BookingComplete] API 回應狀態碼: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        final bookingNumber = data['data']['booking_number'];
+        final orderStatus = data['data']['status'];
+
+        debugPrint('[BookingComplete] 訂單編號: $bookingNumber');
+        debugPrint('[BookingComplete] 訂單狀態: $orderStatus');
+
         setState(() {
-          _bookingNumber = data['data']['booking_number'];
+          _bookingNumber = bookingNumber;
         });
 
         // 延遲 500ms 後顯示評價對話框
+        // 彈出條件：1. 訂單狀態為 trip_ended/pending_balance/completed 2. 延遲 500ms 3. 未評價過
         if (!_hasShownRatingDialog) {
           await Future.delayed(const Duration(milliseconds: 500));
           if (mounted) {
+            debugPrint('[BookingComplete] 準備顯示評價對話框');
             _showRatingDialog();
           }
         }
+      } else {
+        debugPrint('[BookingComplete] API 回應失敗: ${response.statusCode}');
       }
     } catch (e) {
       debugPrint('[BookingComplete] 載入訂單資料失敗: $e');
