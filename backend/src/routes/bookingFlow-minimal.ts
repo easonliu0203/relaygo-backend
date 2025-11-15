@@ -678,13 +678,92 @@ router.post('/bookings/:bookingId/end-trip', async (req: Request, res: Response)
       return;
     }
 
-    // 5. 更新訂單狀態為 trip_ended
+    // 5. 計算超時費用
+    console.log('[API] 開始計算超時費用');
+    let overtimeFee = 0;
+    let overtimeMinutes = 0;
+
+    try {
+      // 5.1 計算預定結束時間
+      const startDateTime = new Date(`${booking.start_date}T${booking.start_time}`);
+      const scheduledEndTime = new Date(startDateTime.getTime() + booking.duration_hours * 60 * 60 * 1000);
+      const actualEndTime = new Date();
+
+      console.log('[API] 預定開始時間:', startDateTime.toISOString());
+      console.log('[API] 預定結束時間:', scheduledEndTime.toISOString());
+      console.log('[API] 實際結束時間:', actualEndTime.toISOString());
+
+      // 5.2 計算超時時間（分鐘）
+      const timeDiffMs = actualEndTime.getTime() - scheduledEndTime.getTime();
+      const totalOvertimeMinutes = Math.floor(timeDiffMs / (60 * 1000));
+
+      console.log('[API] 總超時時間（分鐘）:', totalOvertimeMinutes);
+
+      // 5.3 扣除寬限時間（10 分鐘）
+      const GRACE_PERIOD_MINUTES = 10;
+      overtimeMinutes = Math.max(0, totalOvertimeMinutes - GRACE_PERIOD_MINUTES);
+
+      console.log('[API] 扣除寬限時間後的超時時間（分鐘）:', overtimeMinutes);
+
+      // 5.4 如果有超時，計算超時費用
+      if (overtimeMinutes > 0) {
+        // 查詢超時費率（從 system_settings 或 vehicle_pricing）
+        const { data: pricingConfig } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'pricing_config')
+          .single();
+
+        if (pricingConfig) {
+          // 確定車型類別
+          const vehicleCategory = ['A', 'B'].includes(booking.vehicle_type) ? 'large' : 'small';
+          const packageType = booking.duration_hours <= 6 ? '6_hours' : '8_hours';
+
+          console.log('[API] 車型類別:', vehicleCategory);
+          console.log('[API] 套餐類型:', packageType);
+
+          // 獲取超時費率（每小時）
+          const overtimeRate = pricingConfig.value?.vehicleTypes?.[vehicleCategory]?.packages?.[packageType]?.overtime_rate || 800;
+
+          console.log('[API] 超時費率（每小時）:', overtimeRate);
+
+          // 計算超時小時數（不足 1 小時以 1 小時計）
+          const overtimeHours = Math.ceil(overtimeMinutes / 60);
+
+          console.log('[API] 超時小時數（向上取整）:', overtimeHours);
+
+          // 計算超時費用
+          overtimeFee = overtimeRate * overtimeHours;
+
+          console.log('[API] ✅ 超時費用:', overtimeFee);
+        } else {
+          console.log('[API] ⚠️  無法查詢價格配置，超時費用設為 0');
+        }
+      } else {
+        console.log('[API] ⚠️  未超時或在寬限時間內，超時費用為 0');
+      }
+    } catch (error) {
+      console.error('[API] ⚠️  計算超時費用失敗（不影響主流程）:', error);
+      overtimeFee = 0;
+    }
+
+    // 6. 計算更新後的尾款金額（包含超時費）
+    const originalBalance = booking.total_amount - booking.deposit_amount;
+    const newBalanceAmount = originalBalance + overtimeFee;
+
+    console.log('[API] 原始尾款:', originalBalance);
+    console.log('[API] 超時費用:', overtimeFee);
+    console.log('[API] 更新後的尾款:', newBalanceAmount);
+
+    // 7. 更新訂單狀態為 trip_ended，並儲存超時費用和更新尾款
     const now = new Date().toISOString();
     const { error: updateError } = await supabase
       .from('bookings')
       .update({
         status: 'trip_ended',
         actual_end_time: now,  // 記錄實際結束時間
+        overtime_fee: overtimeFee,  // 儲存超時費用
+        balance_amount: newBalanceAmount,  // 更新尾款金額（包含超時費）
         updated_at: now
       })
       .eq('id', bookingId);
@@ -699,28 +778,36 @@ router.post('/bookings/:bookingId/end-trip', async (req: Request, res: Response)
     }
 
     console.log('[API] ✅ 訂單狀態已更新為 trip_ended');
+    console.log('[API] ✅ 超時費用已儲存:', overtimeFee);
+    console.log('[API] ✅ 尾款金額已更新:', newBalanceAmount);
 
-    // 6. 發送系統訊息到聊天室
+    // 8. 發送系統訊息到聊天室
     try {
-      await sendSystemMessage(
-        bookingId,
-        '行程已結束，請支付尾款 💰'
-      );
+      const message = overtimeFee > 0
+        ? `行程已結束，請支付尾款 💰\n超時費用: NT$ ${overtimeFee.toFixed(0)}`
+        : '行程已結束，請支付尾款 💰';
+
+      await sendSystemMessage(bookingId, message);
       console.log('[API] ✅ 系統訊息已發送');
     } catch (messageError) {
       console.error('[API] ⚠️  發送系統訊息失敗（不影響主流程）:', messageError);
     }
 
-    // 7. 返回成功響應
+    // 9. 返回成功響應
     res.json({
       success: true,
       data: {
         bookingId,
         status: 'trip_ended',
         endedAt: now,
+        overtimeFee,  // 返回超時費用
+        overtimeMinutes,  // 返回超時時間（分鐘）
+        balanceAmount: newBalanceAmount,  // 返回更新後的尾款金額
         nextStep: 'pay_balance'
       },
-      message: '行程已結束'
+      message: overtimeFee > 0
+        ? `行程已結束，超時 ${overtimeMinutes} 分鐘，超時費用 NT$ ${overtimeFee.toFixed(0)}`
+        : '行程已結束'
     });
 
   } catch (error: any) {
