@@ -933,7 +933,7 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
     console.log('[API] 支付方式:', paymentMethod, '是否為現金支付:', isCashPayment);
 
     let paymentResponse: any;
-    let paymentProviderType: string;
+    let paymentProviderType: string | undefined;
     let transactionId: string;
 
     if (isCashPayment) {
@@ -954,14 +954,16 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       const { PaymentProviderFactory, PaymentProviderType } = await import('../services/payment/PaymentProvider');
 
       // 決定使用哪個支付提供者
-      paymentProviderType = process.env.PAYMENT_PROVIDER === 'gomypay'
+      const providerType = process.env.PAYMENT_PROVIDER === 'gomypay'
         ? PaymentProviderType.GOMYPAY
         : PaymentProviderType.MOCK;
 
-      console.log('[API] 使用支付提供者:', paymentProviderType);
+      paymentProviderType = providerType;
+
+      console.log('[API] 使用支付提供者:', providerType);
 
       const provider = PaymentProviderFactory.createProvider({
-        provider: paymentProviderType,
+        provider: providerType,
         isTestMode: process.env.GOMYPAY_TEST_MODE === 'true',
         config: {}
       });
