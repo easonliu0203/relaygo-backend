@@ -1,4 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
+import { getFirebaseApp, getFirestore } from '../../config/firebase';
+import admin from 'firebase-admin';
 
 // 通知類型
 export enum NotificationType {
@@ -370,8 +372,105 @@ export class NotificationService {
 
   // 推播通知
   private async sendPushNotification(notification: Notification): Promise<void> {
-    // TODO: 實作 FCM 推播
-    console.log('Push notification sent:', notification.title);
+    try {
+      console.log('[FCM] 準備發送推播通知:', {
+        recipientId: notification.recipientId,
+        type: notification.type,
+        title: notification.title
+      });
+
+      // 1. 從 Firestore 獲取用戶的 FCM Token
+      const fcmToken = await this.getUserFcmToken(notification.recipientId);
+
+      if (!fcmToken) {
+        console.log('[FCM] 用戶沒有 FCM Token，跳過推播:', notification.recipientId);
+        return;
+      }
+
+      console.log('[FCM] 找到 FCM Token:', fcmToken.substring(0, 20) + '...');
+
+      // 2. 構建推播訊息
+      const message: admin.messaging.Message = {
+        token: fcmToken,
+        notification: {
+          title: notification.title,
+          body: notification.message
+        },
+        data: {
+          type: notification.type.toString(),
+          notificationId: notification.id,
+          ...(notification.data || {})
+        },
+        // Android 特定配置
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'chat_messages',
+            sound: 'default',
+            priority: 'high' as const,
+            defaultSound: true,
+            defaultVibrateTimings: true
+          }
+        },
+        // iOS 特定配置
+        apns: {
+          payload: {
+            aps: {
+              alert: {
+                title: notification.title,
+                body: notification.message
+              },
+              sound: 'default',
+              badge: 1
+            }
+          }
+        }
+      };
+
+      // 3. 發送推播
+      const firebaseApp = getFirebaseApp();
+      const messaging = admin.messaging(firebaseApp);
+
+      const response = await messaging.send(message);
+
+      console.log('[FCM] ✅ 推播通知發送成功:', response);
+
+    } catch (error: any) {
+      console.error('[FCM] ❌ 推播通知發送失敗:', error);
+
+      // 如果是 Token 無效，可以考慮從 Firestore 刪除該 Token
+      if (error.code === 'messaging/invalid-registration-token' ||
+          error.code === 'messaging/registration-token-not-registered') {
+        console.log('[FCM] Token 無效，考慮清理:', notification.recipientId);
+        // TODO: 可以實作清理無效 Token 的邏輯
+      }
+    }
+  }
+
+  // 從 Firestore 獲取用戶的 FCM Token
+  private async getUserFcmToken(userId: string): Promise<string | null> {
+    try {
+      const firestore = getFirestore();
+      const userDoc = await firestore.collection('users').doc(userId).get();
+
+      if (!userDoc.exists) {
+        console.log('[FCM] 用戶文檔不存在:', userId);
+        return null;
+      }
+
+      const userData = userDoc.data();
+      const fcmToken = userData?.fcmToken;
+
+      if (!fcmToken) {
+        console.log('[FCM] 用戶沒有設置 FCM Token:', userId);
+        return null;
+      }
+
+      return fcmToken;
+    } catch (error) {
+      console.error('[FCM] 獲取 FCM Token 失敗:', error);
+      return null;
+    }
   }
 
   // 郵件通知
