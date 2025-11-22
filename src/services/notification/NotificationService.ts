@@ -1,6 +1,7 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { getFirebaseApp, getFirestore } from '../../config/firebase';
 import admin from 'firebase-admin';
+import { chatService } from '../chat/ChatService';
 
 // 通知類型
 export enum NotificationType {
@@ -663,7 +664,6 @@ export class NotificationService {
     mapLinks: { googleMaps: string; appleMaps: string }
   ): Promise<void> {
     try {
-      const chatService = require('../chat/ChatService').chatService;
       const chatRoomId = `chat_${bookingId}`;
 
       // 根據狀態生成訊息內容
