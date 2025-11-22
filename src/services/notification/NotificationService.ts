@@ -608,7 +608,7 @@ export class NotificationService {
   } {
     return {
       googleMaps: `https://maps.google.com/?q=${latitude},${longitude}`,
-      appleMaps: `http://maps.apple.com/?q=${latitude},${longitude}`
+      appleMaps: `https://maps.apple.com/?q=${latitude},${longitude}` // 修改為 https://
     };
   }
 
