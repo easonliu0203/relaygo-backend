@@ -1,7 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
-import { getFirebaseApp, getFirestore } from '../../config/firebase';
+import { getFirebaseApp, getFirestore, sendSystemMessage } from '../../config/firebase';
 import admin from 'firebase-admin';
-import { chatService } from '../chat/ChatService';
 
 // 通知類型
 export enum NotificationType {
@@ -664,8 +663,6 @@ export class NotificationService {
     mapLinks: { googleMaps: string; appleMaps: string }
   ): Promise<void> {
     try {
-      const chatRoomId = `chat_${bookingId}`;
-
       // 根據狀態生成訊息內容
       const statusText = status === 'driver_departed' ? '司機已出發前往接送地點' : '司機已到達接送地點';
       const emoji = status === 'driver_departed' ? '🚗' : '📍';
@@ -689,10 +686,10 @@ export class NotificationService {
 • Apple Maps: ${mapLinks.appleMaps}
 時間：${timeString}`;
 
-      // 發送系統訊息
-      await chatService.sendSystemMessage(chatRoomId, messageContent);
+      // 使用 Firebase 的 sendSystemMessage 函數將訊息儲存到 Firestore
+      await sendSystemMessage(bookingId, messageContent);
 
-      console.log('[Location] ✅ 定位訊息已發送到聊天室:', chatRoomId);
+      console.log('[Location] ✅ 定位訊息已發送到聊天室:', bookingId);
 
     } catch (error) {
       console.error('[Location] ❌ 發送定位訊息到聊天室失敗:', error);
