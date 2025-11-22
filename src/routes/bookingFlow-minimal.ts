@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { createChatRoomInFirestore, chatRoomExists, sendSystemMessage } from '../config/firebase';
+import { notificationService } from '../services/notification/NotificationService';
 
 dotenv.config();
 
@@ -270,9 +271,9 @@ router.post('/bookings/:bookingId/accept', async (req: Request, res: Response): 
 router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): Promise<void> => {
   try {
     const { bookingId } = req.params;
-    const { driverUid } = req.body;
+    const { driverUid, latitude, longitude } = req.body;
 
-    console.log(`[API] 司機出發: bookingId=${bookingId}, driverUid=${driverUid}`);
+    console.log(`[API] 司機出發: bookingId=${bookingId}, driverUid=${driverUid}, location=${latitude},${longitude}`);
 
     // 1. 查詢訂單資料
     const { data: booking, error: bookingError } = await supabase
@@ -347,15 +348,30 @@ router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): 
 
     console.log('[API] ✅ 訂單狀態已更新為 driver_departed');
 
-    // 6. 發送系統訊息到聊天室
+    // 6. 分享司機定位到聊天室
     try {
-      await sendSystemMessage(
-        bookingId,
-        '司機已出發，正在前往上車地點 🚗'
-      );
-      console.log('[API] ✅ 系統訊息已發送');
+      if (latitude && longitude) {
+        // 如果有定位資訊，發送包含地圖連結的訊息
+        console.log('[API] 📍 開始分享司機定位...');
+        await notificationService.shareDriverLocation(
+          bookingId,
+          driver.id,
+          'driver_departed',
+          parseFloat(latitude),
+          parseFloat(longitude)
+        );
+        console.log('[API] ✅ 定位分享成功');
+      } else {
+        // 如果沒有定位資訊，發送簡單的系統訊息
+        console.log('[API] ⚠️  未提供定位資訊，發送簡單系統訊息');
+        await sendSystemMessage(
+          bookingId,
+          '司機已出發，正在前往上車地點 🚗'
+        );
+        console.log('[API] ✅ 系統訊息已發送');
+      }
     } catch (messageError) {
-      console.error('[API] ⚠️  發送系統訊息失敗（不影響主流程）:', messageError);
+      console.error('[API] ⚠️  發送訊息失敗（不影響主流程）:', messageError);
     }
 
     // 7. 返回成功響應
@@ -386,9 +402,9 @@ router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): 
 router.post('/bookings/:bookingId/arrive', async (req: Request, res: Response): Promise<void> => {
   try {
     const { bookingId } = req.params;
-    const { driverUid } = req.body;
+    const { driverUid, latitude, longitude } = req.body;
 
-    console.log(`[API] 司機到達: bookingId=${bookingId}, driverUid=${driverUid}`);
+    console.log(`[API] 司機到達: bookingId=${bookingId}, driverUid=${driverUid}, location=${latitude},${longitude}`);
 
     // 1. 查詢訂單資料
     const { data: booking, error: bookingError } = await supabase
@@ -463,15 +479,30 @@ router.post('/bookings/:bookingId/arrive', async (req: Request, res: Response): 
 
     console.log('[API] ✅ 訂單狀態已更新為 driver_arrived');
 
-    // 6. 發送系統訊息到聊天室
+    // 6. 分享司機定位到聊天室
     try {
-      await sendSystemMessage(
-        bookingId,
-        '司機已到達上車地點，請準備上車 📍'
-      );
-      console.log('[API] ✅ 系統訊息已發送');
+      if (latitude && longitude) {
+        // 如果有定位資訊，發送包含地圖連結的訊息
+        console.log('[API] 📍 開始分享司機定位...');
+        await notificationService.shareDriverLocation(
+          bookingId,
+          driver.id,
+          'driver_arrived',
+          parseFloat(latitude),
+          parseFloat(longitude)
+        );
+        console.log('[API] ✅ 定位分享成功');
+      } else {
+        // 如果沒有定位資訊，發送簡單的系統訊息
+        console.log('[API] ⚠️  未提供定位資訊，發送簡單系統訊息');
+        await sendSystemMessage(
+          bookingId,
+          '司機已到達上車地點，請準備上車 📍'
+        );
+        console.log('[API] ✅ 系統訊息已發送');
+      }
     } catch (messageError) {
-      console.error('[API] ⚠️  發送系統訊息失敗（不影響主流程）:', messageError);
+      console.error('[API] ⚠️  發送訊息失敗（不影響主流程）:', messageError);
     }
 
     // 7. 返回成功響應
