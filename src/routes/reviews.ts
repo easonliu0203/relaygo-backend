@@ -137,7 +137,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         rating: rating,
         comment: comment || null,
         is_anonymous: isAnonymous || false,
-        status: 'pending', // 待審核
+        status: 'approved', // ✅ 修改：自動批准評價（2025-11-23）
         helpful_count: 0,
         report_count: 0,
       })
@@ -155,7 +155,56 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     console.log('[API] ✅ 評價創建成功:', review.id);
 
-    // 9. 返回成功響應（201 Created）
+    // 9. 更新司機統計資料
+    try {
+      // 9.1 查詢司機當前統計
+      const { data: driverStats, error: statsError } = await supabase
+        .from('drivers')
+        .select('total_reviews, average_rating, rating_distribution')
+        .eq('user_id', booking.driver_id)
+        .single();
+
+      if (statsError) {
+        console.error('[API] ⚠️  查詢司機統計失敗:', statsError);
+      } else {
+        // 9.2 計算新的統計資料
+        const currentTotal = driverStats?.total_reviews || 0;
+        const currentAverage = driverStats?.average_rating || 0;
+        const currentDistribution = driverStats?.rating_distribution || { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+
+        const newTotal = currentTotal + 1;
+        const newAverage = ((currentAverage * currentTotal) + rating) / newTotal;
+        const newDistribution = { ...currentDistribution };
+        newDistribution[rating.toString()] = (newDistribution[rating.toString()] || 0) + 1;
+
+        // 9.3 更新司機統計
+        const { error: updateError } = await supabase
+          .from('drivers')
+          .update({
+            total_reviews: newTotal,
+            average_rating: Math.round(newAverage * 10) / 10, // 保留一位小數
+            rating_distribution: newDistribution,
+            last_review_at: new Date().toISOString(),
+          })
+          .eq('user_id', booking.driver_id);
+
+        if (updateError) {
+          console.error('[API] ⚠️  更新司機統計失敗:', updateError);
+        } else {
+          console.log('[API] ✅ 司機統計更新成功:', {
+            driverId: booking.driver_id,
+            newTotal,
+            newAverage: Math.round(newAverage * 10) / 10,
+            newDistribution,
+          });
+        }
+      }
+    } catch (statsUpdateError) {
+      console.error('[API] ⚠️  更新司機統計異常:', statsUpdateError);
+      // 不影響評價創建，繼續執行
+    }
+
+    // 10. 返回成功響應（201 Created）
     // 返回完整的評價數據（camelCase 格式）
     res.status(201).json({
       success: true,
