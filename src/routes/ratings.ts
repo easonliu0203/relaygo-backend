@@ -13,8 +13,21 @@ const supabase = createClient(
 );
 
 /**
+ * ⚠️ DEPRECATED - 此路由已棄用
+ *
+ * 此文件使用舊的 `ratings` 表，已被新的 `reviews` 表取代。
+ * 新的評價功能請使用 `/api/reviews/*` 路由（見 reviews.ts）。
+ *
+ * 棄用日期：2025-11-23
+ * 原因：統一使用 reviews 表，支援更完整的評價功能（審核、匿名、舉報等）
+ *
+ * 此文件保留僅為向後兼容，未來版本將完全移除。
+ */
+
+/**
+ * @deprecated 使用 POST /api/reviews 替代
  * @route POST /api/bookings/:bookingId/rating
- * @desc 提交訂單評價
+ * @desc 提交訂單評價（已棄用）
  * @access Customer
  */
 router.post('/:bookingId/rating', async (req: Request, res: Response): Promise<void> => {
@@ -169,8 +182,9 @@ router.post('/:bookingId/rating', async (req: Request, res: Response): Promise<v
 });
 
 /**
+ * @deprecated 使用 GET /api/reviews/check/:bookingId 替代
  * @route GET /api/bookings/:bookingId/rating
- * @desc 查詢訂單評價
+ * @desc 查詢訂單評價（已棄用）
  * @access Public
  */
 router.get('/:bookingId/rating', async (req: Request, res: Response): Promise<void> => {
@@ -226,8 +240,9 @@ router.get('/:bookingId/rating', async (req: Request, res: Response): Promise<vo
 });
 
 /**
+ * @deprecated 使用 GET /api/reviews/driver 替代
  * @route GET /api/drivers/:driverId/ratings
- * @desc 查詢司機的所有評價
+ * @desc 查詢司機的所有評價（已棄用）
  * @access Public
  */
 router.get('/drivers/:driverId/ratings', async (req: Request, res: Response): Promise<void> => {

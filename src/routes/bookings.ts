@@ -510,17 +510,21 @@ router.get('/:bookingId', async (req: Request, res: Response): Promise<void> => 
 });
 
 /**
+ * @deprecated 使用 GET /api/reviews/check/:bookingId 替代
  * @route GET /api/bookings/:bookingId/rating
- * @desc 檢查訂單是否已評價
+ * @desc 檢查訂單是否已評價（已棄用，使用舊的 ratings 表）
  * @access Public
+ *
+ * 修改歷史：
+ * - 2025-11-23: 標記為 deprecated，統一使用 reviews 表
  */
 router.get('/:bookingId/rating', async (req: Request, res: Response): Promise<void> => {
   try {
     const { bookingId } = req.params;
 
-    console.log('[API] 查詢訂單評價:', bookingId);
+    console.log('[API] ⚠️  查詢訂單評價（使用已棄用的 ratings 表）:', bookingId);
 
-    // 查詢評價資料
+    // 查詢評價資料（使用舊的 ratings 表）
     const { data: rating, error: ratingError } = await supabase
       .from('ratings')
       .select('*')
