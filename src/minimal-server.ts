@@ -7,7 +7,8 @@ import gomypayRoutes from './routes/gomypay';
 import pricingRoutes from './routes/pricing';
 import testFirebaseRoutes from './routes/test-firebase';
 import profileRoutes from './routes/profile';
-import ratingsRoutes from './routes/ratings';
+import ratingsRoutes from './routes/ratings'; // @deprecated - 保留向後兼容
+import reviewRoutes from './routes/reviews'; // ✅ 新的評價路由（使用 reviews 表）
 import { initializeFirebase } from './config/firebase';
 import { initializePaymentProviders } from './services/payment';
 
@@ -75,14 +76,15 @@ app.get('/health', (_req, res) => {
 });
 
 // API routes
-app.use('/api/bookings', ratingsRoutes);
+app.use('/api/reviews', reviewRoutes); // ✅ 新的評價路由（優先註冊）
+app.use('/api/bookings', ratingsRoutes); // @deprecated - 保留向後兼容
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/booking-flow', bookingFlowRoutes);
 app.use('/api/payment', gomypayRoutes);
 app.use('/api/pricing', pricingRoutes);
 app.use('/api/test-firebase', testFirebaseRoutes);
 app.use('/api/profile', profileRoutes);
-app.use('/api', ratingsRoutes);
+app.use('/api', ratingsRoutes); // @deprecated - 保留向後兼容
 
 // 404 handler
 app.use((_req, res) => {
