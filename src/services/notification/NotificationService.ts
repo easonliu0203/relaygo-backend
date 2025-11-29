@@ -1,6 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
-import { getFirebaseApp, getFirestore, sendSystemMessage } from '../../config/firebase';
 import admin from 'firebase-admin';
+import { getFirebaseApp, getFirestore } from '../../config/firebase';
 
 // 通知類型
 export enum NotificationType {
@@ -209,17 +209,6 @@ export class NotificationService {
       message: `訂單 ${booking.booking_number} 的司機已出發`,
       data: { bookingId: booking.id, driverId: booking.driver_id }
     });
-
-    // 分享司機定位到聊天室
-    if (booking.driver_location) {
-      await this.shareDriverLocation(
-        booking.id,
-        booking.driver_id,
-        'driver_departed',
-        booking.driver_location.latitude,
-        booking.driver_location.longitude
-      );
-    }
   }
 
   // 司機到達通知
@@ -239,17 +228,6 @@ export class NotificationService {
       message: `訂單 ${booking.booking_number} 的司機已到達`,
       data: { bookingId: booking.id, driverId: booking.driver_id }
     });
-
-    // 分享司機定位到聊天室
-    if (booking.driver_location) {
-      await this.shareDriverLocation(
-        booking.id,
-        booking.driver_id,
-        'driver_arrived',
-        booking.driver_location.latitude,
-        booking.driver_location.longitude
-      );
-    }
   }
 
   // 行程開始通知
@@ -428,10 +406,11 @@ export class NotificationService {
           priority: 'high',
           notification: {
             channelId: 'chat_messages',
+            priority: 'high',
             sound: 'default',
-            priority: 'high' as const,
             defaultSound: true,
-            defaultVibrateTimings: true
+            defaultVibrateTimings: true,
+            defaultLightSettings: true
           }
         },
         // iOS 特定配置
@@ -443,29 +422,32 @@ export class NotificationService {
                 body: notification.message
               },
               sound: 'default',
-              badge: 1
+              badge: 1,
+              contentAvailable: true
             }
+          },
+          headers: {
+            'apns-priority': '10'
           }
         }
       };
 
       // 3. 發送推播
-      const firebaseApp = getFirebaseApp();
-      const messaging = admin.messaging(firebaseApp);
-
+      const messaging = admin.messaging(getFirebaseApp());
       const response = await messaging.send(message);
 
       console.log('[FCM] ✅ 推播通知發送成功:', response);
-
     } catch (error: any) {
       console.error('[FCM] ❌ 推播通知發送失敗:', error);
 
-      // 如果是 Token 無效，可以考慮從 Firestore 刪除該 Token
+      // 處理無效 Token 的情況
       if (error.code === 'messaging/invalid-registration-token' ||
           error.code === 'messaging/registration-token-not-registered') {
         console.log('[FCM] Token 無效，考慮清理:', notification.recipientId);
-        // TODO: 可以實作清理無效 Token 的邏輯
+        // TODO: 可以在這裡清理無效的 Token
       }
+
+      // 不拋出錯誤，避免影響主流程
     }
   }
 
@@ -484,7 +466,7 @@ export class NotificationService {
       const fcmToken = userData?.fcmToken;
 
       if (!fcmToken) {
-        console.log('[FCM] 用戶沒有設置 FCM Token:', userId);
+        console.log('[FCM] 用戶沒有 FCM Token:', userId);
         return null;
       }
 
@@ -533,167 +515,12 @@ export class NotificationService {
   // 清理過期通知
   async cleanupExpiredNotifications(): Promise<void> {
     const now = new Date();
-
+    
     for (const [userId, notifications] of this.notifications.entries()) {
       const validNotifications = notifications.filter(
         notification => !notification.expiresAt || notification.expiresAt > now
       );
       this.notifications.set(userId, validNotifications);
-    }
-  }
-
-  // ==================== 司機定位分享功能 ====================
-
-  /**
-   * 分享司機定位到聊天室
-   * @param bookingId 訂單 ID
-   * @param driverId 司機 ID
-   * @param status 觸發狀態 (driver_departed 或 driver_arrived)
-   * @param latitude 緯度
-   * @param longitude 經度
-   */
-  async shareDriverLocation(
-    bookingId: string,
-    driverId: string,
-    status: 'driver_departed' | 'driver_arrived',
-    latitude: number,
-    longitude: number
-  ): Promise<void> {
-    try {
-      console.log('[Location] 分享司機定位:', {
-        bookingId,
-        driverId,
-        status,
-        latitude,
-        longitude
-      });
-
-      // 1. 生成地圖連結
-      const mapLinks = this.generateMapLinks(latitude, longitude);
-
-      // 2. 儲存定位到 Firestore
-      await this.saveLocationToFirestore(
-        bookingId,
-        driverId,
-        status,
-        latitude,
-        longitude,
-        mapLinks
-      );
-
-      // 3. 發送系統訊息到聊天室
-      await this.sendLocationMessageToChat(
-        bookingId,
-        status,
-        mapLinks
-      );
-
-      console.log('[Location] ✅ 定位分享成功');
-
-    } catch (error) {
-      console.error('[Location] ❌ 定位分享失敗:', error);
-      // 不中斷流程，只記錄錯誤
-    }
-  }
-
-  /**
-   * 生成地圖連結
-   * @param latitude 緯度
-   * @param longitude 經度
-   * @returns Google Maps 和 Apple Maps 連結
-   */
-  private generateMapLinks(latitude: number, longitude: number): {
-    googleMaps: string;
-    appleMaps: string;
-  } {
-    return {
-      googleMaps: `https://maps.google.com/?q=${latitude},${longitude}`,
-      appleMaps: `https://maps.apple.com/?q=${latitude},${longitude}` // 修改為 https://
-    };
-  }
-
-  /**
-   * 儲存定位到 Firestore
-   */
-  private async saveLocationToFirestore(
-    bookingId: string,
-    driverId: string,
-    status: 'driver_departed' | 'driver_arrived',
-    latitude: number,
-    longitude: number,
-    mapLinks: { googleMaps: string; appleMaps: string }
-  ): Promise<void> {
-    try {
-      const firestore = getFirestore();
-      const locationRef = firestore
-        .collection('bookings')
-        .doc(bookingId)
-        .collection('location_history')
-        .doc();
-
-      const locationData = {
-        id: locationRef.id,
-        bookingId,
-        driverId,
-        status,
-        latitude,
-        longitude,
-        googleMapsUrl: mapLinks.googleMaps,
-        appleMapsUrl: mapLinks.appleMaps,
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      };
-
-      await locationRef.set(locationData);
-
-      console.log('[Location] ✅ 定位已儲存到 Firestore:', locationRef.id);
-
-    } catch (error) {
-      console.error('[Location] ❌ 儲存定位到 Firestore 失敗:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 發送定位訊息到聊天室
-   */
-  private async sendLocationMessageToChat(
-    bookingId: string,
-    status: 'driver_departed' | 'driver_arrived',
-    mapLinks: { googleMaps: string; appleMaps: string }
-  ): Promise<void> {
-    try {
-      // 根據狀態生成訊息內容
-      const statusText = status === 'driver_departed' ? '司機已出發前往接送地點' : '司機已到達接送地點';
-      const emoji = status === 'driver_departed' ? '🚗' : '📍';
-
-      // 獲取當前時間
-      const now = new Date();
-      const timeString = now.toLocaleString('zh-TW', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-      });
-
-      // 構建訊息內容
-      const messageContent = `${emoji} ${statusText}
-📍 查看司機位置：
-• Google Maps: ${mapLinks.googleMaps}
-• Apple Maps: ${mapLinks.appleMaps}
-時間：${timeString}`;
-
-      // 使用 Firebase 的 sendSystemMessage 函數將訊息儲存到 Firestore
-      await sendSystemMessage(bookingId, messageContent);
-
-      console.log('[Location] ✅ 定位訊息已發送到聊天室:', bookingId);
-
-    } catch (error) {
-      console.error('[Location] ❌ 發送定位訊息到聊天室失敗:', error);
-      throw error;
     }
   }
 }
