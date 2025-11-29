@@ -1,11 +1,14 @@
+[providers]
+node = "18"
+
 [phases.setup]
 nixPkgs = ["nodejs-18_x"]
 
 [phases.install]
-cmds = ["npm install"]
+cmds = ["npm ci --include=dev"]
 
 [phases.build]
-cmds = ["npx tsc -p tsconfig.min.json"]
+cmds = ["npm run build:min"]
 
 [start]
 cmd = "node dist/minimal-server.js"
