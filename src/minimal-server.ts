@@ -7,8 +7,8 @@ import gomypayRoutes from './routes/gomypay';
 import pricingRoutes from './routes/pricing';
 import testFirebaseRoutes from './routes/test-firebase';
 import profileRoutes from './routes/profile';
-import ratingsRoutes from './routes/ratings'; // @deprecated - 保留向後兼容
-import reviewRoutes from './routes/reviews'; // ✅ 新的評價路由（使用 reviews 表）
+import ratingsRoutes from './routes/ratings';
+// import translationRoutes from './routes/translation'; // TODO: 翻譯路由檔案不存在，暫時註解
 import { initializeFirebase } from './config/firebase';
 import { initializePaymentProviders } from './services/payment';
 
@@ -22,6 +22,7 @@ console.log(`PORT: ${process.env.PORT || 3000}`);
 console.log(`FIREBASE_PROJECT_ID: ${process.env.FIREBASE_PROJECT_ID ? 'SET' : 'NOT SET'}`);
 console.log(`FIREBASE_CLIENT_EMAIL: ${process.env.FIREBASE_CLIENT_EMAIL ? 'SET' : 'NOT SET'}`);
 console.log(`FIREBASE_PRIVATE_KEY: ${process.env.FIREBASE_PRIVATE_KEY ? `SET (length: ${process.env.FIREBASE_PRIVATE_KEY.length})` : 'NOT SET'}`);
+console.log(`OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET'}`);
 console.log('');
 
 // Initialize Firebase Admin SDK
@@ -75,16 +76,25 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// Test translation route loading
+app.get('/api/translation/test', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Translation route is loaded!',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // API routes
-app.use('/api/reviews', reviewRoutes); // ✅ 新的評價路由（優先註冊）
-app.use('/api/bookings', ratingsRoutes); // @deprecated - 保留向後兼容
+app.use('/api/bookings', ratingsRoutes);
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/booking-flow', bookingFlowRoutes);
 app.use('/api/payment', gomypayRoutes);
 app.use('/api/pricing', pricingRoutes);
 app.use('/api/test-firebase', testFirebaseRoutes);
 app.use('/api/profile', profileRoutes);
-app.use('/api', ratingsRoutes); // @deprecated - 保留向後兼容
+app.use('/api', ratingsRoutes);
+// app.use('/api/translation', translationRoutes); // TODO: 翻譯路由檔案不存在，暫時註解
 
 // 404 handler
 app.use((_req, res) => {
@@ -111,5 +121,7 @@ app.listen(PORT, () => {
   console.log(`     - POST /api/bookings`);
   console.log(`     - POST /api/bookings/:id/pay-deposit`);
   console.log(`     - POST /api/booking-flow/bookings/:id/accept`);
+  console.log(`     - POST /api/translation/translate`);
+  console.log(`     - GET /api/translation/test`);
 });
 
