@@ -364,10 +364,11 @@ router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): 
     try {
       let message = '司機已出發，正在前往上車地點 🚗';
 
-      // 如果有位置資訊，添加 Google Maps 連結
+      // 如果有位置資訊，添加 Google Maps 和 Apple Maps 連結
       if (latitude && longitude) {
-        const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
-        message += `\n📍 當前位置：${mapsUrl}`;
+        const googleMapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+        const appleMapsUrl = `https://maps.apple.com/?q=${latitude},${longitude}`;
+        message += `\n📍 當前位置：${googleMapsUrl} | ${appleMapsUrl}`;
       }
 
       await sendSystemMessage(bookingId, message);
@@ -500,10 +501,11 @@ router.post('/bookings/:bookingId/arrive', async (req: Request, res: Response): 
     try {
       let message = '司機已到達上車地點，請準備上車 📍';
 
-      // 如果有位置資訊，添加 Google Maps 連結
+      // 如果有位置資訊，添加 Google Maps 和 Apple Maps 連結
       if (latitude && longitude) {
-        const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
-        message += `\n📍 當前位置：${mapsUrl}`;
+        const googleMapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+        const appleMapsUrl = `https://maps.apple.com/?q=${latitude},${longitude}`;
+        message += `\n📍 當前位置：${googleMapsUrl} | ${appleMapsUrl}`;
       }
 
       await sendSystemMessage(bookingId, message);
