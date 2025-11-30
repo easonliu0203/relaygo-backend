@@ -34,6 +34,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // packageId,
       packageName,
       estimatedFare,
+      tourPackageId,
+      tourPackageName,
     } = req.body;
 
     console.log('[API] 創建訂單:', {
@@ -41,6 +43,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       pickupAddress,
       bookingTime,
       passengerCount,
+      tourPackageId,
+      tourPackageName,
     });
 
     // 1. 驗證必填欄位
@@ -189,6 +193,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         tip_amount: tipAmount,
         total_amount: totalAmount,
         deposit_amount: depositAmount,
+        tour_package_id: tourPackageId || null, // ✅ 新增：旅遊方案 ID
+        tour_package_name: tourPackageName || null, // ✅ 新增：旅遊方案名稱
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
