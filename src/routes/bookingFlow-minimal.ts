@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import { createChatRoomInFirestore, chatRoomExists, sendSystemMessage } from '../config/firebase';
+import { createChatRoomInFirestore, chatRoomExists, sendSystemMessage, saveDriverLocationHistory } from '../config/firebase';
 
 dotenv.config();
 
@@ -330,22 +330,13 @@ router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): 
       return;
     }
 
-    // 5. 更新訂單狀態為 driver_departed，並儲存司機出發位置
-    const updateData: any = {
-      status: 'driver_departed',
-      updated_at: new Date().toISOString()
-    };
-
-    // 如果有位置資訊，儲存到訂單中
-    if (latitude && longitude) {
-      updateData.driver_depart_latitude = latitude;
-      updateData.driver_depart_longitude = longitude;
-      console.log('[API] ✅ 儲存司機出發位置');
-    }
-
+    // 5. 更新訂單狀態為 driver_departed
     const { error: updateError } = await supabase
       .from('bookings')
-      .update(updateData)
+      .update({
+        status: 'driver_departed',
+        updated_at: new Date().toISOString()
+      })
       .eq('id', bookingId);
 
     if (updateError) {
@@ -359,7 +350,17 @@ router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): 
 
     console.log('[API] ✅ 訂單狀態已更新為 driver_departed');
 
-    // 6. 發送系統訊息到聊天室（包含位置資訊）
+    // 6. 儲存司機出發位置到 Firebase Firestore
+    if (latitude && longitude) {
+      try {
+        await saveDriverLocationHistory(bookingId, 'driver_departed', latitude, longitude);
+        console.log('[API] ✅ 司機出發位置已儲存到 Firebase');
+      } catch (firebaseError) {
+        console.error('[API] ⚠️  儲存司機出發位置到 Firebase 失敗（不影響主流程）:', firebaseError);
+      }
+    }
+
+    // 7. 發送系統訊息到聊天室（包含位置資訊）
     try {
       let message = '司機已出發，正在前往上車地點 🚗';
 
@@ -465,22 +466,13 @@ router.post('/bookings/:bookingId/arrive', async (req: Request, res: Response): 
       return;
     }
 
-    // 5. 更新訂單狀態為 driver_arrived，並儲存司機到達位置
-    const updateData: any = {
-      status: 'driver_arrived',
-      updated_at: new Date().toISOString()
-    };
-
-    // 如果有位置資訊，儲存到訂單中
-    if (latitude && longitude) {
-      updateData.driver_arrive_latitude = latitude;
-      updateData.driver_arrive_longitude = longitude;
-      console.log('[API] ✅ 儲存司機到達位置');
-    }
-
+    // 5. 更新訂單狀態為 driver_arrived
     const { error: updateError } = await supabase
       .from('bookings')
-      .update(updateData)
+      .update({
+        status: 'driver_arrived',
+        updated_at: new Date().toISOString()
+      })
       .eq('id', bookingId);
 
     if (updateError) {
@@ -494,7 +486,17 @@ router.post('/bookings/:bookingId/arrive', async (req: Request, res: Response): 
 
     console.log('[API] ✅ 訂單狀態已更新為 driver_arrived');
 
-    // 6. 發送系統訊息到聊天室（包含位置資訊）
+    // 6. 儲存司機到達位置到 Firebase Firestore
+    if (latitude && longitude) {
+      try {
+        await saveDriverLocationHistory(bookingId, 'driver_arrived', latitude, longitude);
+        console.log('[API] ✅ 司機到達位置已儲存到 Firebase');
+      } catch (firebaseError) {
+        console.error('[API] ⚠️  儲存司機到達位置到 Firebase 失敗（不影響主流程）:', firebaseError);
+      }
+    }
+
+    // 7. 發送系統訊息到聊天室（包含位置資訊）
     try {
       let message = '司機已到達上車地點，請準備上車 📍';
 

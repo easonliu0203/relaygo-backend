@@ -155,7 +155,7 @@ export async function chatRoomExists(bookingId: string): Promise<boolean> {
 
 /**
  * 發送系統訊息到聊天室
- * 
+ *
  * @param bookingId 訂單 ID
  * @param message 訊息內容
  */
@@ -165,7 +165,7 @@ export async function sendSystemMessage(
 ): Promise<void> {
   try {
     const firestore = getFirestore();
-    
+
     const systemMessage = {
       senderId: 'system',
       receiverId: 'all',
@@ -194,6 +194,45 @@ export async function sendSystemMessage(
   } catch (error) {
     console.error('[Firebase] ❌ 發送系統訊息失敗:', error);
     // 不拋出錯誤，避免影響主流程
+  }
+}
+
+/**
+ * 儲存司機位置歷史記錄到 Firestore
+ *
+ * @param bookingId 訂單 ID
+ * @param status 狀態（driver_departed 或 driver_arrived）
+ * @param latitude 緯度
+ * @param longitude 經度
+ */
+export async function saveDriverLocationHistory(
+  bookingId: string,
+  status: 'driver_departed' | 'driver_arrived',
+  latitude: number,
+  longitude: number
+): Promise<void> {
+  try {
+    const firestore = getFirestore();
+
+    const locationData = {
+      status,
+      latitude,
+      longitude,
+      googleMapsUrl: `https://www.google.com/maps?q=${latitude},${longitude}`,
+      appleMapsUrl: `https://maps.apple.com/?q=${latitude},${longitude}`,
+      timestamp: admin.firestore.Timestamp.now(),
+    };
+
+    await firestore
+      .collection('bookings')
+      .doc(bookingId)
+      .collection('location_history')
+      .add(locationData);
+
+    console.log(`[Firebase] ✅ 司機位置歷史記錄已儲存: ${status}`, { latitude, longitude });
+  } catch (error) {
+    console.error('[Firebase] ❌ 儲存司機位置歷史記錄失敗:', error);
+    throw error;
   }
 }
 
