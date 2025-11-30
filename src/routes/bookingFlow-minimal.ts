@@ -270,9 +270,12 @@ router.post('/bookings/:bookingId/accept', async (req: Request, res: Response): 
 router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): Promise<void> => {
   try {
     const { bookingId } = req.params;
-    const { driverUid } = req.body;
+    const { driverUid, latitude, longitude } = req.body;
 
     console.log(`[API] 司機出發: bookingId=${bookingId}, driverUid=${driverUid}`);
+    if (latitude && longitude) {
+      console.log(`[API] 📍 司機位置: ${latitude}, ${longitude}`);
+    }
 
     // 1. 查詢訂單資料
     const { data: booking, error: bookingError } = await supabase
@@ -327,13 +330,22 @@ router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): 
       return;
     }
 
-    // 5. 更新訂單狀態為 driver_departed
+    // 5. 更新訂單狀態為 driver_departed，並儲存司機出發位置
+    const updateData: any = {
+      status: 'driver_departed',
+      updated_at: new Date().toISOString()
+    };
+
+    // 如果有位置資訊，儲存到訂單中
+    if (latitude && longitude) {
+      updateData.driver_depart_latitude = latitude;
+      updateData.driver_depart_longitude = longitude;
+      console.log('[API] ✅ 儲存司機出發位置');
+    }
+
     const { error: updateError } = await supabase
       .from('bookings')
-      .update({
-        status: 'driver_departed',
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', bookingId);
 
     if (updateError) {
@@ -347,13 +359,18 @@ router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): 
 
     console.log('[API] ✅ 訂單狀態已更新為 driver_departed');
 
-    // 6. 發送系統訊息到聊天室
+    // 6. 發送系統訊息到聊天室（包含位置資訊）
     try {
-      await sendSystemMessage(
-        bookingId,
-        '司機已出發，正在前往上車地點 🚗'
-      );
-      console.log('[API] ✅ 系統訊息已發送');
+      let message = '司機已出發，正在前往上車地點 🚗';
+
+      // 如果有位置資訊，添加 Google Maps 連結
+      if (latitude && longitude) {
+        const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+        message += `\n📍 當前位置：${mapsUrl}`;
+      }
+
+      await sendSystemMessage(bookingId, message);
+      console.log('[API] ✅ 系統訊息已發送（含位置資訊）');
     } catch (messageError) {
       console.error('[API] ⚠️  發送系統訊息失敗（不影響主流程）:', messageError);
     }
@@ -364,6 +381,8 @@ router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): 
       data: {
         bookingId,
         status: 'driver_departed',
+        latitude,
+        longitude,
         nextStep: 'driver_arrive'
       },
       message: '已出發'
@@ -386,9 +405,12 @@ router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): 
 router.post('/bookings/:bookingId/arrive', async (req: Request, res: Response): Promise<void> => {
   try {
     const { bookingId } = req.params;
-    const { driverUid } = req.body;
+    const { driverUid, latitude, longitude } = req.body;
 
     console.log(`[API] 司機到達: bookingId=${bookingId}, driverUid=${driverUid}`);
+    if (latitude && longitude) {
+      console.log(`[API] 📍 司機位置: ${latitude}, ${longitude}`);
+    }
 
     // 1. 查詢訂單資料
     const { data: booking, error: bookingError } = await supabase
@@ -443,13 +465,22 @@ router.post('/bookings/:bookingId/arrive', async (req: Request, res: Response): 
       return;
     }
 
-    // 5. 更新訂單狀態為 driver_arrived
+    // 5. 更新訂單狀態為 driver_arrived，並儲存司機到達位置
+    const updateData: any = {
+      status: 'driver_arrived',
+      updated_at: new Date().toISOString()
+    };
+
+    // 如果有位置資訊，儲存到訂單中
+    if (latitude && longitude) {
+      updateData.driver_arrive_latitude = latitude;
+      updateData.driver_arrive_longitude = longitude;
+      console.log('[API] ✅ 儲存司機到達位置');
+    }
+
     const { error: updateError } = await supabase
       .from('bookings')
-      .update({
-        status: 'driver_arrived',
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', bookingId);
 
     if (updateError) {
@@ -463,13 +494,18 @@ router.post('/bookings/:bookingId/arrive', async (req: Request, res: Response): 
 
     console.log('[API] ✅ 訂單狀態已更新為 driver_arrived');
 
-    // 6. 發送系統訊息到聊天室
+    // 6. 發送系統訊息到聊天室（包含位置資訊）
     try {
-      await sendSystemMessage(
-        bookingId,
-        '司機已到達上車地點，請準備上車 📍'
-      );
-      console.log('[API] ✅ 系統訊息已發送');
+      let message = '司機已到達上車地點，請準備上車 📍';
+
+      // 如果有位置資訊，添加 Google Maps 連結
+      if (latitude && longitude) {
+        const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+        message += `\n📍 當前位置：${mapsUrl}`;
+      }
+
+      await sendSystemMessage(bookingId, message);
+      console.log('[API] ✅ 系統訊息已發送（含位置資訊）');
     } catch (messageError) {
       console.error('[API] ⚠️  發送系統訊息失敗（不影響主流程）:', messageError);
     }
@@ -480,6 +516,8 @@ router.post('/bookings/:bookingId/arrive', async (req: Request, res: Response): 
       data: {
         bookingId,
         status: 'driver_arrived',
+        latitude,
+        longitude,
         nextStep: 'start_trip'
       },
       message: '已到達'
