@@ -85,14 +85,59 @@ router.post('/register-or-login', async (req: Request, res: Response) => {
       });
     }
 
-    // 如果用戶已存在，直接返回
+    // 如果用戶已存在，檢查是否需要添加新角色
     if (existingUser) {
-      console.log('✅ 用戶已存在，返回現有資料:', {
+      const currentRoles = existingUser.roles || [];
+
+      console.log('✅ 用戶已存在:', {
         id: existingUser.id,
         email: existingUser.email,
-        role: existingUser.role,
+        currentRoles: currentRoles,
+        requestedRole: role,
       });
 
+      // 檢查角色是否已存在
+      if (!currentRoles.includes(role)) {
+        // 添加新角色
+        const updatedRoles = [...currentRoles, role];
+
+        console.log('📝 添加新角色:', {
+          oldRoles: currentRoles,
+          newRoles: updatedRoles,
+        });
+
+        const { data: updatedUser, error: updateError } = await supabaseAdmin
+          .from('users')
+          .update({
+            roles: updatedRoles,
+            role: role, // 同時更新 role 欄位（向後兼容）
+          })
+          .eq('id', existingUser.id)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error('❌ 添加角色失敗:', updateError);
+          return res.status(500).json({
+            success: false,
+            error: '添加角色失敗',
+            details: updateError.message,
+          });
+        }
+
+        console.log('✅ 角色添加成功:', {
+          id: updatedUser.id,
+          roles: updatedUser.roles,
+        });
+
+        return res.status(200).json({
+          success: true,
+          data: updatedUser,
+          message: `角色 ${role} 已添加`,
+        });
+      }
+
+      // 角色已存在，直接返回
       return res.status(200).json({
         success: true,
         data: existingUser,
@@ -100,14 +145,15 @@ router.post('/register-or-login', async (req: Request, res: Response) => {
       });
     }
 
-    // 創建新用戶
+    // 創建新用戶（包含 roles 陣列）
     console.log('📝 創建新用戶...');
     const { data: newUser, error: insertError } = await supabaseAdmin
       .from('users')
       .insert({
         firebase_uid: firebaseUid,
         email: email,
-        role: role,
+        role: role, // 保留 role 欄位（向後兼容）
+        roles: [role], // ✅ 使用 roles 陣列
         status: 'active',
         // 注意：display_name 不在 users 表中，應該存儲在 user_profiles 表
       })
@@ -127,6 +173,7 @@ router.post('/register-or-login', async (req: Request, res: Response) => {
       id: newUser.id,
       email: newUser.email,
       role: newUser.role,
+      roles: newUser.roles,
     });
 
     return res.status(201).json({

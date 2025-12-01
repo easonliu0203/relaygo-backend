@@ -67,11 +67,27 @@ router.get('/upsert', async (req: Request, res: Response) => {
       });
     }
 
-    // 如果沒有資料，返回 null
+    // 如果沒有資料，返回包含 email 的基本資料（讓前端能顯示 email）
     if (!profile) {
+      console.log('⚠️ user_profiles 表中沒有資料，返回包含 email 的基本資料');
       return res.json({
         success: true,
-        data: null,
+        data: {
+          id: null,
+          userId: userId,
+          email: userEmail, // ✅ 即使沒有 profile，也要返回 email
+          firstName: null,
+          lastName: null,
+          phone: null,
+          avatarUrl: null,
+          dateOfBirth: null,
+          gender: null,
+          address: null,
+          emergencyContactName: null,
+          emergencyContactPhone: null,
+          createdAt: null,
+          updatedAt: null,
+        },
       });
     }
 
