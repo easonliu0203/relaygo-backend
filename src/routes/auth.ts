@@ -109,7 +109,7 @@ router.post('/register-or-login', async (req: Request, res: Response) => {
         email: email,
         role: role,
         status: 'active',
-        display_name: displayName || null,
+        // 注意：display_name 不在 users 表中，應該存儲在 user_profiles 表
       })
       .select()
       .single();
