@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import authRoutes from './routes/auth'; // ✅ 新增：添加 auth 路由（2025-12-01）
 import bookingFlowRoutes from './routes/bookingFlow-minimal';
 import bookingsRoutes from './routes/bookings';
 import gomypayRoutes from './routes/gomypay';
@@ -88,6 +89,7 @@ app.get('/api/translation/test', (_req, res) => {
 });
 
 // API routes
+app.use('/api/auth', authRoutes); // ✅ 新增：註冊 auth 路由（2025-12-01）
 app.use('/api/bookings', ratingsRoutes);
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/booking-flow', bookingFlowRoutes);
