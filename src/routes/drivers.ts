@@ -128,7 +128,8 @@ router.post('/ensure', async (req: Request, res: Response) => {
         total_trips: 0,
         total_reviews: 0,
         average_rating: 0,
-        background_check_status: 'pending',
+        background_check_status: 'approved', // ⚠️ 臨時改為 approved，方便封測人員快速測試建立訂單功能
+                                             // TODO: 封測結束後改回 pending，需要人工審核
       })
       .select()
       .single();
