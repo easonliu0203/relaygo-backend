@@ -75,9 +75,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     // 2. 驗證客戶是否存在
     const { data: customer, error: customerError } = await supabase
       .from('users')
-      .select('id, email, role')
+      .select('id, email, role, roles')
       .eq('firebase_uid', customerUid)
-      .eq('role', 'customer')
+      .contains('roles', ['customer']) // ✅ 修復：檢查 roles 陣列是否包含 'customer'，支援多角色用戶
       .single();
 
     if (customerError || !customer) {

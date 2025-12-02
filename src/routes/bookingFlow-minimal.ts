@@ -68,9 +68,9 @@ router.post('/bookings/:bookingId/accept', async (req: Request, res: Response): 
     // 2. 查詢司機資料（通過 Firebase UID 獲取 Supabase user ID）
     const { data: driver, error: driverError } = await supabase
       .from('users')
-      .select('id, firebase_uid, email')
+      .select('id, firebase_uid, email, roles')
       .eq('firebase_uid', driverUid)
-      .eq('role', 'driver')
+      .contains('roles', ['driver']) // ✅ 修復：檢查 roles 陣列是否包含 'driver'，支援多角色用戶
       .single();
 
     if (driverError || !driver) {
@@ -296,9 +296,9 @@ router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): 
     // 2. 查詢司機資料並驗證權限
     const { data: driver, error: driverError } = await supabase
       .from('users')
-      .select('id, firebase_uid')
+      .select('id, firebase_uid, roles')
       .eq('firebase_uid', driverUid)
-      .eq('role', 'driver')
+      .contains('roles', ['driver']) // ✅ 修復：檢查 roles 陣列是否包含 'driver'，支援多角色用戶
       .single();
 
     if (driverError || !driver) {
@@ -433,9 +433,9 @@ router.post('/bookings/:bookingId/arrive', async (req: Request, res: Response): 
     // 2. 查詢司機資料並驗證權限
     const { data: driver, error: driverError } = await supabase
       .from('users')
-      .select('id, firebase_uid')
+      .select('id, firebase_uid, roles')
       .eq('firebase_uid', driverUid)
-      .eq('role', 'driver')
+      .contains('roles', ['driver']) // ✅ 修復：檢查 roles 陣列是否包含 'driver'，支援多角色用戶
       .single();
 
     if (driverError || !driver) {
@@ -567,9 +567,9 @@ router.post('/bookings/:bookingId/start-trip', async (req: Request, res: Respons
     // 2. 查詢客戶資料並驗證權限
     const { data: customer, error: customerError } = await supabase
       .from('users')
-      .select('id, firebase_uid')
+      .select('id, firebase_uid, roles')
       .eq('firebase_uid', customerUid)
-      .eq('role', 'customer')
+      .contains('roles', ['customer']) // ✅ 修復：檢查 roles 陣列是否包含 'customer'，支援多角色用戶
       .single();
 
     if (customerError || !customer) {
@@ -686,9 +686,9 @@ router.post('/bookings/:bookingId/end-trip', async (req: Request, res: Response)
     // 2. 查詢客戶資料並驗證權限
     const { data: customer, error: customerError } = await supabase
       .from('users')
-      .select('id, firebase_uid')
+      .select('id, firebase_uid, roles')
       .eq('firebase_uid', customerUid)
-      .eq('role', 'customer')
+      .contains('roles', ['customer']) // ✅ 修復：檢查 roles 陣列是否包含 'customer'，支援多角色用戶
       .single();
 
     if (customerError || !customer) {
@@ -897,10 +897,11 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
         firebase_uid,
         email,
         phone,
+        roles,
         user_profiles:user_profiles(first_name, last_name, phone)
       `)
       .eq('firebase_uid', customerUid)
-      .eq('role', 'customer')
+      .contains('roles', ['customer']) // ✅ 修復：檢查 roles 陣列是否包含 'customer'，支援多角色用戶
       .single();
 
     if (customerError || !customer) {

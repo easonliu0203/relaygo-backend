@@ -10,19 +10,22 @@ const bookingFlowController = new BookingFlowController();
 // 驗證中間件
 const requireAuth = authMiddleware;
 const requireCustomer = [authMiddleware, (req: any, res: any, next: any) => {
-  if (req.user?.role !== 'customer') {
+  // ✅ 修復：檢查 roles 陣列是否包含 'customer'，支援多角色用戶
+  if (!req.user?.roles || !req.user.roles.includes('customer')) {
     return res.status(403).json({ success: false, error: 'Customer access required' });
   }
   next();
 }];
 const requireDriver = [authMiddleware, (req: any, res: any, next: any) => {
-  if (req.user?.role !== 'driver') {
+  // ✅ 修復：檢查 roles 陣列是否包含 'driver'，支援多角色用戶
+  if (!req.user?.roles || !req.user.roles.includes('driver')) {
     return res.status(403).json({ success: false, error: 'Driver access required' });
   }
   next();
 }];
 const requireAdmin = [authMiddleware, (req: any, res: any, next: any) => {
-  if (req.user?.role !== 'admin') {
+  // ✅ 修復：檢查 roles 陣列是否包含 'admin'，支援多角色用戶
+  if (!req.user?.roles || !req.user.roles.includes('admin')) {
     return res.status(403).json({ success: false, error: 'Admin access required' });
   }
   next();
