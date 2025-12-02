@@ -21,18 +21,20 @@ const supabaseAdmin = createClient(
 /**
  * POST /api/drivers/ensure
  * 確保 drivers 表中存在該用戶的記錄
- * 
+ *
  * 功能：
- * - 如果記錄不存在，自動創建（is_available = FALSE）
+ * - 如果記錄不存在，自動創建（is_available = TRUE，臨時設定方便封測）
  * - 如果記錄已存在，返回現有記錄
  * - 使用 INSERT ... ON CONFLICT DO NOTHING 確保冪等性
- * 
+ *
  * Request Body:
  * - firebaseUid: Firebase 用戶 UID
- * 
+ *
  * Response:
  * - success: boolean
  * - data: Driver 記錄
+ *
+ * TODO: 封測結束後改回 is_available = FALSE
  */
 router.post('/ensure', async (req: Request, res: Response) => {
   try {
@@ -118,7 +120,8 @@ router.post('/ensure', async (req: Request, res: Response) => {
       .from('drivers')
       .insert({
         user_id: userId,
-        is_available: false, // ⚠️ 重要：默認為 FALSE，需要人工審核後手動改為 TRUE
+        is_available: true, // ⚠️ 臨時改為 TRUE，方便封測人員快速測試建立訂單功能
+                            // TODO: 封測結束後改回 FALSE，需要人工審核後才能接單
         rating: 0,
         total_trips: 0,
         total_reviews: 0,
