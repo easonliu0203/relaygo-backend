@@ -11,6 +11,7 @@ import profileRoutes from './routes/profile';
 import ratingsRoutes from './routes/ratings';
 import reviewRoutes from './routes/reviews'; // ✅ 修復：添加 reviews 路由（2025-11-30）
 import tourPackagesRoutes from './routes/tourPackages'; // ✅ 新增：添加 tour packages 路由（2025-11-30）
+import driversRoutes from './routes/drivers'; // ✅ 新增：添加 drivers 路由（2025-12-02）
 // import translationRoutes from './routes/translation'; // TODO: 翻譯路由檔案不存在，暫時註解
 import { initializeFirebase } from './config/firebase';
 import { initializePaymentProviders } from './services/payment';
@@ -97,6 +98,7 @@ app.use('/api/payment', gomypayRoutes);
 app.use('/api/pricing', pricingRoutes);
 app.use('/api/test-firebase', testFirebaseRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/drivers', driversRoutes); // ✅ 新增：註冊 drivers 路由（2025-12-02）
 app.use('/api/reviews', reviewRoutes); // ✅ 修復：註冊 reviews 路由（2025-11-30）
 app.use('/api/tour-packages', tourPackagesRoutes); // ✅ 新增：註冊 tour packages 路由（2025-11-30）
 app.use('/api', ratingsRoutes); // 保留舊的 ratings 路由以向後兼容
