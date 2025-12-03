@@ -27,12 +27,7 @@ const VEHICLE_DISPLAY_NAMES: Record<string, string> = {
   'extra_large': 'Extra Large 特大型',
 };
 
-// 車型特色（基礎特色）
-const BASE_FEATURES: string[] = [
-  '專業司機服務',
-  '車輛保險保障',
-  '24小時客服支援',
-];
+// 注意: features 欄位已不再使用,所有顯示內容來自 vehicle_pricing 表
 
 interface VehiclePricing {
   id: string;
@@ -100,17 +95,6 @@ router.get('/packages', async (_req: Request, res: Response) => {
       const clientVehicleType = VEHICLE_TYPE_MAPPING[pricing.vehicle_type] || pricing.vehicle_type.toLowerCase();
       const displayName = VEHICLE_DISPLAY_NAMES[clientVehicleType] || pricing.vehicle_description;
 
-      // 組合特色列表
-      const features = [
-        ...BASE_FEATURES,
-        pricing.capacity_info,
-      ];
-
-      // 8小時方案添加長時間優惠標籤
-      if (pricing.duration_hours >= 8) {
-        features.push('長時間包車優惠');
-      }
-
       return {
         id: pricing.id,
         name: `${displayName} ${pricing.duration_hours}小時方案`,
@@ -122,7 +106,7 @@ router.get('/packages', async (_req: Request, res: Response) => {
         overtimeRate: Number(pricing.overtime_rate),
         vehicleCategory: clientVehicleType,
         vehicleType: pricing.vehicle_type,
-        features: features,
+        features: [], // 不再生成 features,保留欄位以維持向後兼容
       };
     });
 
