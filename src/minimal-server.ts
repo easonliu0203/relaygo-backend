@@ -12,6 +12,8 @@ import ratingsRoutes from './routes/ratings';
 import reviewRoutes from './routes/reviews'; // ✅ 修復：添加 reviews 路由（2025-11-30）
 import tourPackagesRoutes from './routes/tourPackages'; // ✅ 新增：添加 tour packages 路由（2025-11-30）
 import driversRoutes from './routes/drivers'; // ✅ 新增：添加 drivers 路由（2025-12-02）
+import influencersRoutes from './routes/influencers'; // ✅ 新增：添加 influencers 路由（2025-12-05）
+import promoCodesRoutes from './routes/promoCodes'; // ✅ 新增：添加 promo codes 路由（2025-12-05）
 // import translationRoutes from './routes/translation'; // TODO: 翻譯路由檔案不存在，暫時註解
 import { initializeFirebase } from './config/firebase';
 import { initializePaymentProviders } from './services/payment';
@@ -101,6 +103,8 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/drivers', driversRoutes); // ✅ 新增：註冊 drivers 路由（2025-12-02）
 app.use('/api/reviews', reviewRoutes); // ✅ 修復：註冊 reviews 路由（2025-11-30）
 app.use('/api/tour-packages', tourPackagesRoutes); // ✅ 新增：註冊 tour packages 路由（2025-11-30）
+app.use('/api/admin/influencers', influencersRoutes); // ✅ 新增：註冊 influencers 路由（2025-12-05）
+app.use('/api/promo-codes', promoCodesRoutes); // ✅ 新增：註冊 promo codes 路由（2025-12-05）
 app.use('/api', ratingsRoutes); // 保留舊的 ratings 路由以向後兼容
 // app.use('/api/translation', translationRoutes); // TODO: 翻譯路由檔案不存在，暫時註解
 
