@@ -39,11 +39,11 @@ router.post('/validate', async (req: Request, res: Response) => {
       });
     }
 
-    // 查詢優惠碼
+    // 查詢優惠碼（不分大小寫）
     const { data: influencer, error } = await supabase
       .from('influencers')
       .select('*')
-      .eq('promo_code', promo_code)
+      .ilike('promo_code', promo_code) // ✅ 使用 ilike 進行不分大小寫比對
       .eq('is_active', true)
       .single();
 
