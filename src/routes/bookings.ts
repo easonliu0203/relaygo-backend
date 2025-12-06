@@ -36,6 +36,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       estimatedFare,
       tourPackageId,
       tourPackageName,
+      // 優惠碼相關欄位
+      promoCode,
+      influencerId,
+      influencerCommission,
     } = req.body;
 
     console.log('[API] 創建訂單:', {
@@ -193,6 +197,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         tip_amount: tipAmount,
         total_amount: totalAmount,
         deposit_amount: depositAmount,
+        influencer_commission: influencerCommission || 0, // ✅ 新增：網紅推廣獎金快照（如果有使用優惠碼）
         tour_package_id: tourPackageId || null, // ✅ 新增：旅遊方案 ID
         tour_package_name: tourPackageName || null, // ✅ 新增：旅遊方案名稱
         created_at: new Date().toISOString(),
@@ -212,7 +217,32 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     console.log('[API] ✅ 訂單創建成功:', booking.id);
 
-    // 7. 返回訂單資訊
+    // 7. 如果有使用優惠碼，記錄優惠碼使用
+    if (promoCode && influencerId) {
+      console.log('[API] 記錄優惠碼使用:', promoCode);
+
+      const { error: usageError } = await supabase
+        .from('promo_code_usage')
+        .insert({
+          influencer_id: influencerId,
+          booking_id: booking.id,
+          promo_code: promoCode,
+          original_price: totalAmount,
+          discount_amount_applied: 0, // 這裡應該從前端傳遞實際的折扣金額
+          discount_percentage_applied: 0, // 這裡應該從前端傳遞實際的折扣百分比
+          final_price: totalAmount,
+          commission_amount: influencerCommission || 0,
+        });
+
+      if (usageError) {
+        console.error('[API] 記錄優惠碼使用失敗:', usageError);
+        // 不中斷訂單建立流程，只記錄錯誤
+      } else {
+        console.log('[API] ✅ 優惠碼使用記錄成功');
+      }
+    }
+
+    // 8. 返回訂單資訊
     res.status(200).json({
       success: true,
       data: {
