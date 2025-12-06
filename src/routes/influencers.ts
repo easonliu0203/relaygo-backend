@@ -19,6 +19,7 @@ interface Influencer {
   discount_amount: number;
   discount_percentage_enabled: boolean;
   discount_percentage: number;
+  commission_per_order: number;
   account_username: string;
   account_password: string;
   bank_name: string | null;
@@ -136,6 +137,7 @@ router.post('/', async (req: Request, res: Response) => {
       discount_amount,
       discount_percentage_enabled,
       discount_percentage,
+      commission_per_order,
       account_username,
       account_password,
       bank_name,
@@ -198,6 +200,7 @@ router.post('/', async (req: Request, res: Response) => {
         discount_amount: discount_amount || 0,
         discount_percentage_enabled: discount_percentage_enabled || false,
         discount_percentage: discount_percentage || 0,
+        commission_per_order: commission_per_order || 0,
         account_username,
         account_password: hashedPassword,
         bank_name: bank_name || null,
@@ -257,6 +260,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
       discount_amount,
       discount_percentage_enabled,
       discount_percentage,
+      commission_per_order,
       account_username,
       account_password,
       bank_name,
@@ -325,6 +329,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
     if (discount_amount !== undefined) updateData.discount_amount = discount_amount;
     if (discount_percentage_enabled !== undefined) updateData.discount_percentage_enabled = discount_percentage_enabled;
     if (discount_percentage !== undefined) updateData.discount_percentage = discount_percentage;
+    if (commission_per_order !== undefined) updateData.commission_per_order = commission_per_order;
     if (account_username !== undefined) updateData.account_username = account_username;
     if (bank_name !== undefined) updateData.bank_name = bank_name;
     if (bank_code !== undefined) updateData.bank_code = bank_code;
@@ -419,6 +424,124 @@ router.delete('/:id', async (req: Request, res: Response) => {
     return res.json({
       success: true,
       message: '網紅刪除成功'
+    });
+
+  } catch (error) {
+    console.error('[Influencers API] 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
+
+/**
+ * @route GET /api/admin/influencers/:id/performance
+ * @desc 獲取網紅推廣績效
+ * @access Admin
+ */
+router.get('/:id/performance', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    console.log(`[Influencers API] 獲取網紅績效: ${id}`);
+
+    // 1. 獲取網紅基本資訊
+    const { data: influencer, error: influencerError } = await supabase
+      .from('influencers')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (influencerError || !influencer) {
+      return res.status(404).json({
+        success: false,
+        error: '網紅不存在'
+      });
+    }
+
+    // 移除密碼欄位
+    const { account_password, ...influencerWithoutPassword } = influencer;
+
+    // 2. 獲取使用記錄（包含訂單資訊）
+    const { data: usageRecords, error: usageError } = await supabase
+      .from('promo_code_usage')
+      .select(`
+        *,
+        bookings (
+          id,
+          status,
+          customer_id,
+          users!bookings_customer_id_fkey (
+            full_name,
+            email
+          )
+        )
+      `)
+      .eq('influencer_id', id)
+      .order('used_at', { ascending: false });
+
+    if (usageError) {
+      console.error('[Influencers API] 查詢使用記錄失敗:', usageError);
+      return res.status(500).json({
+        success: false,
+        error: '查詢使用記錄失敗',
+        details: usageError.message
+      });
+    }
+
+    // 3. 計算統計數據
+    const totalUsageCount = usageRecords?.length || 0;
+    const totalCommission = usageRecords?.reduce((sum, record) => sum + (record.commission_amount || 0), 0) || 0;
+
+    // 計算本月統計（使用台灣時區）
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const currentMonthStart = new Date(currentYear, currentMonth - 1, 1);
+    const currentMonthEnd = new Date(currentYear, currentMonth, 0, 23, 59, 59);
+
+    const currentMonthRecords = usageRecords?.filter(record => {
+      const usedAt = new Date(record.used_at);
+      return usedAt >= currentMonthStart && usedAt <= currentMonthEnd;
+    }) || [];
+
+    const currentMonthUsageCount = currentMonthRecords.length;
+    const currentMonthCommission = currentMonthRecords.reduce((sum, record) => sum + (record.commission_amount || 0), 0);
+
+    // 4. 格式化使用記錄
+    const usageHistory = usageRecords?.map(record => {
+      const booking = record.bookings as any;
+      const customer = booking?.users as any;
+
+      return {
+        id: record.id,
+        booking_id: record.booking_id,
+        customer_name: customer?.full_name || '未知客戶',
+        customer_email: customer?.email || '',
+        used_at: record.used_at,
+        original_price: record.original_price,
+        final_price: record.final_price,
+        commission_amount: record.commission_amount,
+        booking_status: booking?.status || 'unknown'
+      };
+    }) || [];
+
+    console.log(`[Influencers API] ✅ 成功獲取網紅績效: ${influencer.name}`);
+    console.log(`[Influencers API] 總使用次數: ${totalUsageCount}, 總推廣獎金: NT$ ${totalCommission}`);
+
+    return res.json({
+      success: true,
+      data: {
+        influencer: influencerWithoutPassword,
+        statistics: {
+          total_usage_count: totalUsageCount,
+          total_commission: totalCommission,
+          current_month_usage_count: currentMonthUsageCount,
+          current_month_commission: currentMonthCommission
+        },
+        usage_history: usageHistory
+      }
     });
 
   } catch (error) {

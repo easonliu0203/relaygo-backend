@@ -99,6 +99,7 @@ router.post('/validate', async (req: Request, res: Response) => {
       promo_code: influencer.promo_code,
       discount_amount: discountAmountApplied,
       discount_percentage: discountPercentageApplied,
+      commission_amount: influencer.commission_per_order || 0,
       original_price: price,
       final_price: finalPrice,
       total_discount: price - finalPrice,
@@ -129,7 +130,8 @@ router.post('/record-usage', async (req: Request, res: Response) => {
       original_price,
       discount_amount_applied,
       discount_percentage_applied,
-      final_price
+      final_price,
+      commission_amount
     } = req.body;
 
     console.log(`[Promo Code API] 記錄優惠碼使用: ${promo_code} for booking ${booking_id}`);
@@ -142,6 +144,18 @@ router.post('/record-usage', async (req: Request, res: Response) => {
       });
     }
 
+    // 如果沒有提供 commission_amount，則從 influencers 表查詢當前的 commission_per_order
+    let commissionToRecord = commission_amount;
+    if (commissionToRecord === undefined || commissionToRecord === null) {
+      const { data: influencer } = await supabase
+        .from('influencers')
+        .select('commission_per_order')
+        .eq('id', influencer_id)
+        .single();
+
+      commissionToRecord = influencer?.commission_per_order || 0;
+    }
+
     // 記錄優惠碼使用
     const { data, error } = await supabase
       .from('promo_code_usage')
@@ -152,7 +166,8 @@ router.post('/record-usage', async (req: Request, res: Response) => {
         original_price: original_price || 0,
         discount_amount_applied: discount_amount_applied || 0,
         discount_percentage_applied: discount_percentage_applied || 0,
-        final_price: final_price || 0
+        final_price: final_price || 0,
+        commission_amount: commissionToRecord
       })
       .select()
       .single();
