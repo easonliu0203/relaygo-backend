@@ -463,21 +463,10 @@ router.get('/:id/performance', async (req: Request, res: Response) => {
     // 移除密碼欄位
     const { account_password, ...influencerWithoutPassword } = influencer;
 
-    // 2. 獲取使用記錄（包含訂單資訊）
+    // 2. 獲取使用記錄（只查詢 promo_code_usage 表）
     const { data: usageRecords, error: usageError } = await supabase
       .from('promo_code_usage')
-      .select(`
-        *,
-        bookings (
-          id,
-          status,
-          customer_id,
-          users!bookings_customer_id_fkey (
-            full_name,
-            email
-          )
-        )
-      `)
+      .select('*')
       .eq('influencer_id', id)
       .order('used_at', { ascending: false });
 
@@ -509,23 +498,61 @@ router.get('/:id/performance', async (req: Request, res: Response) => {
     const currentMonthUsageCount = currentMonthRecords.length;
     const currentMonthCommission = currentMonthRecords.reduce((sum, record) => sum + (record.commission_amount || 0), 0);
 
-    // 4. 格式化使用記錄
-    const usageHistory = usageRecords?.map(record => {
-      const booking = record.bookings as any;
-      const customer = booking?.users as any;
+    // 4. 如果有使用記錄，查詢訂單和客戶資訊
+    let usageHistory: any[] = [];
 
-      return {
-        id: record.id,
-        booking_id: record.booking_id,
-        customer_name: customer?.full_name || '未知客戶',
-        customer_email: customer?.email || '',
-        used_at: record.used_at,
-        original_price: record.original_price,
-        final_price: record.final_price,
-        commission_amount: record.commission_amount,
-        booking_status: booking?.status || 'unknown'
-      };
-    }) || [];
+    if (usageRecords && usageRecords.length > 0) {
+      // 提取所有 booking_id
+      const bookingIds = usageRecords.map(record => record.booking_id);
+
+      // 查詢訂單資訊
+      const { data: bookings, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('id, status, customer_id')
+        .in('id', bookingIds);
+
+      if (bookingsError) {
+        console.error('[Influencers API] 查詢訂單失敗:', bookingsError);
+        // 不中斷，繼續處理
+      }
+
+      // 提取所有 customer_id
+      const customerIds = bookings?.map(b => b.customer_id).filter(Boolean) || [];
+
+      // 查詢客戶資訊
+      let users: any[] = [];
+      if (customerIds.length > 0) {
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('id, full_name, email')
+          .in('id', customerIds);
+
+        if (usersError) {
+          console.error('[Influencers API] 查詢客戶失敗:', usersError);
+          // 不中斷，繼續處理
+        } else {
+          users = usersData || [];
+        }
+      }
+
+      // 組合資料
+      usageHistory = usageRecords.map(record => {
+        const booking = bookings?.find(b => b.id === record.booking_id);
+        const customer = users.find(u => u.id === booking?.customer_id);
+
+        return {
+          id: record.id,
+          booking_id: record.booking_id,
+          customer_name: customer?.full_name || '未知客戶',
+          customer_email: customer?.email || '',
+          used_at: record.used_at,
+          original_price: record.original_price,
+          final_price: record.final_price,
+          commission_amount: record.commission_amount,
+          booking_status: booking?.status || 'unknown'
+        };
+      });
+    }
 
     console.log(`[Influencers API] ✅ 成功獲取網紅績效: ${influencer.name}`);
     console.log(`[Influencers API] 總使用次數: ${totalUsageCount}, 總推廣獎金: NT$ ${totalCommission}`);
