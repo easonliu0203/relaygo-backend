@@ -40,6 +40,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       promoCode, // 優惠碼
       influencerId, // 網紅 ID
       influencerCommission, // 網紅推廣獎金（公司支付給網紅的金額，不影響司機收入）
+      // 統一編號（選填）
+      taxId, // 統一編號（8 位數字）
     } = req.body;
 
     console.log('[API] 創建訂單:', {
@@ -198,6 +200,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         total_amount: totalAmount,
         deposit_amount: depositAmount,
         influencer_commission: influencerCommission || 0, // ✅ 網紅推廣獎金快照（公司支付給網紅的金額，從公司總收入中撥出，不影響司機收入）
+        tax_id: taxId || null, // ✅ 新增：統一編號（選填）
         tour_package_id: tourPackageId || null, // ✅ 新增：旅遊方案 ID
         tour_package_name: tourPackageName || null, // ✅ 新增：旅遊方案名稱
         created_at: new Date().toISOString(),
