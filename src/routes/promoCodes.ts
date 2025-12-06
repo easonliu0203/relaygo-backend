@@ -78,7 +78,6 @@ router.post('/validate', async (req: Request, res: Response) => {
     if (influencer.discount_percentage_enabled && influencer.discount_percentage > 0) {
       discountPercentageApplied = influencer.discount_percentage;
       const discountMultiplier = 1 - (discountPercentageApplied / 100);
-      const priceBeforePercentage = currentPrice;
       currentPrice = currentPrice * discountMultiplier;
       calculationSteps.push(
         `百分比折扣：${(100 - discountPercentageApplied).toFixed(0)} 折 = NT$ ${Math.round(currentPrice).toLocaleString()}`
@@ -97,7 +96,9 @@ router.post('/validate', async (req: Request, res: Response) => {
       influencer_id: influencer.id,
       influencer_name: influencer.name,
       promo_code: influencer.promo_code,
+      discount_amount_enabled: influencer.discount_amount_enabled || false, // ✅ 新增：是否啟用現金折扣
       discount_amount: discountAmountApplied,
+      discount_percentage_enabled: influencer.discount_percentage_enabled || false, // ✅ 新增：是否啟用百分比折扣
       discount_percentage: discountPercentageApplied,
       commission_amount: influencer.commission_per_order || 0,
       original_price: price,
