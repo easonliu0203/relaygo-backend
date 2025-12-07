@@ -40,6 +40,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       promoCode, // 優惠碼
       influencerId, // 網紅 ID
       influencerCommission, // 網紅推廣獎金（公司支付給網紅的金額，不影響司機收入）
+      originalPrice, // ✅ 新增：原始價格（未使用優惠碼前）
+      discountAmount, // ✅ 新增：折扣金額
+      finalPrice, // ✅ 新增：折扣後最終價格
       // 統一編號（選填）
       taxId, // 統一編號（8 位數字）
     } = req.body;
@@ -160,14 +163,34 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const foreignLanguageSurcharge = 0; // 外語加價
     const overtimeFee = 0; // 超時費用
     const tipAmount = 0; // 小費
-    const totalAmount = basePrice + foreignLanguageSurcharge + overtimeFee + tipAmount;
+
+    // ✅ 修正：如果有使用優惠碼，使用折扣後的價格
+    let totalAmount = basePrice + foreignLanguageSurcharge + overtimeFee + tipAmount;
+    let actualOriginalPrice = totalAmount; // 原始價格（未折扣前）
+    let actualDiscountAmount = 0; // 折扣金額
+    let actualFinalPrice = totalAmount; // 折扣後最終價格
+
+    if (finalPrice && finalPrice > 0) {
+      // 客戶使用了優惠碼
+      actualOriginalPrice = originalPrice || totalAmount;
+      actualDiscountAmount = discountAmount || 0;
+      actualFinalPrice = finalPrice;
+      totalAmount = finalPrice; // ✅ 使用折扣後的價格作為訂單總金額
+      console.log('[API] ✅ 使用優惠碼折扣後價格:', {
+        originalPrice: actualOriginalPrice,
+        discountAmount: actualDiscountAmount,
+        finalPrice: actualFinalPrice
+      });
+    }
+
     const depositAmount = Math.round(totalAmount * depositRate);
 
     console.log('[API] 計算費用:', {
       basePrice,
       depositRate,
       totalAmount,
-      depositAmount
+      depositAmount,
+      hasPromoCode: !!promoCode
     });
 
     // 6. 解析預約時間
@@ -199,7 +222,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         tip_amount: tipAmount,
         total_amount: totalAmount,
         deposit_amount: depositAmount,
-        influencer_commission: influencerCommission || 0, // ✅ 網紅推廣獎金快照（公司支付給網紅的金額，從公司總收入中撥出，不影響司機收入）
+        // ✅ 新增：優惠碼相關欄位
+        promo_code: promoCode || null, // 優惠碼
+        influencer_id: influencerId || null, // 網紅 ID
+        influencer_commission: influencerCommission || 0, // 網紅推廣獎金快照（公司支付給網紅的金額，從公司總收入中撥出，不影響司機收入）
+        original_price: actualOriginalPrice, // 原始價格（未使用優惠碼前）
+        discount_amount: actualDiscountAmount, // 折扣金額
+        final_price: actualFinalPrice, // 折扣後最終價格
         tax_id: taxId || null, // ✅ 新增：統一編號（選填）
         tour_package_id: tourPackageId || null, // ✅ 新增：旅遊方案 ID
         tour_package_name: tourPackageName || null, // ✅ 新增：旅遊方案名稱
@@ -230,10 +259,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           influencer_id: influencerId,
           booking_id: booking.id,
           promo_code: promoCode,
-          original_price: totalAmount,
-          discount_amount_applied: 0, // 這裡應該從前端傳遞實際的折扣金額
-          discount_percentage_applied: 0, // 這裡應該從前端傳遞實際的折扣百分比
-          final_price: totalAmount,
+          original_price: actualOriginalPrice, // ✅ 修正：使用實際的原始價格
+          discount_amount_applied: actualDiscountAmount, // ✅ 修正：使用實際的折扣金額
+          discount_percentage_applied: 0, // 百分比折扣（可以從前端傳遞）
+          final_price: actualFinalPrice, // ✅ 修正：使用實際的折扣後價格
           commission_amount: influencerCommission || 0,
         });
 
