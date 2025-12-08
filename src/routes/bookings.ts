@@ -466,48 +466,30 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
 
     console.log('[API] ✅ 支付記錄創建成功:', payment.id);
 
-    // 7. 返回支付 URL（如果有）或成功響應
-    if (paymentResponse.paymentUrl) {
-      // GoMyPay 或其他需要跳轉的支付方式
-      res.json({
-        success: true,
-        data: {
-          bookingId,
-          paymentId: payment.id,
-          transactionId: paymentResponse.transactionId,
-          paymentUrl: paymentResponse.paymentUrl,
-          instructions: paymentResponse.instructions,
-          expiresAt: paymentResponse.expiresAt,
-          requiresRedirect: true
-        }
+    // 7. 返回支付 URL
+    // ⚠️ 所有支付都必須通過 GoMyPay，不再支援自動完成的模擬支付
+    if (!paymentResponse.paymentUrl) {
+      console.error('[API] 支付提供者未返回支付 URL');
+      res.status(500).json({
+        success: false,
+        error: '支付發起失敗：未獲取到支付 URL'
       });
-    } else {
-      // Mock 或其他自動完成的支付方式
-      // 更新訂單狀態為已付訂金
-      const { error: updateError } = await supabase
-        .from('bookings')
-        .update({
-          status: 'paid_deposit',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', bookingId);
-
-      if (updateError) {
-        console.error('[API] 更新訂單狀態失敗:', updateError);
-      }
-
-      res.json({
-        success: true,
-        data: {
-          bookingId,
-          paymentId: payment.id,
-          transactionId: paymentResponse.transactionId,
-          status: 'paid_deposit',
-          depositAmount: booking.deposit_amount,
-          requiresRedirect: false
-        }
-      });
+      return;
     }
+
+    // 返回 GoMyPay 支付 URL
+    res.json({
+      success: true,
+      data: {
+        bookingId,
+        paymentId: payment.id,
+        transactionId: paymentResponse.transactionId,
+        paymentUrl: paymentResponse.paymentUrl,
+        instructions: paymentResponse.instructions,
+        expiresAt: paymentResponse.expiresAt,
+        requiresRedirect: true
+      }
+    });
 
   } catch (error: any) {
     console.error('[API] 支付訂金失敗:', error);
