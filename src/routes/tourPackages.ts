@@ -22,13 +22,45 @@ interface TourPackage {
 }
 
 /**
+ * 從多語言 JSONB 欄位中提取指定語言的內容
+ * @param i18nData - JSONB 多語言資料
+ * @param lang - 目標語言代碼
+ * @param fallback - 後備內容
+ * @returns 翻譯內容或後備內容
+ */
+function getTranslation(i18nData: Record<string, string> | null | undefined, lang: string, fallback: string): string {
+  if (!i18nData || typeof i18nData !== 'object') {
+    return fallback;
+  }
+
+  // 1. 嘗試返回請求的語言
+  if (i18nData[lang]) {
+    return i18nData[lang];
+  }
+
+  // 2. 後備到繁體中文
+  if (i18nData['zh-TW']) {
+    return i18nData['zh-TW'];
+  }
+
+  // 3. 返回原始後備內容
+  return fallback;
+}
+
+/**
  * @route GET /api/tour-packages
- * @desc 獲取所有旅遊方案（包含停用的）
+ * @desc 獲取所有旅遊方案（支援多語言）
+ * @query lang - 語言代碼（zh-TW, en, ja, ko, vi, th, ms, id）
  * @access Public
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    console.log('[Tour Packages API] 獲取旅遊方案列表');
+    // 獲取語言參數（從 query 或 Accept-Language header）
+    const lang = (req.query.lang as string) ||
+                 req.headers['accept-language']?.split(',')[0]?.split('-')[0] ||
+                 'zh-TW';
+
+    console.log(`[Tour Packages API] 獲取旅遊方案列表 (語言: ${lang})`);
 
     // 獲取所有旅遊方案（包含停用的，讓 Web Admin 可以管理）
     const { data, error } = await supabase
@@ -45,12 +77,24 @@ router.get('/', async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`[Tour Packages API] ✅ 成功獲取 ${data?.length || 0} 個旅遊方案`);
+    // 處理多語言內容
+    const translatedData = data?.map((pkg: TourPackage) => ({
+      ...pkg,
+      // 根據語言參數提取翻譯內容
+      name: getTranslation(pkg.name_i18n, lang, pkg.name),
+      description: getTranslation(pkg.description_i18n, lang, pkg.description || ''),
+      // 保留原始多語言資料供 Web Admin 使用
+      name_i18n: pkg.name_i18n,
+      description_i18n: pkg.description_i18n,
+    }));
+
+    console.log(`[Tour Packages API] ✅ 成功獲取 ${translatedData?.length || 0} 個旅遊方案 (語言: ${lang})`);
 
     return res.json({
       success: true,
-      data: data || [],
-      count: data?.length || 0
+      data: translatedData || [],
+      count: translatedData?.length || 0,
+      lang: lang, // 返回使用的語言
     });
 
   } catch (error) {
