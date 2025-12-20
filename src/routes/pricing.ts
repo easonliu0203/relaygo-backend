@@ -29,11 +29,44 @@ const VEHICLE_DISPLAY_NAMES: Record<string, string> = {
 
 // 注意: features 欄位已不再使用,所有顯示內容來自 vehicle_pricing 表
 
+/**
+ * 輔助函數：從多語言 JSONB 資料中提取翻譯
+ * @param i18nData - JSONB 多語言資料物件
+ * @param lang - 目標語言代碼
+ * @param fallback - 後備文字
+ * @returns 翻譯後的文字
+ */
+function getTranslation(
+  i18nData: Record<string, string> | null | undefined,
+  lang: string,
+  fallback: string
+): string {
+  // 如果沒有多語言資料，返回後備文字
+  if (!i18nData || typeof i18nData !== 'object') {
+    return fallback;
+  }
+
+  // 1. 嘗試使用請求的語言
+  if (i18nData[lang]) {
+    return i18nData[lang];
+  }
+
+  // 2. 後備到繁體中文（預設語言）
+  if (i18nData['zh-TW']) {
+    return i18nData['zh-TW'];
+  }
+
+  // 3. 返回原始後備文字
+  return fallback;
+}
+
 interface VehiclePricing {
   id: string;
   vehicle_type: string;
   vehicle_description: string;
+  vehicle_description_i18n?: Record<string, string>;
   capacity_info: string;
+  capacity_info_i18n?: Record<string, string>;
   duration_hours: number;
   base_price: number;
   overtime_rate: number;
@@ -61,11 +94,19 @@ interface VehiclePackage {
 
 /**
  * @route GET /api/pricing/packages
- * @desc 獲取所有可用的車型套餐（客戶端使用）
+ * @desc 獲取所有可用的車型套餐（客戶端使用，支援多語言）
+ * @query lang - 語言代碼（zh-TW, en, ja, ko, vi, th, ms, id）
  * @access Public
  */
-router.get('/packages', async (_req: Request, res: Response) => {
+router.get('/packages', async (req: Request, res: Response) => {
   try {
+    // 獲取語言參數（從 query 或 Accept-Language header）
+    const lang = (req.query.lang as string) ||
+                 req.headers['accept-language']?.split(',')[0]?.split('-')[0] ||
+                 'zh-TW';
+
+    console.log(`[Pricing API] 獲取車型方案列表 (語言: ${lang})`);
+
     // 獲取所有啟用的價格配置
     const { data: pricingData, error } = await supabase
       .from('vehicle_pricing')
@@ -86,20 +127,34 @@ router.get('/packages', async (_req: Request, res: Response) => {
       return res.json({
         success: true,
         data: [],
-        message: '目前沒有可用的車型方案'
+        message: '目前沒有可用的車型方案',
+        lang: lang,
       });
     }
 
-    // 轉換為客戶端格式
+    // 轉換為客戶端格式並應用多語言翻譯
     const packages: VehiclePackage[] = pricingData.map((pricing: VehiclePricing) => {
       const clientVehicleType = VEHICLE_TYPE_MAPPING[pricing.vehicle_type] || pricing.vehicle_type.toLowerCase();
       const displayName = VEHICLE_DISPLAY_NAMES[clientVehicleType] || pricing.vehicle_description;
 
+      // 提取翻譯後的內容
+      const translatedVehicleDescription = getTranslation(
+        pricing.vehicle_description_i18n,
+        lang,
+        pricing.vehicle_description
+      );
+
+      const translatedCapacityInfo = getTranslation(
+        pricing.capacity_info_i18n,
+        lang,
+        pricing.capacity_info
+      );
+
       return {
         id: pricing.id,
         name: `${displayName} ${pricing.duration_hours}小時方案`,
-        description: pricing.vehicle_description,
-        capacityInfo: pricing.capacity_info,
+        description: translatedVehicleDescription,
+        capacityInfo: translatedCapacityInfo,
         duration: pricing.duration_hours,
         originalPrice: Number(pricing.base_price),
         discountPrice: Number(pricing.base_price), // 目前沒有折扣邏輯
@@ -110,11 +165,12 @@ router.get('/packages', async (_req: Request, res: Response) => {
       };
     });
 
-    console.log(`[Pricing API] 成功返回 ${packages.length} 個價格方案`);
+    console.log(`[Pricing API] ✅ 成功返回 ${packages.length} 個價格方案 (語言: ${lang})`);
 
     return res.json({
       success: true,
       data: packages,
+      lang: lang, // 返回使用的語言
     });
 
   } catch (error: any) {
@@ -191,7 +247,7 @@ router.get('/admin/vehicle-pricing', requireAdmin, async (_req: Request, res: Re
 
 /**
  * @route POST /api/pricing/admin/vehicle-pricing
- * @desc 新增車型方案 - Admin 專用
+ * @desc 新增車型方案 - Admin 專用（支援多語言）
  * @access Admin
  */
 router.post('/admin/vehicle-pricing', requireAdmin, async (req: Request, res: Response) => {
@@ -199,7 +255,9 @@ router.post('/admin/vehicle-pricing', requireAdmin, async (req: Request, res: Re
     const {
       vehicle_type,
       vehicle_description,
+      vehicle_description_i18n,
       capacity_info,
+      capacity_info_i18n,
       duration_hours,
       base_price,
       overtime_rate,
@@ -216,13 +274,15 @@ router.post('/admin/vehicle-pricing', requireAdmin, async (req: Request, res: Re
       });
     }
 
-    // 插入新記錄
+    // 插入新記錄（包含多語言欄位）
     const { data, error } = await supabase
       .from('vehicle_pricing')
       .insert([{
         vehicle_type,
         vehicle_description: vehicle_description || '',
+        vehicle_description_i18n: vehicle_description_i18n || {},
         capacity_info: capacity_info || '',
+        capacity_info_i18n: capacity_info_i18n || {},
         duration_hours,
         base_price,
         overtime_rate,
@@ -261,7 +321,7 @@ router.post('/admin/vehicle-pricing', requireAdmin, async (req: Request, res: Re
 
 /**
  * @route PUT /api/pricing/admin/vehicle-pricing/:id
- * @desc 更新車型方案 - Admin 專用
+ * @desc 更新車型方案 - Admin 專用（支援多語言）
  * @access Admin
  */
 router.put('/admin/vehicle-pricing/:id', requireAdmin, async (req: Request, res: Response) => {
@@ -270,7 +330,9 @@ router.put('/admin/vehicle-pricing/:id', requireAdmin, async (req: Request, res:
     const {
       vehicle_type,
       vehicle_description,
+      vehicle_description_i18n,
       capacity_info,
+      capacity_info_i18n,
       duration_hours,
       base_price,
       overtime_rate,
@@ -285,7 +347,9 @@ router.put('/admin/vehicle-pricing/:id', requireAdmin, async (req: Request, res:
 
     if (vehicle_type !== undefined) updateData.vehicle_type = vehicle_type;
     if (vehicle_description !== undefined) updateData.vehicle_description = vehicle_description;
+    if (vehicle_description_i18n !== undefined) updateData.vehicle_description_i18n = vehicle_description_i18n;
     if (capacity_info !== undefined) updateData.capacity_info = capacity_info;
+    if (capacity_info_i18n !== undefined) updateData.capacity_info_i18n = capacity_info_i18n;
     if (duration_hours !== undefined) updateData.duration_hours = duration_hours;
     if (base_price !== undefined) updateData.base_price = base_price;
     if (overtime_rate !== undefined) updateData.overtime_rate = overtime_rate;
