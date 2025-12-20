@@ -18,13 +18,82 @@ const VEHICLE_TYPE_MAPPING: Record<string, string> = {
   'XL': 'extra_large',  // Extra Large 特大型
 };
 
-// 車型顯示名稱
-const VEHICLE_DISPLAY_NAMES: Record<string, string> = {
-  'extra_small': 'Extra Small 特小型',
-  'small': 'Small 小型',
-  'medium': 'Medium 中型',
-  'large': 'Large 大型',
-  'extra_large': 'Extra Large 特大型',
+// 車型顯示名稱（多語言）
+const VEHICLE_DISPLAY_NAMES_I18N: Record<string, Record<string, string>> = {
+  'extra_small': {
+    'zh-TW': 'Extra Small 特小型',
+    'en': 'Extra Small',
+    'ja': 'Extra Small 特小型',
+    'ko': 'Extra Small 특소형',
+    'vi': 'Extra Small Cực nhỏ',
+    'th': 'Extra Small ขนาดเล็กพิเศษ',
+    'ms': 'Extra Small Sangat Kecil',
+    'id': 'Extra Small Sangat Kecil',
+  },
+  'small': {
+    'zh-TW': 'Small 小型',
+    'en': 'Small',
+    'ja': 'Small 小型',
+    'ko': 'Small 소형',
+    'vi': 'Small Nhỏ',
+    'th': 'Small ขนาดเล็ก',
+    'ms': 'Small Kecil',
+    'id': 'Small Kecil',
+  },
+  'medium': {
+    'zh-TW': 'Medium 中型',
+    'en': 'Medium',
+    'ja': 'Medium 中型',
+    'ko': 'Medium 중형',
+    'vi': 'Medium Trung bình',
+    'th': 'Medium ขนาดกลาง',
+    'ms': 'Medium Sederhana',
+    'id': 'Medium Sedang',
+  },
+  'large': {
+    'zh-TW': 'Large 大型',
+    'en': 'Large',
+    'ja': 'Large 大型',
+    'ko': 'Large 대형',
+    'vi': 'Large Lớn',
+    'th': 'Large ขนาดใหญ่',
+    'ms': 'Large Besar',
+    'id': 'Large Besar',
+  },
+  'extra_large': {
+    'zh-TW': 'Extra Large 特大型',
+    'en': 'Extra Large',
+    'ja': 'Extra Large 特大型',
+    'ko': 'Extra Large 특대형',
+    'vi': 'Extra Large Cực lớn',
+    'th': 'Extra Large ขนาดใหญ่พิเศษ',
+    'ms': 'Extra Large Sangat Besar',
+    'id': 'Extra Large Sangat Besar',
+  },
+};
+
+// 「方案」翻譯
+const PACKAGE_LABEL_I18N: Record<string, string> = {
+  'zh-TW': '方案',
+  'en': 'Package',
+  'ja': 'プラン',
+  'ko': '패키지',
+  'vi': 'Gói',
+  'th': 'แพ็คเกจ',
+  'ms': 'Pakej',
+  'id': 'Paket',
+};
+
+// 「小時」翻譯
+const HOURS_LABEL_I18N: Record<string, string> = {
+  'zh-TW': '小時',
+  'en': 'hours',
+  'ja': '時間',
+  'ko': '시간',
+  'vi': 'giờ',
+  'th': 'ชั่วโมง',
+  'ms': 'jam',
+  'id': 'jam',
 };
 
 // 注意: features 欄位已不再使用,所有顯示內容來自 vehicle_pricing 表
@@ -135,7 +204,16 @@ router.get('/packages', async (req: Request, res: Response) => {
     // 轉換為客戶端格式並應用多語言翻譯
     const packages: VehiclePackage[] = pricingData.map((pricing: VehiclePricing) => {
       const clientVehicleType = VEHICLE_TYPE_MAPPING[pricing.vehicle_type] || pricing.vehicle_type.toLowerCase();
-      const displayName = VEHICLE_DISPLAY_NAMES[clientVehicleType] || pricing.vehicle_description;
+
+      // 獲取翻譯後的車型顯示名稱
+      const displayNameI18n = VEHICLE_DISPLAY_NAMES_I18N[clientVehicleType];
+      const displayName = displayNameI18n
+        ? getTranslation(displayNameI18n, lang, pricing.vehicle_description)
+        : pricing.vehicle_description;
+
+      // 獲取翻譯後的「小時」和「方案」標籤
+      const hoursLabel = HOURS_LABEL_I18N[lang] || HOURS_LABEL_I18N['zh-TW'];
+      const packageLabel = PACKAGE_LABEL_I18N[lang] || PACKAGE_LABEL_I18N['zh-TW'];
 
       // 提取翻譯後的內容
       const translatedVehicleDescription = getTranslation(
@@ -152,7 +230,7 @@ router.get('/packages', async (req: Request, res: Response) => {
 
       return {
         id: pricing.id,
-        name: `${displayName} ${pricing.duration_hours}小時方案`,
+        name: `${displayName} ${pricing.duration_hours}${hoursLabel}${packageLabel}`,
         description: translatedVehicleDescription,
         capacityInfo: translatedCapacityInfo,
         duration: pricing.duration_hours,
