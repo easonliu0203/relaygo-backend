@@ -13,6 +13,8 @@ interface TourPackage {
   id: string;
   name: string;
   description: string;
+  name_i18n?: Record<string, string>;
+  description_i18n?: Record<string, string>;
   is_active: boolean;
   display_order: number;
   created_at: string;
@@ -21,18 +23,17 @@ interface TourPackage {
 
 /**
  * @route GET /api/tour-packages
- * @desc 獲取所有旅遊方案
+ * @desc 獲取所有旅遊方案（包含停用的）
  * @access Public
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
     console.log('[Tour Packages API] 獲取旅遊方案列表');
 
-    // 獲取所有活躍的旅遊方案
+    // 獲取所有旅遊方案（包含停用的，讓 Web Admin 可以管理）
     const { data, error } = await supabase
       .from('tour_packages')
       .select('*')
-      .eq('is_active', true)
       .order('display_order', { ascending: true });
 
     if (error) {
@@ -111,9 +112,9 @@ router.get('/:id', async (req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, description, is_active, display_order } = req.body;
+    const { name, description, name_i18n, description_i18n, is_active, display_order } = req.body;
 
-    console.log('[Tour Packages API] 新增旅遊方案:', { name, description });
+    console.log('[Tour Packages API] 新增旅遊方案:', { name, description, name_i18n, description_i18n });
 
     // 驗證必填欄位
     if (!name) {
@@ -128,6 +129,8 @@ router.post('/', async (req: Request, res: Response) => {
       .insert([{
         name,
         description: description || '',
+        name_i18n: name_i18n || {},
+        description_i18n: description_i18n || {},
         is_active: is_active !== undefined ? is_active : true,
         display_order: display_order || 0
       }])
@@ -168,9 +171,9 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, description, is_active, display_order } = req.body;
+    const { name, description, name_i18n, description_i18n, is_active, display_order } = req.body;
 
-    console.log(`[Tour Packages API] 更新旅遊方案: ${id}`, { name, description });
+    console.log(`[Tour Packages API] 更新旅遊方案: ${id}`, { name, description, name_i18n, description_i18n });
 
     // 驗證必填欄位
     if (!name) {
@@ -180,14 +183,25 @@ router.put('/:id', async (req: Request, res: Response) => {
       });
     }
 
+    // 構建更新物件
+    const updateData: any = {
+      name,
+      description: description || '',
+      is_active: is_active !== undefined ? is_active : true,
+      display_order: display_order !== undefined ? display_order : 0
+    };
+
+    // 只在提供了多語言資料時才更新
+    if (name_i18n !== undefined) {
+      updateData.name_i18n = name_i18n;
+    }
+    if (description_i18n !== undefined) {
+      updateData.description_i18n = description_i18n;
+    }
+
     const { data, error } = await supabase
       .from('tour_packages')
-      .update({
-        name,
-        description: description || '',
-        is_active: is_active !== undefined ? is_active : true,
-        display_order: display_order !== undefined ? display_order : 0
-      })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
