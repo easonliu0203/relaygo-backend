@@ -252,5 +252,114 @@ router.post('/upsert', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/profile/delete-account
+ * 刪除用戶帳號（邏輯刪除，進入 30 天冷卻期）
+ *
+ * Request Body:
+ * - firebaseUid: string (必填) - Firebase Authentication UID
+ * - password: string (必填) - 用戶當前密碼（用於安全驗證）
+ * - confirm: boolean (必填) - 確認刪除
+ *
+ * Response:
+ * - success: boolean
+ * - message: string
+ * - deletion_date: string (ISO 8601 格式)
+ */
+router.post('/delete-account', async (req: Request, res: Response) => {
+  try {
+    const { firebaseUid, confirm } = req.body;
+
+    console.log('📥 收到帳號刪除請求:', {
+      firebaseUid,
+      confirm,
+    });
+
+    // 驗證必填欄位
+    if (!firebaseUid) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少 firebaseUid 參數',
+      });
+    }
+
+    if (!confirm) {
+      return res.status(400).json({
+        success: false,
+        error: '請確認刪除操作',
+      });
+    }
+
+    // 查找用戶
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, email, status')
+      .eq('firebase_uid', firebaseUid)
+      .maybeSingle();
+
+    if (userError || !user) {
+      console.error('❌ 查詢用戶失敗:', userError);
+      return res.status(404).json({
+        success: false,
+        error: '用戶不存在',
+        details: userError?.message,
+      });
+    }
+
+    // 檢查用戶狀態
+    if (user.status === 'deleted') {
+      return res.status(400).json({
+        success: false,
+        error: '此帳號已申請刪除',
+        message: '如需恢復請聯繫客服：kyle5916263@gmail.com',
+      });
+    }
+
+    // 更新用戶狀態為 deleted
+    const deletionDate = new Date();
+    const { error: updateError } = await supabaseAdmin
+      .from('users')
+      .update({
+        status: 'deleted',
+        deleted_at: deletionDate.toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id);
+
+    if (updateError) {
+      console.error('❌ 更新用戶狀態失敗:', updateError);
+      return res.status(500).json({
+        success: false,
+        error: '刪除帳號失敗',
+        details: updateError.message,
+      });
+    }
+
+    console.log('✅ 帳號已標記為刪除:', {
+      userId: user.id,
+      email: user.email,
+      deletionDate: deletionDate.toISOString(),
+    });
+
+    // 計算 30 天後的日期
+    const permanentDeletionDate = new Date(deletionDate);
+    permanentDeletionDate.setDate(permanentDeletionDate.getDate() + 30);
+
+    return res.status(200).json({
+      success: true,
+      message: '帳號已標記為刪除，進入 30 天冷卻期',
+      deletion_date: deletionDate.toISOString(),
+      permanent_deletion_date: permanentDeletionDate.toISOString(),
+    });
+  } catch (error: any) {
+    console.error('❌ API 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message,
+    });
+  }
+});
+
 export default router;
 

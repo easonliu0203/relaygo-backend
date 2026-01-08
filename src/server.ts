@@ -15,7 +15,7 @@ import { logger } from './utils/logger';
 
 // 路由導入
 import authRoutes from './routes/auth';
-import userRoutes from './routes/users';
+import profileRoutes from './routes/profile';
 import bookingRoutes from './routes/bookings';
 import bookingFlowRoutes from './routes/bookingFlow';
 import tripRoutes from './routes/trips';
@@ -95,7 +95,7 @@ app.get('/health', (req, res) => {
 
 // API 路由
 app.use('/api/auth', authRoutes);
-app.use('/api/users', authMiddleware, userRoutes);
+app.use('/api/profile', profileRoutes); // 個人資料路由（包含刪除帳號功能）
 app.use('/api/bookings', authMiddleware, bookingRoutes);
 app.use('/api/booking-flow', bookingFlowRoutes);
 app.use('/api/trips', authMiddleware, tripRoutes);
