@@ -433,7 +433,29 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
       hasPaymentUrl: !!paymentResponse.paymentUrl
     });
 
-    // 9. 創建支付記錄（狀態為 pending，等待回調確認）
+    // 9. 檢查是否已存在 pending 狀態的支付記錄
+    const { data: existingPayments } = await supabase
+      .from('payments')
+      .select('id, status, transaction_id')
+      .eq('booking_id', bookingId)
+      .eq('type', 'deposit')
+      .in('status', ['pending', 'processing']);
+
+    // 如果存在舊的 pending/processing 支付記錄，將其標記為 cancelled
+    if (existingPayments && existingPayments.length > 0) {
+      console.log('[API] 發現舊的支付記錄，將其標記為 cancelled:', existingPayments.map(p => p.id));
+
+      const oldPaymentIds = existingPayments.map(p => p.id);
+      await supabase
+        .from('payments')
+        .update({
+          status: 'cancelled',
+          updated_at: new Date().toISOString()
+        })
+        .in('id', oldPaymentIds);
+    }
+
+    // 10. 創建新的支付記錄（狀態為 pending，等待回調確認）
     const paymentData = {
       booking_id: bookingId,
       customer_id: booking.customer_id,
@@ -466,7 +488,7 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
 
     console.log('[API] ✅ 支付記錄創建成功:', payment.id);
 
-    // 7. 返回支付 URL
+    // 11. 返回支付 URL
     // ⚠️ 所有支付都必須通過 GoMyPay，不再支援自動完成的模擬支付
     if (!paymentResponse.paymentUrl) {
       console.error('[API] 支付提供者未返回支付 URL');
