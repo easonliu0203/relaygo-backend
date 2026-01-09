@@ -153,10 +153,10 @@ router.post('/upsert', async (req: Request, res: Response) => {
       });
     }
 
-    // 根據 Firebase UID 查找 Supabase user_id
+    // 根據 Firebase UID 查找 Supabase user_id 和 email
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id')
+      .select('id, email')
       .eq('firebase_uid', firebaseUid)
       .maybeSingle();
 
@@ -169,6 +169,7 @@ router.post('/upsert', async (req: Request, res: Response) => {
     }
 
     const userId = user.id;
+    const userEmail = user.email;
 
     console.log('✅ 找到用戶 ID:', userId);
 
@@ -224,12 +225,13 @@ router.post('/upsert', async (req: Request, res: Response) => {
       last_name: profile.last_name,
     });
 
-    // 返回資料（轉換為 camelCase）
+    // 返回資料（轉換為 camelCase，包含 email）
     return res.json({
       success: true,
       data: {
         id: profile.id,
         userId: profile.user_id,
+        email: userEmail, // ✅ 添加 email 欄位（從 users 表獲取）
         firstName: profile.first_name,
         lastName: profile.last_name,
         phone: profile.phone,
