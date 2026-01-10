@@ -214,6 +214,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         pickup_latitude: pickupLatitude,
         pickup_longitude: pickupLongitude,
         destination: dropoffAddress || '',
+        passenger_count: passengerCount || 1, // ✅ 新增：乘客數量（預設為 1）
+        luggage_count: luggageCount || 0, // ✅ 新增：行李數量（預設為 0）
         special_requirements: notes || '',
         requires_foreign_language: false, // 可以從請求中獲取
         base_price: basePrice,
