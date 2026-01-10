@@ -29,7 +29,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // dropoffLongitude,
       bookingTime,
       passengerCount,
-      // luggageCount,
+      luggageCount, // ✅ 修復：取消註解，從請求中獲取行李數量
       notes,
       // packageId,
       packageName,
