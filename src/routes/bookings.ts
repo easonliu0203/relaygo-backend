@@ -45,6 +45,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       finalPrice, // ✅ 新增：折扣後最終價格
       // 統一編號（選填）
       taxId, // 統一編號（8 位數字）
+      // ✅ 新增：取消政策同意狀態
+      policyAgreed, // 客戶是否已同意取消政策
     } = req.body;
 
     console.log('[API] 創建訂單:', {
@@ -77,6 +79,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       res.status(400).json({
         success: false,
         error: '缺少預約時間'
+      });
+      return;
+    }
+
+    // ✅ 新增：驗證取消政策同意狀態
+    if (policyAgreed !== true) {
+      console.error('[API] 客戶未同意取消政策');
+      res.status(400).json({
+        success: false,
+        error: '必須同意取消政策才能繼續支付'
       });
       return;
     }
@@ -234,6 +246,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         tax_id: taxId || null, // ✅ 新增：統一編號（選填）
         tour_package_id: tourPackageId || null, // ✅ 新增：旅遊方案 ID
         tour_package_name: tourPackageName || null, // ✅ 新增：旅遊方案名稱
+        policy_agreed: policyAgreed === true, // ✅ 新增：取消政策同意狀態
+        policy_agreed_at: policyAgreed === true ? new Date().toISOString() : null, // ✅ 新增：同意時間戳記
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
