@@ -13,6 +13,35 @@ const supabase = createClient(
 );
 
 /**
+ * 獲取客戶端真實 IP 地址
+ * 考慮代理伺服器情況（X-Forwarded-For, X-Real-IP 等）
+ */
+function getClientIp(req: Request): string {
+  // 1. 檢查 X-Forwarded-For（最常見的代理 header）
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (forwardedFor) {
+    // X-Forwarded-For 可能包含多個 IP，取第一個（客戶端真實 IP）
+    const ips = (typeof forwardedFor === 'string' ? forwardedFor : forwardedFor[0]).split(',');
+    return ips[0].trim();
+  }
+
+  // 2. 檢查 X-Real-IP（Nginx 常用）
+  const realIp = req.headers['x-real-ip'];
+  if (realIp) {
+    return typeof realIp === 'string' ? realIp : realIp[0];
+  }
+
+  // 3. 檢查 CF-Connecting-IP（Cloudflare）
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (cfIp) {
+    return typeof cfIp === 'string' ? cfIp : cfIp[0];
+  }
+
+  // 4. 使用 req.ip 或 req.connection.remoteAddress
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+/**
  * @route POST /api/bookings
  * @desc 創建新訂單
  * @access Customer
@@ -205,12 +234,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       hasPromoCode: !!promoCode
     });
 
-    // 6. 解析預約時間
+    // 6. 獲取客戶端 IP 地址（用於防範 Chargeback 爭議）
+    const clientIp = getClientIp(req);
+    console.log('[API] 客戶端 IP:', clientIp);
+
+    // 7. 解析預約時間
     const bookingDateTime = new Date(bookingTime);
     const startDate = bookingDateTime.toISOString().split('T')[0]; // YYYY-MM-DD
     const startTime = bookingDateTime.toTimeString().split(' ')[0]; // HH:MM:SS
 
-    // 6. 創建訂單
+    // 8. 創建訂單
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert({
@@ -248,6 +281,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         tour_package_name: tourPackageName || null, // ✅ 新增：旅遊方案名稱
         policy_agreed: policyAgreed === true, // ✅ 新增：取消政策同意狀態
         policy_agreed_at: policyAgreed === true ? new Date().toISOString() : null, // ✅ 新增：同意時間戳記
+        client_ip: clientIp, // ✅ 新增：客戶端 IP 地址（用於防範 Chargeback 爭議）
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })

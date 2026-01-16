@@ -34,12 +34,24 @@ export interface ReceiptData {
   tipAmount?: number;
   totalAmount: number;
   paidAmount: number;
-  
+
+  // ✅ 新增：優惠碼和折扣資訊
+  promoCode?: string;
+  originalPrice?: number;
+  discountAmount?: number;
+  finalPrice?: number;
+
+  // ✅ 新增：統一編號
+  taxId?: string;
+
+  // ✅ 新增：取消政策同意資訊
+  policyAgreedAt?: string;
+
   // 支付資訊
   transactionId: string;
   paymentMethod: string;
   paymentDate: string;
-  
+
   // 語言
   language: string;
 }
@@ -73,12 +85,19 @@ const translations: Record<string, any> = {
     vehiclePlate: '車牌號碼',
     feeBreakdown: '費用明細',
     basePrice: '基本費用',
+    promoCodeDiscount: '優惠碼折扣',
+    promoCode: '優惠碼',
+    discountedAmount: '折扣後金額',
     depositAmount: '訂金金額',
+    depositPercentage: '訂金比例',
     balanceAmount: '尾款金額',
     overtimeFee: '超時費用',
     tipAmount: '小費',
     totalAmount: '總金額',
     paidAmount: '已支付金額',
+    taxId: '統一編號',
+    policyAgreement: '您已同意《RelayGo 取消政策》',
+    authorizationTime: '授權時間',
     paymentInfo: '支付資訊',
     transactionId: '交易編號',
     paymentMethod: '支付方式',
@@ -112,12 +131,19 @@ const translations: Record<string, any> = {
     vehiclePlate: '车牌号码',
     feeBreakdown: '费用明细',
     basePrice: '基本费用',
+    promoCodeDiscount: '优惠码折扣',
+    promoCode: '优惠码',
+    discountedAmount: '折扣后金额',
     depositAmount: '订金金额',
+    depositPercentage: '订金比例',
     balanceAmount: '尾款金额',
     overtimeFee: '超时费用',
     tipAmount: '小费',
     totalAmount: '总金额',
     paidAmount: '已支付金额',
+    taxId: '统一编号',
+    policyAgreement: '您已同意《RelayGo 取消政策》',
+    authorizationTime: '授权时间',
     paymentInfo: '支付信息',
     transactionId: '交易编号',
     paymentMethod: '支付方式',
@@ -151,12 +177,19 @@ const translations: Record<string, any> = {
     vehiclePlate: 'Vehicle Plate',
     feeBreakdown: 'Fee Breakdown',
     basePrice: 'Base Price',
+    promoCodeDiscount: 'Promo Code Discount',
+    promoCode: 'Promo Code',
+    discountedAmount: 'Discounted Amount',
     depositAmount: 'Deposit Amount',
+    depositPercentage: 'Deposit Percentage',
     balanceAmount: 'Balance Amount',
     overtimeFee: 'Overtime Fee',
     tipAmount: 'Tip',
     totalAmount: 'Total Amount',
     paidAmount: 'Paid Amount',
+    taxId: 'Tax ID',
+    policyAgreement: 'You have agreed to the RelayGo Cancellation Policy',
+    authorizationTime: 'Authorization Time',
     paymentInfo: 'Payment Information',
     transactionId: 'Transaction ID',
     paymentMethod: 'Payment Method',
@@ -374,11 +407,21 @@ export function generateReceiptHtml(data: ReceiptData): string {
       <div class="section-title">${t.feeBreakdown}</div>
       <div class="info-row">
         <span class="info-label">${t.basePrice}</span>
-        <span class="info-value">${formatCurrency(data.basePrice, lang)}</span>
+        <span class="info-value">${formatCurrency(data.originalPrice || data.basePrice, lang)}</span>
       </div>
+      ${data.promoCode && data.discountAmount ? `
+      <div class="info-row" style="color: #4CAF50;">
+        <span class="info-label">${t.promoCodeDiscount}</span>
+        <span class="info-value">-${formatCurrency(data.discountAmount, lang)} (${t.promoCode}: ${data.promoCode})</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">${t.discountedAmount}</span>
+        <span class="info-value">${formatCurrency(data.finalPrice || data.basePrice, lang)}</span>
+      </div>
+      ` : ''}
       ${data.depositAmount ? `
       <div class="info-row">
-        <span class="info-label">${t.depositAmount}</span>
+        <span class="info-label">${t.depositAmount} (${data.paymentType === 'deposit' ? '25%' : ''})</span>
         <span class="info-value">${formatCurrency(data.depositAmount, lang)}</span>
       </div>
       ` : ''}
@@ -398,6 +441,12 @@ export function generateReceiptHtml(data: ReceiptData): string {
       <div class="info-row">
         <span class="info-label">${t.tipAmount}</span>
         <span class="info-value">${formatCurrency(data.tipAmount, lang)}</span>
+      </div>
+      ` : ''}
+      ${data.taxId ? `
+      <div class="info-row">
+        <span class="info-label">${t.taxId}</span>
+        <span class="info-value">${data.taxId}</span>
       </div>
       ` : ''}
       <div class="info-row total-row">
@@ -421,6 +470,15 @@ export function generateReceiptHtml(data: ReceiptData): string {
         <span class="info-label">${t.paymentDate}</span>
         <span class="info-value">${data.paymentDate}</span>
       </div>
+      ${data.policyAgreedAt ? `
+      <div class="info-row" style="background-color: #f0f8ff; padding: 12px; margin-top: 10px; border-radius: 4px; border-left: 4px solid #4CAF50;">
+        <span class="info-label" style="color: #4CAF50; font-weight: bold;">✓ ${t.policyAgreement}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">${t.authorizationTime}</span>
+        <span class="info-value">${data.policyAgreedAt}</span>
+      </div>
+      ` : ''}
     </div>
 
     <!-- 頁尾 -->

@@ -102,6 +102,20 @@ export class ReceiptEmailService {
         totalAmount: booking.total_amount || booking.total_price || 0,
         paidAmount: params.amount,
 
+        // ✅ 新增：優惠碼和折扣資訊
+        promoCode: booking.promo_code || undefined,
+        originalPrice: booking.original_price || undefined,
+        discountAmount: booking.discount_amount || undefined,
+        finalPrice: booking.final_price || undefined,
+
+        // ✅ 新增：統一編號
+        taxId: booking.tax_id || undefined,
+
+        // ✅ 新增：取消政策同意資訊
+        policyAgreedAt: booking.policy_agreed_at
+          ? moment(booking.policy_agreed_at).tz('Asia/Taipei').format('YYYY/MM/DD HH:mm')
+          : undefined,
+
         // 支付資訊
         transactionId: params.transactionId,
         paymentMethod: 'GoMyPay',
