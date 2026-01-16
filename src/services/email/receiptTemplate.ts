@@ -47,6 +47,9 @@ export interface ReceiptData {
   // ✅ 新增：取消政策同意資訊
   policyAgreedAt?: string;
 
+  // ✅ 新增：數位簽名（支付尾款時）
+  signatureBase64?: string;
+
   // 支付資訊
   transactionId: string;
   paymentMethod: string;
@@ -98,6 +101,8 @@ const translations: Record<string, any> = {
     taxId: '統一編號',
     policyAgreement: '您已同意《RelayGo 取消政策》',
     authorizationTime: '授權時間',
+    digitalSignature: '客戶數位簽名',
+    signatureNote: '此簽名用於確認支付尾款',
     paymentInfo: '支付資訊',
     transactionId: '交易編號',
     paymentMethod: '支付方式',
@@ -144,6 +149,8 @@ const translations: Record<string, any> = {
     taxId: '统一编号',
     policyAgreement: '您已同意《RelayGo 取消政策》',
     authorizationTime: '授权时间',
+    digitalSignature: '客户数位签名',
+    signatureNote: '此签名用于确认支付尾款',
     paymentInfo: '支付信息',
     transactionId: '交易编号',
     paymentMethod: '支付方式',
@@ -190,6 +197,8 @@ const translations: Record<string, any> = {
     taxId: 'Tax ID',
     policyAgreement: 'You have agreed to the RelayGo Cancellation Policy',
     authorizationTime: 'Authorization Time',
+    digitalSignature: 'Customer Digital Signature',
+    signatureNote: 'This signature confirms the balance payment',
     paymentInfo: 'Payment Information',
     transactionId: 'Transaction ID',
     paymentMethod: 'Payment Method',
@@ -454,6 +463,17 @@ export function generateReceiptHtml(data: ReceiptData): string {
         <span class="info-value">${formatCurrency(data.paidAmount, lang)}</span>
       </div>
     </div>
+
+    <!-- 數位簽名（僅支付尾款時顯示） -->
+    ${data.paymentType === 'balance' && data.signatureBase64 ? `
+    <div class="section">
+      <div class="section-title">${t.digitalSignature}</div>
+      <div style="text-align: center; padding: 20px 0;">
+        <img src="${data.signatureBase64}" alt="Customer Signature" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;" />
+        <p style="color: #666; font-size: 12px; margin-top: 10px;">${t.signatureNote}</p>
+      </div>
+    </div>
+    ` : ''}
 
     <!-- 支付資訊 -->
     <div class="section">

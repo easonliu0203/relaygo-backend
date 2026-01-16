@@ -133,6 +133,22 @@ export class ReceiptEmailService {
         language
       };
 
+      // 3.5. 如果是支付尾款，查詢數位簽名
+      if (params.paymentType === 'balance') {
+        const { data: signature } = await supabase
+          .from('payment_signatures')
+          .select('signature_base64')
+          .eq('booking_id', params.bookingId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (signature?.signature_base64) {
+          receiptData.signatureBase64 = signature.signature_base64;
+          console.log('[ReceiptEmail] ✅ 已加入數位簽名到收據');
+        }
+      }
+
       // 4. 生成收據 HTML
       const receiptHtml = generateReceiptHtml(receiptData);
 
