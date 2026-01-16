@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 // import crypto from 'crypto'; // 暫時不需要，待實現 str_check 驗證時再啟用
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import { receiptEmailService } from '../services/email/receiptEmailService';
 
 dotenv.config();
 
@@ -740,6 +741,30 @@ async function handlePaymentSuccess(params: {
 
     console.log('[GOMYPAY Callback] 驗證小費儲存結果:', verifyBooking?.tip_amount);
   }
+
+  // 3. 發送收據郵件（異步，不阻塞主流程）
+  console.log('[GOMYPAY Callback] 準備發送收據郵件');
+
+  // 使用 setTimeout 確保郵件發送不會阻塞支付流程
+  setTimeout(async () => {
+    try {
+      const emailResult = await receiptEmailService.sendReceiptEmail({
+        bookingId,
+        paymentType: paymentType as 'deposit' | 'balance',
+        transactionId,
+        amount
+      });
+
+      if (emailResult.success) {
+        console.log('[GOMYPAY Callback] ✅ 收據郵件發送成功');
+      } else {
+        console.error('[GOMYPAY Callback] ⚠️  收據郵件發送失敗:', emailResult.error);
+      }
+    } catch (emailError) {
+      // 郵件發送失敗不應影響支付流程
+      console.error('[GOMYPAY Callback] ⚠️  收據郵件發送異常:', emailError);
+    }
+  }, 1000); // 延遲 1 秒發送，確保資料庫更新完成
 }
 
 /**
