@@ -29,7 +29,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // dropoffLongitude,
       bookingTime,
       passengerCount,
-      // luggageCount,
+      luggageCount, // ✅ 修復：取消註解，從請求中獲取行李數量
       notes,
       // packageId,
       packageName,
@@ -45,6 +45,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       finalPrice, // ✅ 新增：折扣後最終價格
       // 統一編號（選填）
       taxId, // 統一編號（8 位數字）
+      // ✅ 新增：取消政策同意狀態
+      policyAgreed, // 客戶是否已同意取消政策
     } = req.body;
 
     console.log('[API] 創建訂單:', {
@@ -77,6 +79,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       res.status(400).json({
         success: false,
         error: '缺少預約時間'
+      });
+      return;
+    }
+
+    // ✅ 新增：驗證取消政策同意狀態
+    if (policyAgreed !== true) {
+      console.error('[API] 客戶未同意取消政策');
+      res.status(400).json({
+        success: false,
+        error: '必須同意取消政策才能繼續支付'
       });
       return;
     }
@@ -214,6 +226,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         pickup_latitude: pickupLatitude,
         pickup_longitude: pickupLongitude,
         destination: dropoffAddress || '',
+        passenger_count: passengerCount || 1, // ✅ 新增：乘客數量（預設為 1）
+        luggage_count: luggageCount || 0, // ✅ 新增：行李數量（預設為 0）
         special_requirements: notes || '',
         requires_foreign_language: false, // 可以從請求中獲取
         base_price: basePrice,
@@ -232,6 +246,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         tax_id: taxId || null, // ✅ 新增：統一編號（選填）
         tour_package_id: tourPackageId || null, // ✅ 新增：旅遊方案 ID
         tour_package_name: tourPackageName || null, // ✅ 新增：旅遊方案名稱
+        policy_agreed: policyAgreed === true, // ✅ 新增：取消政策同意狀態
+        policy_agreed_at: policyAgreed === true ? new Date().toISOString() : null, // ✅ 新增：同意時間戳記
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -433,7 +449,29 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
       hasPaymentUrl: !!paymentResponse.paymentUrl
     });
 
-    // 9. 創建支付記錄（狀態為 pending，等待回調確認）
+    // 9. 檢查是否已存在 pending 狀態的支付記錄
+    const { data: existingPayments } = await supabase
+      .from('payments')
+      .select('id, status, transaction_id')
+      .eq('booking_id', bookingId)
+      .eq('type', 'deposit')
+      .in('status', ['pending', 'processing']);
+
+    // 如果存在舊的 pending/processing 支付記錄，將其標記為 cancelled
+    if (existingPayments && existingPayments.length > 0) {
+      console.log('[API] 發現舊的支付記錄，將其標記為 cancelled:', existingPayments.map(p => p.id));
+
+      const oldPaymentIds = existingPayments.map(p => p.id);
+      await supabase
+        .from('payments')
+        .update({
+          status: 'cancelled',
+          updated_at: new Date().toISOString()
+        })
+        .in('id', oldPaymentIds);
+    }
+
+    // 10. 創建新的支付記錄（狀態為 pending，等待回調確認）
     const paymentData = {
       booking_id: bookingId,
       customer_id: booking.customer_id,
@@ -466,7 +504,7 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
 
     console.log('[API] ✅ 支付記錄創建成功:', payment.id);
 
-    // 7. 返回支付 URL
+    // 11. 返回支付 URL
     // ⚠️ 所有支付都必須通過 GoMyPay，不再支援自動完成的模擬支付
     if (!paymentResponse.paymentUrl) {
       console.error('[API] 支付提供者未返回支付 URL');
