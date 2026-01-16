@@ -65,7 +65,10 @@ export class ReceiptEmailService {
       const driverProfile = booking.driver?.user_profiles?.[0] || {};
       const driverInfo = booking.driver?.drivers?.[0] || {};
 
-      const customerName = `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim() || '客戶';
+      // ✅ 修復：確保客戶姓名正確顯示，如果沒有姓名則使用郵箱前綴
+      const customerName = `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim()
+        || customerEmail.split('@')[0]
+        || '客戶';
       const driverName = booking.driver ? `${driverProfile.first_name || ''} ${driverProfile.last_name || ''}`.trim() : undefined;
 
       const language = booking.customer?.preferred_language || 'zh-TW';
@@ -94,6 +97,8 @@ export class ReceiptEmailService {
 
         // 費用明細
         paymentType: params.paymentType,
+        // ✅ basePrice 保持為基本費用（不含折扣）
+        // 模板會根據是否有 originalPrice 來決定顯示邏輯
         basePrice: booking.base_price || 0,
         depositAmount: booking.deposit_amount || 0,
         balanceAmount: booking.balance_amount || 0,
@@ -102,10 +107,13 @@ export class ReceiptEmailService {
         totalAmount: booking.total_amount || booking.total_price || 0,
         paidAmount: params.amount,
 
-        // ✅ 新增：優惠碼和折扣資訊
+        // ✅ 優惠碼和折扣資訊（付訂金當下的快照）
         promoCode: booking.promo_code || undefined,
+        // 如果有優惠碼，originalPrice 是折扣前的原價
         originalPrice: booking.original_price || undefined,
+        // 折扣金額
         discountAmount: booking.discount_amount || undefined,
+        // 折扣後的最終價格
         finalPrice: booking.final_price || undefined,
 
         // ✅ 新增：統一編號
