@@ -1,5 +1,5 @@
-# 使用 Node.js 18 Alpine 作為基礎映像（更小更快）
-FROM node:18-alpine
+# 使用 Node.js 20 Alpine 作為基礎映像（更小更快）
+FROM node:20-alpine
 
 # 設定工作目錄
 WORKDIR /app
@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # 安裝依賴（包含 devDependencies，因為需要 TypeScript）
-RUN npm ci --include=dev
+RUN npm install --include=dev
 
 # 複製所有原始碼
 COPY . .
