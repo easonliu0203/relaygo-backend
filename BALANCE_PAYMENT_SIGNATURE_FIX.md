@@ -30,10 +30,11 @@ upstreamAddress: http://[fd12:c8e0:646e:1:9000:1e:d1a:2ad1]:8080
 
 ### 問題定位
 1. **後端代碼已存在**：`src/routes/signatures.ts` 文件已正確實現
-2. **路由已註冊**：`server.ts` 中已正確導入和註冊路由
-3. **代碼已推送**：GitHub 上已有最新代碼（commit: 2beb928）
+2. **代碼已推送**：GitHub 上已有最新代碼（commit: 2beb928）
 
-### 真正原因
+### 真正原因（兩個問題）
+
+#### 問題 1：`tsconfig.min.json` 缺少 signatures.ts
 **`tsconfig.min.json` 的 `include` 列表中缺少 `src/routes/signatures.ts`**
 
 Railway 使用 Dockerfile 構建，執行 `npm run build:min`，該命令使用 `tsconfig.min.json` 進行編譯。由於 `signatures.ts` 不在 include 列表中，導致：
@@ -41,11 +42,22 @@ Railway 使用 Dockerfile 構建，執行 `npm run build:min`，該命令使用 
 - `dist/routes/signatures.js` 未生成
 - 運行時找不到路由，返回 404
 
+#### 問題 2：minimal-server.ts 未註冊路由（關鍵問題）
+**`src/minimal-server.ts` 中沒有導入和註冊 `signatures` 路由**
+
+即使 TypeScript 編譯成功生成了 `dist/routes/signatures.js`，但由於 `minimal-server.ts` 中沒有：
+```typescript
+import signaturesRoutes from './routes/signatures';
+app.use('/api/signatures', signaturesRoutes);
+```
+
+導致 Express 應用程式根本不知道這個路由的存在，所有請求都會返回 404。
+
 ---
 
 ## ✅ 修復方案
 
-### 修改文件：`backend/tsconfig.min.json`
+### 修復 1：修改 `backend/tsconfig.min.json`
 
 **修改前**：
 ```json
@@ -97,14 +109,38 @@ Railway 使用 Dockerfile 構建，執行 `npm run build:min`，該命令使用 
 ],
 ```
 
+**Commit Hash**: `fd27f4e`
+
+---
+
+### 修復 2：修改 `backend/src/minimal-server.ts`（關鍵修復）
+
+**新增導入**：
+```typescript
+import signaturesRoutes from './routes/signatures'; // ✅ 新增：添加 signatures 路由（2026-01-17）
+```
+
+**新增路由註冊**：
+```typescript
+app.use('/api/signatures', signaturesRoutes); // ✅ 新增：註冊 signatures 路由（2026-01-17）
+```
+
+**Commit Hash**: `6611e4a`
+
+---
+
 ### 提交記錄
 ```bash
+# 第一次修復（不完整）
 git add tsconfig.min.json
 git commit -m "fix: 添加 signatures.ts 和 email 服務到 tsconfig.min.json 以修復 Railway 部署 404 錯誤"
 git push origin main
-```
 
-**Commit Hash**: `fd27f4e`
+# 第二次修復（完整修復）
+git add src/minimal-server.ts
+git commit -m "fix: 在 minimal-server.ts 中註冊 signatures 路由 - 修復 404 錯誤的真正原因"
+git push origin main
+```
 
 ---
 
