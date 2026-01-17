@@ -73,19 +73,61 @@ router.post('/balance-payment', async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    // 3. 獲取客戶端資訊
+    // 3. 上傳簽名圖片到 Supabase Storage
+    let signatureUrl = '';
+    try {
+      // 移除 Base64 前綴（如果存在）
+      const base64Data = signatureBase64.replace(/^data:image\/\w+;base64,/, '');
+      const imageBuffer = Buffer.from(base64Data, 'base64');
+
+      // 生成唯一文件名：booking_number-timestamp.png
+      const timestamp = Date.now();
+      const fileName = `${booking.booking_number}-${timestamp}.png`;
+
+      console.log('[API] 上傳簽名圖片到 Storage:', fileName);
+
+      // 上傳到 Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('payment-signatures')
+        .upload(fileName, imageBuffer, {
+          contentType: 'image/png',
+          cacheControl: '31536000', // 1 年緩存
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('[API] 上傳簽名圖片失敗:', uploadError);
+        throw new Error('上傳簽名圖片失敗: ' + uploadError.message);
+      }
+
+      // 獲取公開 URL
+      const { data: publicUrlData } = supabase.storage
+        .from('payment-signatures')
+        .getPublicUrl(fileName);
+
+      signatureUrl = publicUrlData.publicUrl;
+      console.log('[API] ✅ 簽名圖片上傳成功:', signatureUrl);
+
+    } catch (uploadError: any) {
+      console.error('[API] 上傳簽名圖片異常:', uploadError);
+      // 如果上傳失敗，仍然繼續儲存 Base64（向後兼容）
+      console.log('[API] ⚠️  將使用 Base64 格式儲存簽名');
+    }
+
+    // 4. 獲取客戶端資訊
     const clientIp = getClientIp(req);
     const userAgent = req.headers['user-agent'] || 'unknown';
 
     console.log('[API] 客戶端資訊:', { clientIp, userAgent });
 
-    // 4. 儲存簽名記錄
+    // 5. 儲存簽名記錄
     const { data: signature, error: signatureError } = await supabase
       .from('payment_signatures')
       .insert({
         booking_id: bookingId,
         payment_id: paymentId || null,
-        signature_base64: signatureBase64,
+        signature_base64: signatureBase64, // 保留 Base64 以向後兼容
+        signature_url: signatureUrl || null, // 新增：Storage URL
         signed_at: new Date().toISOString(),
         client_ip: clientIp,
         user_agent: userAgent,
@@ -111,7 +153,8 @@ router.post('/balance-payment', async (req: Request, res: Response): Promise<voi
       data: {
         signatureId: signature.id,
         bookingId: booking.id,
-        bookingNumber: booking.booking_number
+        bookingNumber: booking.booking_number,
+        signatureUrl: signatureUrl || undefined
       }
     });
 

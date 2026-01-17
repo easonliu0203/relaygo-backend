@@ -137,15 +137,21 @@ export class ReceiptEmailService {
       if (params.paymentType === 'balance') {
         const { data: signature } = await supabase
           .from('payment_signatures')
-          .select('signature_base64')
+          .select('signature_url, signature_base64')
           .eq('booking_id', params.bookingId)
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
 
-        if (signature?.signature_base64) {
-          receiptData.signatureBase64 = signature.signature_base64;
-          console.log('[ReceiptEmail] ✅ 已加入數位簽名到收據');
+        if (signature) {
+          // 優先使用 signature_url（Storage URL），如果不存在則使用 signature_base64
+          if (signature.signature_url) {
+            receiptData.signatureUrl = signature.signature_url;
+            console.log('[ReceiptEmail] ✅ 已加入數位簽名 URL 到收據');
+          } else if (signature.signature_base64) {
+            receiptData.signatureBase64 = signature.signature_base64;
+            console.log('[ReceiptEmail] ✅ 已加入數位簽名 Base64 到收據（向後兼容）');
+          }
         }
       }
 

@@ -48,7 +48,8 @@ export interface ReceiptData {
   policyAgreedAt?: string;
 
   // ✅ 新增：數位簽名（支付尾款時）
-  signatureBase64?: string;
+  signatureUrl?: string;        // 優先使用：Supabase Storage URL
+  signatureBase64?: string;     // 向後兼容：Base64 編碼
 
   // 支付資訊
   transactionId: string;
@@ -465,11 +466,17 @@ export function generateReceiptHtml(data: ReceiptData): string {
     </div>
 
     <!-- 數位簽名（僅支付尾款時顯示） -->
-    ${data.paymentType === 'balance' && data.signatureBase64 ? `
+    ${data.paymentType === 'balance' && (data.signatureUrl || data.signatureBase64) ? `
     <div class="section">
       <div class="section-title">${t.digitalSignature}</div>
       <div style="text-align: center; padding: 20px 0;">
-        <img src="${data.signatureBase64}" alt="Customer Signature" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;" />
+        ${data.signatureUrl ? `
+          <!-- 使用 Supabase Storage URL（推薦） -->
+          <img src="${data.signatureUrl}" alt="Customer Signature" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;" />
+        ` : data.signatureBase64 ? `
+          <!-- 向後兼容：使用 Base64（可能在某些郵件客戶端無法顯示） -->
+          <img src="${data.signatureBase64}" alt="Customer Signature" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;" />
+        ` : ''}
         <p style="color: #666; font-size: 12px; margin-top: 10px;">${t.signatureNote}</p>
       </div>
     </div>
