@@ -29,13 +29,13 @@ router.post('/apply', async (req: Request, res: Response) => {
       });
     }
 
-    // 驗證推薦碼格式（3-10個英文字母或數字）
-    const promoCodeRegex = /^[a-zA-Z0-9]{3,10}$/;
+    // 驗證推薦碼格式：6-20 個英數字混合（至少包含一個字母和一個數字）
+    const promoCodeRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,20}$/;
     if (!promoCodeRegex.test(promo_code)) {
       return res.status(400).json({
         success: false,
         error: '推薦碼格式錯誤',
-        details: '推薦碼必須為 3-10 個英文字母或數字'
+        details: '推薦碼必須為 6-20 個英數字混合（至少包含一個字母和一個數字）'
       });
     }
 
@@ -261,24 +261,32 @@ router.get('/check-promo-code/:code', async (req: Request, res: Response) => {
 
     console.log(`[Affiliates API] 檢查推薦碼: ${code}`);
 
-    // 驗證推薦碼格式
-    const promoCodeRegex = /^[a-zA-Z0-9]{3,10}$/;
+    // 驗證推薦碼格式：6-20 個英數字混合（至少包含一個字母和一個數字）
+    const promoCodeRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,20}$/;
     if (!promoCodeRegex.test(code)) {
+      console.log(`[Affiliates API] 推薦碼格式錯誤: ${code}`);
       return res.json({
         success: true,
         available: false,
-        message: '推薦碼格式錯誤（必須為 3-10 個英文字母或數字）'
+        message: '推薦碼格式錯誤（必須為 6-20 個英數字混合）'
       });
     }
 
     // 檢查推薦碼是否已存在（不分大小寫）
-    const { data: existingPromoCode } = await supabase
+    const { data: existingPromoCode, error } = await supabase
       .from('influencers')
       .select('id')
       .ilike('promo_code', code)
       .single();
 
+    if (error && error.code !== 'PGRST116') {
+      // PGRST116 是 "not found" 錯誤，這是正常的（表示推薦碼可用）
+      console.error(`[Affiliates API] 資料庫查詢錯誤:`, error);
+      throw error;
+    }
+
     if (existingPromoCode) {
+      console.log(`[Affiliates API] 推薦碼已被使用: ${code}`);
       return res.json({
         success: true,
         available: false,
@@ -286,6 +294,7 @@ router.get('/check-promo-code/:code', async (req: Request, res: Response) => {
       });
     }
 
+    console.log(`[Affiliates API] 推薦碼可用: ${code}`);
     return res.json({
       success: true,
       available: true,
