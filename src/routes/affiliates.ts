@@ -61,12 +61,13 @@ router.post('/apply', async (req: Request, res: Response) => {
       .single();
 
     if (existingAffiliate) {
-      const statusText = {
+      const statusMap: Record<string, string> = {
         pending: '待審核',
         active: '已啟用',
         suspended: '已暫停',
         rejected: '已拒絕'
-      }[existingAffiliate.affiliate_status] || '未知';
+      };
+      const statusText = statusMap[existingAffiliate.affiliate_status as string] || '未知';
 
       return res.status(409).json({
         success: false,
