@@ -324,13 +324,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
 
       // ✅ 新增：建立推薦關係（如果是首次使用推薦碼）
-      console.log('[API] 檢查推薦關係:', { customerId, influencerId, promoCode });
+      console.log('[API] 檢查推薦關係:', { customerUid, influencerId, promoCode });
 
       // 檢查用戶是否已有推薦人
       const { data: existingReferral } = await supabase
         .from('referrals')
         .select('id')
-        .eq('referee_id', customerId)
+        .eq('referee_id', customerUid)
         .single();
 
       if (!existingReferral) {
@@ -350,7 +350,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             .from('referrals')
             .insert({
               referrer_id: influencerData.user_id,
-              referee_id: customerId,
+              referee_id: customerUid,
               influencer_id: influencerId,
               promo_code: promoCode,
               first_booking_id: booking.id
