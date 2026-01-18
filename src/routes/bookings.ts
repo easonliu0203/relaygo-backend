@@ -322,6 +322,51 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       } else {
         console.log('[API] ✅ 優惠碼使用記錄成功');
       }
+
+      // ✅ 新增：建立推薦關係（如果是首次使用推薦碼）
+      console.log('[API] 檢查推薦關係:', { customerId, influencerId, promoCode });
+
+      // 檢查用戶是否已有推薦人
+      const { data: existingReferral } = await supabase
+        .from('referrals')
+        .select('id')
+        .eq('referee_id', customerId)
+        .single();
+
+      if (!existingReferral) {
+        // 首次使用推薦碼，建立推薦關係
+        console.log('[API] 首次使用推薦碼，建立推薦關係');
+
+        // 獲取推廣人的 user_id（如果是客戶推廣人）
+        const { data: influencerData } = await supabase
+          .from('influencers')
+          .select('user_id, affiliate_type')
+          .eq('id', influencerId)
+          .single();
+
+        if (influencerData && influencerData.user_id) {
+          // 客戶推廣人，建立推薦關係
+          const { error: referralError } = await supabase
+            .from('referrals')
+            .insert({
+              referrer_id: influencerData.user_id,
+              referee_id: customerId,
+              influencer_id: influencerId,
+              promo_code: promoCode,
+              first_booking_id: booking.id
+            });
+
+          if (referralError) {
+            console.error('[API] 建立推薦關係失敗:', referralError);
+          } else {
+            console.log('[API] ✅ 推薦關係建立成功');
+          }
+        } else {
+          console.log('[API] 網紅推廣碼，不建立推薦關係');
+        }
+      } else {
+        console.log('[API] 用戶已有推薦人，不建立新的推薦關係');
+      }
     }
 
     // 8. 返回訂單資訊

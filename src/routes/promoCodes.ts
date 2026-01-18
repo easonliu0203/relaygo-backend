@@ -16,9 +16,9 @@ const supabase = createClient(
  */
 router.post('/validate', async (req: Request, res: Response) => {
   try {
-    const { promo_code, original_price } = req.body;
+    const { promo_code, original_price, user_id } = req.body;
 
-    console.log(`[Promo Code API] 驗證優惠碼: ${promo_code}, 原價: ${original_price}`);
+    console.log(`[Promo Code API] 驗證優惠碼: ${promo_code}, 原價: ${original_price}, 用戶: ${user_id || '未提供'}`);
 
     // 驗證必填欄位
     if (!promo_code || !original_price) {
@@ -90,21 +90,46 @@ router.post('/validate', async (req: Request, res: Response) => {
     console.log(`[Promo Code API] ✅ 優惠碼有效: ${promo_code}`);
     console.log(`[Promo Code API] 原價: ${price}, 最終價格: ${finalPrice}`);
 
+    // ✅ 新增：檢查推薦關係（如果提供了 user_id）
+    let referral_info = null;
+    if (user_id) {
+      const { data: existingReferral } = await supabase
+        .from('referrals')
+        .select('id, referrer_id, created_at')
+        .eq('referee_id', user_id)
+        .single();
+
+      if (existingReferral) {
+        referral_info = {
+          has_referrer: true,
+          is_first_use: false,
+          message: '您已有推薦人，此次使用優惠碼僅享受折扣，不會建立新的推薦關係'
+        };
+      } else {
+        referral_info = {
+          has_referrer: false,
+          is_first_use: true,
+          message: '首次使用推薦碼，將建立推薦關係並享受折扣'
+        };
+      }
+    }
+
     return res.json({
       success: true,
       valid: true,
       influencer_id: influencer.id,
       influencer_name: influencer.name,
       promo_code: influencer.promo_code,
-      discount_amount_enabled: influencer.discount_amount_enabled || false, // ✅ 新增：是否啟用現金折扣
+      discount_amount_enabled: influencer.discount_amount_enabled || false,
       discount_amount: discountAmountApplied,
-      discount_percentage_enabled: influencer.discount_percentage_enabled || false, // ✅ 新增：是否啟用百分比折扣
+      discount_percentage_enabled: influencer.discount_percentage_enabled || false,
       discount_percentage: discountPercentageApplied,
       commission_amount: influencer.commission_per_order || 0,
       original_price: price,
       final_price: finalPrice,
       total_discount: price - finalPrice,
-      calculation_steps: calculationSteps
+      calculation_steps: calculationSteps,
+      referral_info: referral_info // ✅ 新增：推薦關係資訊
     });
 
   } catch (error) {
