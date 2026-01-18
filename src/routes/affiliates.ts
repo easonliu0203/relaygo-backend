@@ -39,25 +39,32 @@ router.post('/apply', async (req: Request, res: Response) => {
       });
     }
 
-    // 檢查用戶是否存在
+    // 檢查用戶是否存在（使用 firebase_uid 查詢）
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('id, email')
-      .eq('id', user_id)
+      .select('id, email, firebase_uid')
+      .eq('firebase_uid', user_id)
       .single();
 
     if (userError || !user) {
+      console.error('[Affiliates API] 用戶查詢失敗:', userError);
       return res.status(404).json({
         success: false,
-        error: '用戶不存在'
+        error: '用戶不存在',
+        details: userError?.message
       });
     }
+
+    console.log(`[Affiliates API] 找到用戶: id=${user.id}, firebase_uid=${user.firebase_uid}`);
+
+    // 使用 PostgreSQL UUID (user.id) 而不是 Firebase UID
+    const userUuid = user.id;
 
     // 檢查用戶是否已經是推廣人
     const { data: existingAffiliate } = await supabase
       .from('influencers')
       .select('id, affiliate_status')
-      .eq('user_id', user_id)
+      .eq('user_id', userUuid)
       .single();
 
     if (existingAffiliate) {
@@ -95,7 +102,7 @@ router.post('/apply', async (req: Request, res: Response) => {
     const { data: newAffiliate, error: createError } = await supabase
       .from('influencers')
       .insert({
-        user_id: user_id,
+        user_id: userUuid, // 使用 PostgreSQL UUID
         name: user.email, // 暫時使用 email 作為名稱，後續可從 user_profiles 獲取
         promo_code: promo_code.toUpperCase(), // 統一轉為大寫
         affiliate_type: 'customer_affiliate',
@@ -110,7 +117,7 @@ router.post('/apply', async (req: Request, res: Response) => {
         is_commission_percent_active: true,
         is_active: false, // 待審核時設為 false
         applied_at: new Date().toISOString(),
-        account_username: `affiliate_${user_id.substring(0, 8)}`, // 自動生成帳號
+        account_username: `affiliate_${userUuid.substring(0, 8)}`, // 自動生成帳號
         account_password: 'temp_password' // 臨時密碼，客戶推廣人不需要登入
       })
       .select()
@@ -328,13 +335,31 @@ router.get('/my-status', async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`[Affiliates API] 獲取推廣人狀態: user_id=${user_id}`);
+    console.log(`[Affiliates API] 獲取推廣人狀態: firebase_uid=${user_id}`);
 
-    // 查詢用戶的推廣人記錄
+    // 先通過 firebase_uid 查詢用戶的 UUID
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('firebase_uid', user_id as string)
+      .single();
+
+    if (userError || !user) {
+      console.error('[Affiliates API] 用戶查詢失敗:', userError);
+      return res.status(404).json({
+        success: false,
+        error: '用戶不存在',
+        details: userError?.message
+      });
+    }
+
+    console.log(`[Affiliates API] 找到用戶 UUID: ${user.id}`);
+
+    // 查詢用戶的推廣人記錄（使用 PostgreSQL UUID）
     const { data: affiliate, error } = await supabase
       .from('influencers')
       .select('id, promo_code, affiliate_status, total_referrals, total_earnings, applied_at, reviewed_at, review_notes')
-      .eq('user_id', user_id)
+      .eq('user_id', user.id)
       .eq('affiliate_type', 'customer_affiliate')
       .single();
 
