@@ -161,16 +161,16 @@ router.post('/apply', async (req: Request, res: Response) => {
 router.post('/:id/review', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { status, review_notes, reviewed_by } = req.body;
+    const { status, review_notes } = req.body;
 
     console.log(`[Affiliates API] 審核推廣人: ${id}, 狀態: ${status}`);
 
     // 驗證必填欄位
-    if (!status || !reviewed_by) {
+    if (!status) {
       return res.status(400).json({
         success: false,
         error: '缺少必填欄位',
-        details: '審核狀態和審核人為必填'
+        details: '審核狀態為必填'
       });
     }
 
@@ -221,7 +221,7 @@ router.post('/:id/review', async (req: Request, res: Response) => {
         affiliate_status: status,
         is_active: status === 'active', // 通過審核則啟用
         reviewed_at: new Date().toISOString(),
-        reviewed_by: reviewed_by,
+        reviewed_by: null, // 客戶推廣人系統不追蹤審核人員
         review_notes: review_notes || null
       })
       .eq('id', id)
