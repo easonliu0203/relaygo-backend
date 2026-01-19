@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
+import multer from 'multer';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
@@ -8,6 +10,21 @@ const supabase = createClient(
   process.env.SUPABASE_URL || '',
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
+
+// Multer 配置用於文件上傳
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('只允許上傳圖片文件'));
+    }
+  },
+});
 
 /**
  * @route POST /api/affiliates/apply
@@ -401,6 +418,211 @@ router.get('/my-status', async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('[Affiliates API] 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
+
+/**
+ * @route GET /api/affiliates/payment-account
+ * @desc 獲取收款帳戶資訊
+ * @access Customer (需要認證)
+ */
+router.get('/payment-account', async (req: Request, res: Response) => {
+  try {
+    const userId = req.headers['user-id'] as string;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: '未提供用戶 ID'
+      });
+    }
+
+    // 查詢用戶的 UUID
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('firebase_uid', userId)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({
+        success: false,
+        error: '用戶不存在'
+      });
+    }
+
+    // 查詢收款帳戶資訊
+    const { data: account, error: accountError } = await supabase
+      .from('affiliate_payment_accounts')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    if (accountError && accountError.code !== 'PGRST116') {
+      throw accountError;
+    }
+
+    return res.json({
+      success: true,
+      data: account || null
+    });
+
+  } catch (error) {
+    console.error('[Affiliates API] 獲取收款帳戶失敗:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
+
+/**
+ * @route POST /api/affiliates/payment-account
+ * @desc 創建或更新收款帳戶
+ * @access Customer (需要認證)
+ */
+router.post('/payment-account', upload.fields([
+  { name: 'id_card_front', maxCount: 1 },
+  { name: 'id_card_back', maxCount: 1 },
+  { name: 'passport', maxCount: 1 },
+  { name: 'bankbook', maxCount: 1 }
+]), async (req: Request, res: Response) => {
+  try {
+    const userId = req.headers['user-id'] as string;
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const { account_type, bank_name, branch_code, account_number, account_holder_name,
+            bank_name_en, swift_code, account_holder_name_en, iban } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: '未提供用戶 ID'
+      });
+    }
+
+    // 查詢用戶的 UUID
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('firebase_uid', userId)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({
+        success: false,
+        error: '用戶不存在'
+      });
+    }
+
+    const userUuid = user.id;
+
+    // 上傳照片到 Supabase Storage
+    const uploadedUrls: any = {};
+
+    if (files.id_card_front && files.id_card_front[0]) {
+      const file = files.id_card_front[0];
+      const fileName = `${userUuid}/id_card_front_${uuidv4()}.${file.mimetype.split('/')[1]}`;
+      const { data, error } = await supabase.storage
+        .from('affiliate-payment-documents')
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+          upsert: true
+        });
+
+      if (error) throw error;
+      uploadedUrls.id_card_front_url = fileName;
+    }
+
+    if (files.id_card_back && files.id_card_back[0]) {
+      const file = files.id_card_back[0];
+      const fileName = `${userUuid}/id_card_back_${uuidv4()}.${file.mimetype.split('/')[1]}`;
+      const { data, error } = await supabase.storage
+        .from('affiliate-payment-documents')
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+          upsert: true
+        });
+
+      if (error) throw error;
+      uploadedUrls.id_card_back_url = fileName;
+    }
+
+    if (files.passport && files.passport[0]) {
+      const file = files.passport[0];
+      const fileName = `${userUuid}/passport_${uuidv4()}.${file.mimetype.split('/')[1]}`;
+      const { data, error } = await supabase.storage
+        .from('affiliate-payment-documents')
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+          upsert: true
+        });
+
+      if (error) throw error;
+      uploadedUrls.passport_url = fileName;
+    }
+
+    if (files.bankbook && files.bankbook[0]) {
+      const file = files.bankbook[0];
+      const fileName = `${userUuid}/bankbook_${uuidv4()}.${file.mimetype.split('/')[1]}`;
+      const { data, error } = await supabase.storage
+        .from('affiliate-payment-documents')
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+          upsert: true
+        });
+
+      if (error) throw error;
+      uploadedUrls.bankbook_url = fileName;
+    }
+
+    // 準備資料庫記錄
+    const accountData: any = {
+      user_id: userUuid,
+      account_type,
+      ...uploadedUrls,
+      status: 'pending',
+      updated_at: new Date().toISOString()
+    };
+
+    if (account_type === 'taiwan') {
+      accountData.bank_name = bank_name;
+      accountData.branch_code = branch_code;
+      accountData.account_number = account_number;
+      accountData.account_holder_name = account_holder_name;
+    } else {
+      accountData.bank_name_en = bank_name_en;
+      accountData.swift_code = swift_code;
+      accountData.account_holder_name_en = account_holder_name_en;
+      accountData.iban = iban;
+    }
+
+    // 使用 upsert 創建或更新記錄
+    const { data: result, error: upsertError } = await supabase
+      .from('affiliate_payment_accounts')
+      .upsert(accountData, {
+        onConflict: 'user_id'
+      })
+      .select()
+      .single();
+
+    if (upsertError) {
+      throw upsertError;
+    }
+
+    return res.json({
+      success: true,
+      message: '收款帳戶資料已提交',
+      data: result
+    });
+
+  } catch (error) {
+    console.error('[Affiliates API] 創建收款帳戶失敗:', error);
     return res.status(500).json({
       success: false,
       error: '內部伺服器錯誤',
