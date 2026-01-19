@@ -117,6 +117,8 @@ router.post('/apply', async (req: Request, res: Response) => {
         is_commission_percent_active: true,
         is_active: false, // 待審核時設為 false
         applied_at: new Date().toISOString(),
+        terms_accepted: true, // 記錄用戶已同意合作條款
+        terms_accepted_at: new Date().toISOString(), // 記錄同意時間
         account_username: `affiliate_${userUuid.substring(0, 8)}`, // 自動生成帳號
         account_password: 'temp_password' // 臨時密碼，客戶推廣人不需要登入
       })
