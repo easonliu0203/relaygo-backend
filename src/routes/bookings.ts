@@ -324,33 +324,33 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
 
       // ✅ 新增：建立推薦關係（如果是首次使用推薦碼）
-      console.log('[API] 檢查推薦關係:', { customerUid, influencerId, promoCode });
+      console.log('[API] 檢查推薦關係:', { customerId: customer.id, influencerId, promoCode });
 
-      // 檢查用戶是否已有推薦人
+      // 檢查用戶是否已有推薦人（使用 users.id，不是 firebase_uid）
       const { data: existingReferral } = await supabase
         .from('referrals')
         .select('id')
-        .eq('referee_id', customerUid)
+        .eq('referee_id', customer.id)
         .single();
 
       if (!existingReferral) {
         // 首次使用推薦碼，建立推薦關係
         console.log('[API] 首次使用推薦碼，建立推薦關係');
 
-        // 獲取推廣人的 user_id（如果是客戶推廣人）
+        // 獲取推廣人的 user_id 和佣金設定（如果是客戶推廣人）
         const { data: influencerData } = await supabase
           .from('influencers')
-          .select('user_id, affiliate_type')
+          .select('user_id, affiliate_type, commission_fixed, commission_percent, is_commission_fixed_active, is_commission_percent_active')
           .eq('id', influencerId)
           .single();
 
-        if (influencerData && influencerData.user_id) {
+        if (influencerData && influencerData.user_id && influencerData.affiliate_type === 'customer_affiliate') {
           // 客戶推廣人，建立推薦關係
           const { error: referralError } = await supabase
             .from('referrals')
             .insert({
               referrer_id: influencerData.user_id,
-              referee_id: customerUid,
+              referee_id: customer.id, // ✅ 修復：使用 users.id，不是 firebase_uid
               influencer_id: influencerId,
               promo_code: promoCode,
               first_booking_id: booking.id
@@ -360,9 +360,31 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             console.error('[API] 建立推薦關係失敗:', referralError);
           } else {
             console.log('[API] ✅ 推薦關係建立成功');
+
+            // ✅ 新增：立即更新 promo_code_usage 記錄，填寫佣金相關欄位
+            const commissionType = influencerData.is_commission_fixed_active ? 'fixed' :
+                                  influencerData.is_commission_percent_active ? 'percent' : null;
+            const commissionRate = influencerData.is_commission_fixed_active ? influencerData.commission_fixed :
+                                  influencerData.is_commission_percent_active ? influencerData.commission_percent : 0;
+
+            const { error: updateError } = await supabase
+              .from('promo_code_usage')
+              .update({
+                referee_id: customer.id,
+                commission_type: commissionType,
+                commission_rate: commissionRate,
+                order_amount: actualFinalPrice
+              })
+              .eq('booking_id', booking.id);
+
+            if (updateError) {
+              console.error('[API] 更新優惠碼使用記錄失敗:', updateError);
+            } else {
+              console.log('[API] ✅ 優惠碼使用記錄已更新佣金資訊');
+            }
           }
         } else {
-          console.log('[API] 網紅推廣碼，不建立推薦關係');
+          console.log('[API] 網紅推廣碼或非客戶推廣人，不建立推薦關係');
         }
       } else {
         console.log('[API] 用戶已有推薦人，不建立新的推薦關係');
