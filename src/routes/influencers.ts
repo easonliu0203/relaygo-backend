@@ -689,6 +689,7 @@ router.get('/:id/referrals', async (req: Request, res: Response) => {
     console.log(`[Influencers API] 獲取推廣人推薦記錄: ${id}`);
 
     // 查詢推薦記錄，並關聯被推薦人資料
+    // ✅ 修復：users 表沒有 first_name 和 last_name 欄位，這些欄位在 user_profiles 表中
     const { data, error } = await supabase
       .from('referrals')
       .select(`
@@ -698,8 +699,11 @@ router.get('/:id/referrals', async (req: Request, res: Response) => {
         created_at,
         users:referee_id (
           id,
-          first_name,
-          last_name
+          email,
+          user_profiles (
+            first_name,
+            last_name
+          )
         )
       `)
       .eq('influencer_id', id)
@@ -715,13 +719,20 @@ router.get('/:id/referrals', async (req: Request, res: Response) => {
     }
 
     // 格式化資料
-    const referrals = data?.map((record: any) => ({
-      id: record.id,
-      referee_id: record.referee_id,
-      referee_name: record.users ? `${record.users.first_name} ${record.users.last_name}` : '未知',
-      first_booking_id: record.first_booking_id,
-      created_at: record.created_at
-    })) || [];
+    const referrals = data?.map((record: any) => {
+      const profile = record.users?.user_profiles?.[0];
+      const firstName = profile?.first_name || '';
+      const lastName = profile?.last_name || '';
+      const refereeName = firstName && lastName ? `${firstName} ${lastName}` : record.users?.email || '未知';
+
+      return {
+        id: record.id,
+        referee_id: record.referee_id,
+        referee_name: refereeName,
+        first_booking_id: record.first_booking_id,
+        created_at: record.created_at
+      };
+    }) || [];
 
     console.log(`[Influencers API] ✅ 成功獲取 ${referrals.length} 筆推薦記錄`);
 
