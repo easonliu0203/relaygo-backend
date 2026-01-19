@@ -254,6 +254,92 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 /**
+ * @route PUT /api/admin/influencers/:id
+ * @desc 更新推廣人設定（支援客戶推廣人）
+ * @access Admin
+ */
+router.put('/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    console.log(`[Influencers API] 更新推廣人設定: ${id}`);
+
+    const {
+      discount_amount_enabled,
+      discount_amount,
+      discount_percentage_enabled,
+      discount_percentage,
+      commission_fixed,
+      commission_percent,
+      is_commission_fixed_active,
+      is_commission_percent_active,
+      is_active
+    } = req.body;
+
+    // 檢查推廣人是否存在
+    const { data: existingInfluencer, error: fetchError } = await supabase
+      .from('influencers')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existingInfluencer) {
+      return res.status(404).json({
+        success: false,
+        error: '推廣人不存在'
+      });
+    }
+
+    // 準備更新資料
+    const updateData: any = {};
+    if (discount_amount_enabled !== undefined) updateData.discount_amount_enabled = discount_amount_enabled;
+    if (discount_amount !== undefined) updateData.discount_amount = discount_amount;
+    if (discount_percentage_enabled !== undefined) updateData.discount_percentage_enabled = discount_percentage_enabled;
+    if (discount_percentage !== undefined) updateData.discount_percentage = discount_percentage;
+    if (commission_fixed !== undefined) updateData.commission_fixed = commission_fixed;
+    if (commission_percent !== undefined) updateData.commission_percent = commission_percent;
+    if (is_commission_fixed_active !== undefined) updateData.is_commission_fixed_active = is_commission_fixed_active;
+    if (is_commission_percent_active !== undefined) updateData.is_commission_percent_active = is_commission_percent_active;
+    if (is_active !== undefined) updateData.is_active = is_active;
+
+    // 更新推廣人資料
+    const { data, error } = await supabase
+      .from('influencers')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Influencers API] Supabase 更新錯誤:', error);
+      return res.status(500).json({
+        success: false,
+        error: '更新推廣人設定失敗',
+        details: error.message
+      });
+    }
+
+    // 移除密碼欄位
+    const { account_password, ...influencerWithoutPassword } = data;
+
+    console.log(`[Influencers API] ✅ 成功更新推廣人設定: ${id}`);
+
+    return res.json({
+      success: true,
+      data: influencerWithoutPassword,
+      message: '推廣人設定更新成功'
+    });
+
+  } catch (error) {
+    console.error('[Influencers API] 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
+
+/**
  * @route PATCH /api/admin/influencers/:id
  * @desc 更新網紅資料
  * @access Admin
