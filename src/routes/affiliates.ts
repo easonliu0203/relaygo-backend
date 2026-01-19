@@ -358,7 +358,7 @@ router.get('/my-status', async (req: Request, res: Response) => {
     // 查詢用戶的推廣人記錄（使用 PostgreSQL UUID）
     const { data: affiliate, error } = await supabase
       .from('influencers')
-      .select('id, promo_code, affiliate_status, total_referrals, total_earnings, applied_at, reviewed_at, review_notes')
+      .select('id, promo_code, affiliate_status, is_active, total_referrals, total_earnings, applied_at, reviewed_at, review_notes')
       .eq('user_id', user.id)
       .eq('affiliate_type', 'customer_affiliate')
       .single();
@@ -386,7 +386,8 @@ router.get('/my-status', async (req: Request, res: Response) => {
       success: true,
       data: {
         is_affiliate: true,
-        status: affiliate.affiliate_status,
+        affiliate_status: affiliate.affiliate_status,
+        is_active: affiliate.is_active,
         promo_code: affiliate.promo_code,
         total_referrals: affiliate.total_referrals || 0,
         total_earnings: affiliate.total_earnings || 0,
