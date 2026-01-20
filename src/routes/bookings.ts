@@ -303,10 +303,30 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     if (promoCode && influencerId) {
       console.log('[API] 記錄優惠碼使用:', promoCode);
 
+      // ✅ 修復：查找推薦關係，確定實際分潤對象
+      // 場景 1 & 2: 客戶首次或繼續使用推廣人 A 的優惠碼 → 分潤給 A
+      // 場景 3: 客戶使用推廣人 C 的優惠碼，但已有 A→B 推薦關係 → 分潤給 A（而非 C）
+      console.log('[API] 檢查推薦關係:', { customerId: customer.id, influencerId, promoCode });
+
+      const { data: existingReferral } = await supabase
+        .from('referrals')
+        .select('influencer_id')
+        .eq('referee_id', customer.id)
+        .single();
+
+      // 使用推薦關係中的 influencer_id，如果沒有推薦關係則使用訂單的 influencer_id
+      const actualCommissionInfluencerId = existingReferral?.influencer_id || influencerId;
+
+      if (existingReferral) {
+        console.log('[API] 找到現有推薦關係，分潤對象:', actualCommissionInfluencerId);
+      } else {
+        console.log('[API] 無現有推薦關係，分潤對象為優惠碼提供者:', actualCommissionInfluencerId);
+      }
+
       const { error: usageError } = await supabase
         .from('promo_code_usage')
         .insert({
-          influencer_id: influencerId,
+          influencer_id: actualCommissionInfluencerId, // ✅ 修復：使用實際分潤對象
           booking_id: booking.id,
           promo_code: promoCode,
           original_price: actualOriginalPrice, // ✅ 修正：使用實際的原始價格
@@ -323,17 +343,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         console.log('[API] ✅ 優惠碼使用記錄成功');
       }
 
-      // ✅ 新增：建立推薦關係（如果是首次使用推薦碼）
-      console.log('[API] 檢查推薦關係:', { customerId: customer.id, influencerId, promoCode });
-
+      // ✅ 建立推薦關係（如果是首次使用推薦碼）
       // 檢查用戶是否已有推薦人（使用 users.id，不是 firebase_uid）
-      const { data: existingReferral } = await supabase
+      // 注意：這裡重新查詢是為了獲取完整的推薦關係資訊（包括 id）
+      const { data: existingReferralFull } = await supabase
         .from('referrals')
         .select('id')
         .eq('referee_id', customer.id)
         .single();
 
-      if (!existingReferral) {
+      if (!existingReferralFull) {
         // 首次使用推薦碼，建立推薦關係
         console.log('[API] 首次使用推薦碼，建立推薦關係');
 
