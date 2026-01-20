@@ -719,15 +719,22 @@ async function handlePaymentSuccess(params: {
 
   console.log('[GOMYPAY Callback] 準備更新訂單，updateData:', JSON.stringify(updateData, null, 2));
 
-  const { error: bookingUpdateError } = await supabase
-    .from('bookings')
-    .update(updateData)
-    .eq('id', bookingId);
+  // ✅ 使用 RPC 函數更新訂單狀態，確保觸發 PostgreSQL 觸發器
+  // 原因：Supabase SDK 的 .update() 方法可能不會觸發觸發器
+  const { error: bookingUpdateError } = await supabase.rpc('update_booking_status', {
+    p_booking_id: bookingId,
+    p_status: newStatus,
+    p_completed_at: updateData.completed_at || null,
+    p_deposit_paid: updateData.deposit_paid || null,
+    p_tip_amount: updateData.tip_amount || null,
+  });
 
   if (bookingUpdateError) {
     console.error('[GOMYPAY Callback] 更新訂單狀態失敗:', bookingUpdateError);
     throw bookingUpdateError;
   }
+
+  console.log('[GOMYPAY Callback] ✅ 訂單狀態已通過 RPC 函數更新');
 
   console.log('[GOMYPAY Callback] ✅ 訂單狀態已更新為:', newStatus);
 

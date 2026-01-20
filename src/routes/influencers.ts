@@ -38,12 +38,23 @@ interface Influencer {
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    console.log('[Influencers API] 獲取網紅列表');
+    const { affiliate_type } = req.query;
+    console.log('[Influencers API] 獲取網紅列表', { affiliate_type });
 
-    const { data, error } = await supabase
+    // 建立查詢
+    let query = supabase
       .from('influencers')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
+
+    // 如果指定了 affiliate_type，則篩選
+    if (affiliate_type) {
+      query = query.eq('affiliate_type', affiliate_type);
+    }
+
+    // 排序
+    query = query.order('created_at', { ascending: false });
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('[Influencers API] Supabase 查詢錯誤:', error);
@@ -230,6 +241,92 @@ router.post('/', async (req: Request, res: Response) => {
       success: true,
       data: influencerWithoutPassword,
       message: '網紅新增成功'
+    });
+
+  } catch (error) {
+    console.error('[Influencers API] 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
+
+/**
+ * @route PUT /api/admin/influencers/:id
+ * @desc 更新推廣人設定（支援客戶推廣人）
+ * @access Admin
+ */
+router.put('/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    console.log(`[Influencers API] 更新推廣人設定: ${id}`);
+
+    const {
+      discount_amount_enabled,
+      discount_amount,
+      discount_percentage_enabled,
+      discount_percentage,
+      commission_fixed,
+      commission_percent,
+      is_commission_fixed_active,
+      is_commission_percent_active,
+      is_active
+    } = req.body;
+
+    // 檢查推廣人是否存在
+    const { data: existingInfluencer, error: fetchError } = await supabase
+      .from('influencers')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existingInfluencer) {
+      return res.status(404).json({
+        success: false,
+        error: '推廣人不存在'
+      });
+    }
+
+    // 準備更新資料
+    const updateData: any = {};
+    if (discount_amount_enabled !== undefined) updateData.discount_amount_enabled = discount_amount_enabled;
+    if (discount_amount !== undefined) updateData.discount_amount = discount_amount;
+    if (discount_percentage_enabled !== undefined) updateData.discount_percentage_enabled = discount_percentage_enabled;
+    if (discount_percentage !== undefined) updateData.discount_percentage = discount_percentage;
+    if (commission_fixed !== undefined) updateData.commission_fixed = commission_fixed;
+    if (commission_percent !== undefined) updateData.commission_percent = commission_percent;
+    if (is_commission_fixed_active !== undefined) updateData.is_commission_fixed_active = is_commission_fixed_active;
+    if (is_commission_percent_active !== undefined) updateData.is_commission_percent_active = is_commission_percent_active;
+    if (is_active !== undefined) updateData.is_active = is_active;
+
+    // 更新推廣人資料
+    const { data, error } = await supabase
+      .from('influencers')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Influencers API] Supabase 更新錯誤:', error);
+      return res.status(500).json({
+        success: false,
+        error: '更新推廣人設定失敗',
+        details: error.message
+      });
+    }
+
+    // 移除密碼欄位
+    const { account_password, ...influencerWithoutPassword } = data;
+
+    console.log(`[Influencers API] ✅ 成功更新推廣人設定: ${id}`);
+
+    return res.json({
+      success: true,
+      data: influencerWithoutPassword,
+      message: '推廣人設定更新成功'
     });
 
   } catch (error) {
@@ -569,6 +666,137 @@ router.get('/:id/performance', async (req: Request, res: Response) => {
         },
         usage_history: usageHistory
       }
+    });
+
+  } catch (error) {
+    console.error('[Influencers API] 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
+
+/**
+ * @route GET /api/admin/influencers/:id/referrals
+ * @desc 獲取推廣人的推薦記錄
+ * @access Admin
+ */
+router.get('/:id/referrals', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    console.log(`[Influencers API] 獲取推廣人推薦記錄: ${id}`);
+
+    // 查詢推薦記錄，並關聯被推薦人資料
+    // ✅ 修復：users 表沒有 first_name 和 last_name 欄位，這些欄位在 user_profiles 表中
+    const { data, error } = await supabase
+      .from('referrals')
+      .select(`
+        id,
+        referee_id,
+        first_booking_id,
+        created_at,
+        users:referee_id (
+          id,
+          email,
+          user_profiles (
+            first_name,
+            last_name
+          )
+        )
+      `)
+      .eq('influencer_id', id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[Influencers API] 查詢推薦記錄錯誤:', error);
+      return res.status(500).json({
+        success: false,
+        error: '查詢推薦記錄失敗',
+        details: error.message
+      });
+    }
+
+    // 格式化資料
+    const referrals = data?.map((record: any) => {
+      const profile = record.users?.user_profiles?.[0];
+      const firstName = profile?.first_name || '';
+      const lastName = profile?.last_name || '';
+      const refereeName = firstName && lastName ? `${firstName} ${lastName}` : record.users?.email || '未知';
+
+      return {
+        id: record.id,
+        referee_id: record.referee_id,
+        referee_name: refereeName,
+        first_booking_id: record.first_booking_id,
+        created_at: record.created_at
+      };
+    }) || [];
+
+    console.log(`[Influencers API] ✅ 成功獲取 ${referrals.length} 筆推薦記錄`);
+
+    return res.json({
+      success: true,
+      data: referrals,
+      count: referrals.length
+    });
+
+  } catch (error) {
+    console.error('[Influencers API] 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
+
+/**
+ * @route GET /api/admin/influencers/:id/commissions
+ * @desc 獲取推廣人的分潤記錄
+ * @access Admin
+ */
+router.get('/:id/commissions', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    console.log(`[Influencers API] 獲取推廣人分潤記錄: ${id}`);
+
+    // 查詢分潤記錄
+    const { data, error } = await supabase
+      .from('promo_code_usage')
+      .select('*')
+      .eq('influencer_id', id)
+      .not('commission_amount', 'is', null)
+      .order('used_at', { ascending: false });
+
+    if (error) {
+      console.error('[Influencers API] 查詢分潤記錄錯誤:', error);
+      return res.status(500).json({
+        success: false,
+        error: '查詢分潤記錄失敗',
+        details: error.message
+      });
+    }
+
+    // 格式化資料
+    const commissions = data?.map((record: any) => ({
+      id: record.id,
+      booking_id: record.booking_id,
+      order_amount: record.order_amount || 0,
+      commission_amount: record.commission_amount || 0,
+      commission_type: record.commission_type || 'fixed',
+      commission_rate: record.commission_rate,
+      commission_status: record.commission_status || 'pending',
+      used_at: record.used_at
+    })) || [];
+
+    console.log(`[Influencers API] ✅ 成功獲取 ${commissions.length} 筆分潤記錄`);
+
+    return res.json({
+      success: true,
+      data: commissions,
+      count: commissions.length
     });
 
   } catch (error) {

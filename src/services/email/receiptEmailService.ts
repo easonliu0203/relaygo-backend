@@ -65,7 +65,10 @@ export class ReceiptEmailService {
       const driverProfile = booking.driver?.user_profiles?.[0] || {};
       const driverInfo = booking.driver?.drivers?.[0] || {};
 
-      const customerName = `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim() || '客戶';
+      // ✅ 修復：確保客戶姓名正確顯示，如果沒有姓名則使用郵箱前綴
+      const customerName = `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim()
+        || customerEmail.split('@')[0]
+        || '客戶';
       const driverName = booking.driver ? `${driverProfile.first_name || ''} ${driverProfile.last_name || ''}`.trim() : undefined;
 
       const language = booking.customer?.preferred_language || 'zh-TW';
@@ -94,6 +97,8 @@ export class ReceiptEmailService {
 
         // 費用明細
         paymentType: params.paymentType,
+        // ✅ basePrice 保持為基本費用（不含折扣）
+        // 模板會根據是否有 originalPrice 來決定顯示邏輯
         basePrice: booking.base_price || 0,
         depositAmount: booking.deposit_amount || 0,
         balanceAmount: booking.balance_amount || 0,
@@ -101,6 +106,23 @@ export class ReceiptEmailService {
         tipAmount: booking.tip_amount || 0,
         totalAmount: booking.total_amount || booking.total_price || 0,
         paidAmount: params.amount,
+
+        // ✅ 優惠碼和折扣資訊（付訂金當下的快照）
+        promoCode: booking.promo_code || undefined,
+        // 如果有優惠碼，originalPrice 是折扣前的原價
+        originalPrice: booking.original_price || undefined,
+        // 折扣金額
+        discountAmount: booking.discount_amount || undefined,
+        // 折扣後的最終價格
+        finalPrice: booking.final_price || undefined,
+
+        // ✅ 新增：統一編號
+        taxId: booking.tax_id || undefined,
+
+        // ✅ 新增：取消政策同意資訊
+        policyAgreedAt: booking.policy_agreed_at
+          ? moment(booking.policy_agreed_at).tz('Asia/Taipei').format('YYYY/MM/DD HH:mm')
+          : undefined,
 
         // 支付資訊
         transactionId: params.transactionId,
@@ -110,6 +132,28 @@ export class ReceiptEmailService {
         // 語言
         language
       };
+
+      // 3.5. 如果是支付尾款，查詢數位簽名
+      if (params.paymentType === 'balance') {
+        const { data: signature } = await supabase
+          .from('payment_signatures')
+          .select('signature_url, signature_base64')
+          .eq('booking_id', params.bookingId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (signature) {
+          // 優先使用 signature_url（Storage URL），如果不存在則使用 signature_base64
+          if (signature.signature_url) {
+            receiptData.signatureUrl = signature.signature_url;
+            console.log('[ReceiptEmail] ✅ 已加入數位簽名 URL 到收據');
+          } else if (signature.signature_base64) {
+            receiptData.signatureBase64 = signature.signature_base64;
+            console.log('[ReceiptEmail] ✅ 已加入數位簽名 Base64 到收據（向後兼容）');
+          }
+        }
+      }
 
       // 4. 生成收據 HTML
       const receiptHtml = generateReceiptHtml(receiptData);

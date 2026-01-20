@@ -34,12 +34,28 @@ export interface ReceiptData {
   tipAmount?: number;
   totalAmount: number;
   paidAmount: number;
-  
+
+  // ✅ 新增：優惠碼和折扣資訊
+  promoCode?: string;
+  originalPrice?: number;
+  discountAmount?: number;
+  finalPrice?: number;
+
+  // ✅ 新增：統一編號
+  taxId?: string;
+
+  // ✅ 新增：取消政策同意資訊
+  policyAgreedAt?: string;
+
+  // ✅ 新增：數位簽名（支付尾款時）
+  signatureUrl?: string;        // 優先使用：Supabase Storage URL
+  signatureBase64?: string;     // 向後兼容：Base64 編碼
+
   // 支付資訊
   transactionId: string;
   paymentMethod: string;
   paymentDate: string;
-  
+
   // 語言
   language: string;
 }
@@ -73,18 +89,27 @@ const translations: Record<string, any> = {
     vehiclePlate: '車牌號碼',
     feeBreakdown: '費用明細',
     basePrice: '基本費用',
+    promoCodeDiscount: '優惠碼折扣',
+    promoCode: '優惠碼',
+    discountedAmount: '折扣後金額',
     depositAmount: '訂金金額',
+    depositPercentage: '訂金比例',
     balanceAmount: '尾款金額',
     overtimeFee: '超時費用',
     tipAmount: '小費',
     totalAmount: '總金額',
     paidAmount: '已支付金額',
+    taxId: '統一編號',
+    policyAgreement: '您已同意《RelayGo 取消政策》',
+    authorizationTime: '授權時間',
+    digitalSignature: '客戶數位簽名',
+    signatureNote: '此簽名用於確認支付尾款',
     paymentInfo: '支付資訊',
     transactionId: '交易編號',
     paymentMethod: '支付方式',
     paymentDate: '支付日期',
     footer: '感謝您使用 RelayGo 服務',
-    contact: '如有任何問題，請聯繫我們：support@relaygo.pro',
+    contact: '如有任何問題，請聯繫我們：kyle5916263@gmail.com',
     companyInfo: 'RelayGo - 您的專業包車服務平台'
   },
   'zh-CN': {
@@ -112,18 +137,27 @@ const translations: Record<string, any> = {
     vehiclePlate: '车牌号码',
     feeBreakdown: '费用明细',
     basePrice: '基本费用',
+    promoCodeDiscount: '优惠码折扣',
+    promoCode: '优惠码',
+    discountedAmount: '折扣后金额',
     depositAmount: '订金金额',
+    depositPercentage: '订金比例',
     balanceAmount: '尾款金额',
     overtimeFee: '超时费用',
     tipAmount: '小费',
     totalAmount: '总金额',
     paidAmount: '已支付金额',
+    taxId: '统一编号',
+    policyAgreement: '您已同意《RelayGo 取消政策》',
+    authorizationTime: '授权时间',
+    digitalSignature: '客户数位签名',
+    signatureNote: '此签名用于确认支付尾款',
     paymentInfo: '支付信息',
     transactionId: '交易编号',
     paymentMethod: '支付方式',
     paymentDate: '支付日期',
     footer: '感谢您使用 RelayGo 服务',
-    contact: '如有任何问题，请联系我们：support@relaygo.pro',
+    contact: '如有任何问题，请联系我们：kyle5916263@gmail.com',
     companyInfo: 'RelayGo - 您的专业包车服务平台'
   },
   'en': {
@@ -151,18 +185,27 @@ const translations: Record<string, any> = {
     vehiclePlate: 'Vehicle Plate',
     feeBreakdown: 'Fee Breakdown',
     basePrice: 'Base Price',
+    promoCodeDiscount: 'Promo Code Discount',
+    promoCode: 'Promo Code',
+    discountedAmount: 'Discounted Amount',
     depositAmount: 'Deposit Amount',
+    depositPercentage: 'Deposit Percentage',
     balanceAmount: 'Balance Amount',
     overtimeFee: 'Overtime Fee',
     tipAmount: 'Tip',
     totalAmount: 'Total Amount',
     paidAmount: 'Paid Amount',
+    taxId: 'Tax ID',
+    policyAgreement: 'You have agreed to the RelayGo Cancellation Policy',
+    authorizationTime: 'Authorization Time',
+    digitalSignature: 'Customer Digital Signature',
+    signatureNote: 'This signature confirms the balance payment',
     paymentInfo: 'Payment Information',
     transactionId: 'Transaction ID',
     paymentMethod: 'Payment Method',
     paymentDate: 'Payment Date',
     footer: 'Thank you for using RelayGo',
-    contact: 'For any questions, please contact us: support@relaygo.pro',
+    contact: 'For any questions, please contact us: kyle5916263@gmail.com',
     companyInfo: 'RelayGo - Your Professional Charter Service Platform'
   }
 };
@@ -374,11 +417,21 @@ export function generateReceiptHtml(data: ReceiptData): string {
       <div class="section-title">${t.feeBreakdown}</div>
       <div class="info-row">
         <span class="info-label">${t.basePrice}</span>
-        <span class="info-value">${formatCurrency(data.basePrice, lang)}</span>
+        <span class="info-value">${formatCurrency(data.originalPrice || data.basePrice, lang)}</span>
       </div>
+      ${data.promoCode && data.discountAmount ? `
+      <div class="info-row" style="color: #4CAF50;">
+        <span class="info-label">${t.promoCodeDiscount}</span>
+        <span class="info-value">-${formatCurrency(data.discountAmount, lang)} (${t.promoCode}: ${data.promoCode})</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">${t.discountedAmount}</span>
+        <span class="info-value">${formatCurrency(data.finalPrice || data.basePrice, lang)}</span>
+      </div>
+      ` : ''}
       ${data.depositAmount ? `
       <div class="info-row">
-        <span class="info-label">${t.depositAmount}</span>
+        <span class="info-label">${t.depositAmount} (${data.paymentType === 'deposit' ? '25%' : ''})</span>
         <span class="info-value">${formatCurrency(data.depositAmount, lang)}</span>
       </div>
       ` : ''}
@@ -400,11 +453,34 @@ export function generateReceiptHtml(data: ReceiptData): string {
         <span class="info-value">${formatCurrency(data.tipAmount, lang)}</span>
       </div>
       ` : ''}
+      ${data.taxId ? `
+      <div class="info-row">
+        <span class="info-label">${t.taxId}</span>
+        <span class="info-value">${data.taxId}</span>
+      </div>
+      ` : ''}
       <div class="info-row total-row">
         <span class="info-label">${t.paidAmount}</span>
         <span class="info-value">${formatCurrency(data.paidAmount, lang)}</span>
       </div>
     </div>
+
+    <!-- 數位簽名（僅支付尾款時顯示） -->
+    ${data.paymentType === 'balance' && (data.signatureUrl || data.signatureBase64) ? `
+    <div class="section">
+      <div class="section-title">${t.digitalSignature}</div>
+      <div style="text-align: center; padding: 20px 0;">
+        ${data.signatureUrl ? `
+          <!-- 使用 Supabase Storage URL（推薦） -->
+          <img src="${data.signatureUrl}" alt="Customer Signature" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;" />
+        ` : data.signatureBase64 ? `
+          <!-- 向後兼容：使用 Base64（可能在某些郵件客戶端無法顯示） -->
+          <img src="${data.signatureBase64}" alt="Customer Signature" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;" />
+        ` : ''}
+        <p style="color: #666; font-size: 12px; margin-top: 10px;">${t.signatureNote}</p>
+      </div>
+    </div>
+    ` : ''}
 
     <!-- 支付資訊 -->
     <div class="section">
@@ -421,6 +497,15 @@ export function generateReceiptHtml(data: ReceiptData): string {
         <span class="info-label">${t.paymentDate}</span>
         <span class="info-value">${data.paymentDate}</span>
       </div>
+      ${data.policyAgreedAt ? `
+      <div class="info-row" style="background-color: #f0f8ff; padding: 12px; margin-top: 10px; border-radius: 4px; border-left: 4px solid #4CAF50;">
+        <span class="info-label" style="color: #4CAF50; font-weight: bold;">✓ ${t.policyAgreement}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">${t.authorizationTime}</span>
+        <span class="info-value">${data.policyAgreedAt}</span>
+      </div>
+      ` : ''}
     </div>
 
     <!-- 頁尾 -->

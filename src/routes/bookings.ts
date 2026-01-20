@@ -13,6 +13,35 @@ const supabase = createClient(
 );
 
 /**
+ * 獲取客戶端真實 IP 地址
+ * 考慮代理伺服器情況（X-Forwarded-For, X-Real-IP 等）
+ */
+function getClientIp(req: Request): string {
+  // 1. 檢查 X-Forwarded-For（最常見的代理 header）
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (forwardedFor) {
+    // X-Forwarded-For 可能包含多個 IP，取第一個（客戶端真實 IP）
+    const ips = (typeof forwardedFor === 'string' ? forwardedFor : forwardedFor[0]).split(',');
+    return ips[0].trim();
+  }
+
+  // 2. 檢查 X-Real-IP（Nginx 常用）
+  const realIp = req.headers['x-real-ip'];
+  if (realIp) {
+    return typeof realIp === 'string' ? realIp : realIp[0];
+  }
+
+  // 3. 檢查 CF-Connecting-IP（Cloudflare）
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (cfIp) {
+    return typeof cfIp === 'string' ? cfIp : cfIp[0];
+  }
+
+  // 4. 使用 req.ip 或 req.connection.remoteAddress
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+/**
  * @route POST /api/bookings
  * @desc 創建新訂單
  * @access Customer
@@ -205,12 +234,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       hasPromoCode: !!promoCode
     });
 
-    // 6. 解析預約時間
+    // 6. 獲取客戶端 IP 地址（用於防範 Chargeback 爭議）
+    const clientIp = getClientIp(req);
+    console.log('[API] 客戶端 IP:', clientIp);
+
+    // 7. 解析預約時間
     const bookingDateTime = new Date(bookingTime);
     const startDate = bookingDateTime.toISOString().split('T')[0]; // YYYY-MM-DD
     const startTime = bookingDateTime.toTimeString().split(' ')[0]; // HH:MM:SS
 
-    // 6. 創建訂單
+    // 8. 創建訂單
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert({
@@ -248,6 +281,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         tour_package_name: tourPackageName || null, // ✅ 新增：旅遊方案名稱
         policy_agreed: policyAgreed === true, // ✅ 新增：取消政策同意狀態
         policy_agreed_at: policyAgreed === true ? new Date().toISOString() : null, // ✅ 新增：同意時間戳記
+        client_ip: clientIp, // ✅ 新增：客戶端 IP 地址（用於防範 Chargeback 爭議）
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -287,6 +321,73 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         // 不中斷訂單建立流程，只記錄錯誤
       } else {
         console.log('[API] ✅ 優惠碼使用記錄成功');
+      }
+
+      // ✅ 新增：建立推薦關係（如果是首次使用推薦碼）
+      console.log('[API] 檢查推薦關係:', { customerId: customer.id, influencerId, promoCode });
+
+      // 檢查用戶是否已有推薦人（使用 users.id，不是 firebase_uid）
+      const { data: existingReferral } = await supabase
+        .from('referrals')
+        .select('id')
+        .eq('referee_id', customer.id)
+        .single();
+
+      if (!existingReferral) {
+        // 首次使用推薦碼，建立推薦關係
+        console.log('[API] 首次使用推薦碼，建立推薦關係');
+
+        // 獲取推廣人的 user_id 和佣金設定（如果是客戶推廣人）
+        const { data: influencerData } = await supabase
+          .from('influencers')
+          .select('user_id, affiliate_type, commission_fixed, commission_percent, is_commission_fixed_active, is_commission_percent_active')
+          .eq('id', influencerId)
+          .single();
+
+        if (influencerData && influencerData.user_id && influencerData.affiliate_type === 'customer_affiliate') {
+          // 客戶推廣人，建立推薦關係
+          const { error: referralError } = await supabase
+            .from('referrals')
+            .insert({
+              referrer_id: influencerData.user_id,
+              referee_id: customer.id, // ✅ 修復：使用 users.id，不是 firebase_uid
+              influencer_id: influencerId,
+              promo_code: promoCode,
+              first_booking_id: booking.id
+            });
+
+          if (referralError) {
+            console.error('[API] 建立推薦關係失敗:', referralError);
+          } else {
+            console.log('[API] ✅ 推薦關係建立成功');
+
+            // ✅ 新增：立即更新 promo_code_usage 記錄，填寫佣金相關欄位
+            const commissionType = influencerData.is_commission_fixed_active ? 'fixed' :
+                                  influencerData.is_commission_percent_active ? 'percent' : null;
+            const commissionRate = influencerData.is_commission_fixed_active ? influencerData.commission_fixed :
+                                  influencerData.is_commission_percent_active ? influencerData.commission_percent : 0;
+
+            const { error: updateError } = await supabase
+              .from('promo_code_usage')
+              .update({
+                referee_id: customer.id,
+                commission_type: commissionType,
+                commission_rate: commissionRate,
+                order_amount: actualFinalPrice
+              })
+              .eq('booking_id', booking.id);
+
+            if (updateError) {
+              console.error('[API] 更新優惠碼使用記錄失敗:', updateError);
+            } else {
+              console.log('[API] ✅ 優惠碼使用記錄已更新佣金資訊');
+            }
+          }
+        } else {
+          console.log('[API] 網紅推廣碼或非客戶推廣人，不建立推薦關係');
+        }
+      } else {
+        console.log('[API] 用戶已有推薦人，不建立新的推薦關係');
       }
     }
 

@@ -177,9 +177,98 @@ router.post('/register-or-login', async (req: Request, res: Response) => {
 
     if (insertError) {
       console.error('❌ 創建用戶失敗:', insertError);
+
+      // ✅ 特殊處理：如果是 email 重複錯誤，檢查是否為同一用戶
+      if (insertError.code === '23505' && insertError.message.includes('users_email_key')) {
+        console.log('⚠️ Email 已存在，檢查是否為同一用戶...');
+
+        // 根據 email 查找現有用戶
+        const { data: existingUserByEmail, error: emailQueryError } = await supabaseAdmin
+          .from('users')
+          .select('*')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (emailQueryError || !existingUserByEmail) {
+          console.error('❌ 無法找到 email 對應的用戶:', emailQueryError);
+          return res.status(500).json({
+            success: false,
+            error: '資料庫錯誤',
+            details: insertError.message,
+          });
+        }
+
+        console.log('📋 現有用戶資訊:', {
+          id: existingUserByEmail.id,
+          email: existingUserByEmail.email,
+          firebase_uid: existingUserByEmail.firebase_uid,
+          roles: existingUserByEmail.roles,
+        });
+
+        // ⚠️ 安全檢查：Firebase UID 不匹配
+        if (existingUserByEmail.firebase_uid && existingUserByEmail.firebase_uid !== firebaseUid) {
+          console.error('❌ Firebase UID 不匹配:', {
+            existingFirebaseUid: existingUserByEmail.firebase_uid,
+            requestFirebaseUid: firebaseUid,
+          });
+
+          return res.status(409).json({
+            success: false,
+            error: '此 Email 已被其他帳號使用',
+            message: '此 Email 已與另一個 Google 帳號綁定。請使用原本的 Google 帳號登入，或使用其他 Email。',
+            message_en: 'This email is already associated with another Google account. Please sign in with your original Google account or use a different email.',
+          });
+        }
+
+        // ✅ Firebase UID 匹配或為空，可以安全更新
+        const currentRoles = existingUserByEmail.roles || [];
+        const updatedRoles = currentRoles.includes(role) ? currentRoles : [...currentRoles, role];
+
+        console.log('📝 更新現有用戶的角色:', {
+          id: existingUserByEmail.id,
+          oldRoles: currentRoles,
+          newRoles: updatedRoles,
+        });
+
+        const { data: updatedUser, error: updateError } = await supabaseAdmin
+          .from('users')
+          .update({
+            firebase_uid: firebaseUid, // 更新或設置 Firebase UID
+            roles: updatedRoles,
+            role: role,
+            status: 'active',
+          })
+          .eq('id', existingUserByEmail.id)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error('❌ 更新用戶失敗:', updateError);
+          return res.status(500).json({
+            success: false,
+            error: '更新用戶失敗',
+            details: updateError.message,
+          });
+        }
+
+        console.log('✅ 用戶更新成功:', {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          firebase_uid: updatedUser.firebase_uid,
+          roles: updatedUser.roles,
+        });
+
+        return res.status(200).json({
+          success: true,
+          data: updatedUser,
+          message: '登入成功',
+        });
+      }
+
+      // 其他錯誤
       return res.status(500).json({
         success: false,
-        error: '創建用戶失敗',
+        error: '資料庫錯誤',
         details: insertError.message,
       });
     }
