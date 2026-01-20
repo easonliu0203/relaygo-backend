@@ -631,5 +631,186 @@ router.post('/payment-account', upload.fields([
   }
 });
 
+/**
+ * @route GET /api/affiliates/my-referrals
+ * @desc 獲取推廣人的下線列表（分頁）
+ * @access Customer (需要認證)
+ * @query user_id - 用戶 Firebase UID
+ * @query page - 頁碼（從 1 開始，默認 1）
+ * @query limit - 每頁數量（默認 10，最大 50）
+ */
+router.get('/my-referrals', async (req: Request, res: Response) => {
+  try {
+    const { user_id, page = '1', limit = '10' } = req.query;
+
+    console.log(`[Affiliates API] 獲取下線列表: user_id=${user_id}, page=${page}, limit=${limit}`);
+
+    // 驗證必填欄位
+    if (!user_id) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少必填欄位',
+        details: '用戶 ID 為必填'
+      });
+    }
+
+    // 驗證分頁參數
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = Math.min(parseInt(limit as string, 10), 50); // 最大 50 筆
+
+    if (isNaN(pageNum) || pageNum < 1) {
+      return res.status(400).json({
+        success: false,
+        error: '無效的頁碼',
+        details: '頁碼必須為大於 0 的整數'
+      });
+    }
+
+    if (isNaN(limitNum) || limitNum < 1) {
+      return res.status(400).json({
+        success: false,
+        error: '無效的每頁數量',
+        details: '每頁數量必須為大於 0 的整數'
+      });
+    }
+
+    // 查找用戶
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('firebase_uid', user_id)
+      .single();
+
+    if (userError || !user) {
+      console.error('[Affiliates API] 用戶查詢失敗:', userError);
+      return res.status(404).json({
+        success: false,
+        error: '用戶不存在',
+        details: userError?.message
+      });
+    }
+
+    // 查找推廣人資訊
+    const { data: influencer, error: influencerError } = await supabase
+      .from('influencers')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (influencerError || !influencer) {
+      console.error('[Affiliates API] 推廣人查詢失敗:', influencerError);
+      return res.status(404).json({
+        success: false,
+        error: '您不是推廣人',
+        details: influencerError?.message
+      });
+    }
+
+    // 計算分頁偏移量
+    const offset = (pageNum - 1) * limitNum;
+
+    // 查詢下線總數
+    const { count: totalCount, error: countError } = await supabase
+      .from('referrals')
+      .select('*', { count: 'exact', head: true })
+      .eq('influencer_id', influencer.id);
+
+    if (countError) {
+      console.error('[Affiliates API] 查詢下線總數失敗:', countError);
+      return res.status(500).json({
+        success: false,
+        error: '查詢下線總數失敗',
+        details: countError.message
+      });
+    }
+
+    // 查詢下線列表（分頁）
+    const { data: referrals, error: referralsError } = await supabase
+      .from('referrals')
+      .select(`
+        id,
+        referee_id,
+        created_at,
+        users!referrals_referee_id_fkey (
+          email
+        )
+      `)
+      .eq('influencer_id', influencer.id)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limitNum - 1);
+
+    if (referralsError) {
+      console.error('[Affiliates API] 查詢下線列表失敗:', referralsError);
+      return res.status(500).json({
+        success: false,
+        error: '查詢下線列表失敗',
+        details: referralsError.message
+      });
+    }
+
+    // 處理信箱遮罩
+    const maskedReferrals = (referrals || []).map(referral => {
+      const email = (referral.users as any)?.email || '';
+      const maskedEmail = maskEmail(email);
+
+      return {
+        id: referral.id,
+        referee_id: referral.referee_id,
+        email: maskedEmail,
+        created_at: referral.created_at
+      };
+    });
+
+    // 計算總頁數
+    const totalPages = Math.ceil((totalCount || 0) / limitNum);
+
+    console.log(`[Affiliates API] ✅ 成功獲取下線列表: ${maskedReferrals.length} 筆`);
+
+    return res.json({
+      success: true,
+      data: {
+        referrals: maskedReferrals,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: totalCount || 0,
+          totalPages
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('[Affiliates API] 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
+
+/**
+ * 信箱遮罩函數
+ * 只顯示前 3 個字符，中間用 *** 替代，保留 @ 及後續域名
+ * 例如：123456789@gmail.com -> 123***@gmail.com
+ */
+function maskEmail(email: string): string {
+  if (!email || !email.includes('@')) {
+    return email;
+  }
+
+  const [localPart, domain] = email.split('@');
+
+  if (localPart.length <= 3) {
+    // 如果本地部分少於等於 3 個字符，全部顯示
+    return email;
+  }
+
+  // 只顯示前 3 個字符，其餘用 *** 替代
+  const maskedLocalPart = localPart.substring(0, 3) + '***';
+
+  return `${maskedLocalPart}@${domain}`;
+}
+
 export default router;
 
