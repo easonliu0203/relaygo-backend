@@ -68,7 +68,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // 優惠碼相關欄位（如果客戶使用優惠碼）
       promoCode, // 優惠碼
       influencerId, // 網紅 ID
-      influencerCommission, // 網紅推廣獎金（公司支付給網紅的金額，不影響司機收入）
+      // influencerCommission 已移除，改為後端計算（訂單金額的 5%）
       originalPrice, // ✅ 新增：原始價格（未使用優惠碼前）
       discountAmount, // ✅ 新增：折扣金額
       finalPrice, // ✅ 新增：折扣後最終價格
@@ -226,12 +226,29 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     const depositAmount = Math.round(totalAmount * depositRate);
 
+    // ✅ 計算訂單促成費（5% 比例制）
+    // 情境 1：無優惠碼/無推薦關係 → 促成費 = 0
+    // 情境 2：有優惠碼→ 促成費 = 折後最終金額 × 5%
+    const COMMISSION_RATE = 0.05; // 5% 促成費比例
+    let calculatedInfluencerCommission = 0;
+
+    if (promoCode && influencerId) {
+      // 使用折扣後的最終金額作為計算基準
+      calculatedInfluencerCommission = Math.round(actualFinalPrice * COMMISSION_RATE);
+      console.log('[API] ✅ 計算訂單促成費 (5%):', {
+        finalPrice: actualFinalPrice,
+        commissionRate: COMMISSION_RATE,
+        commission: calculatedInfluencerCommission
+      });
+    }
+
     console.log('[API] 計算費用:', {
       basePrice,
       depositRate,
       totalAmount,
       depositAmount,
-      hasPromoCode: !!promoCode
+      hasPromoCode: !!promoCode,
+      influencerCommission: calculatedInfluencerCommission
     });
 
     // 6. 獲取客戶端 IP 地址（用於防範 Chargeback 爭議）
@@ -272,7 +289,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         // ✅ 新增：優惠碼相關欄位
         promo_code: promoCode || null, // 優惠碼
         influencer_id: influencerId || null, // 網紅 ID
-        influencer_commission: influencerCommission || 0, // 網紅推廣獎金快照（公司支付給網紅的金額，從公司總收入中撥出，不影響司機收入）
+        influencer_commission: calculatedInfluencerCommission, // ✅ 訂單促成費（後端計算：折後最終金額 × 5%）
         original_price: actualOriginalPrice, // 原始價格（未使用優惠碼前）
         discount_amount: actualDiscountAmount, // 折扣金額
         final_price: actualFinalPrice, // 折扣後最終價格
@@ -333,7 +350,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           discount_amount_applied: actualDiscountAmount, // ✅ 修正：使用實際的折扣金額
           discount_percentage_applied: 0, // 百分比折扣（可以從前端傳遞）
           final_price: actualFinalPrice, // ✅ 修正：使用實際的折扣後價格
-          commission_amount: influencerCommission || 0,
+          commission_amount: calculatedInfluencerCommission, // ✅ 訂單促成費（後端計算：5%）
         });
 
       if (usageError) {
