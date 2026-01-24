@@ -226,13 +226,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     const depositAmount = Math.round(totalAmount * depositRate);
 
-    // ✅ 計算訂單促成費（支援固定金額和百分比兩種模式）
+    // ✅ 計算訂單促成費（支援固定金額、百分比、或兩者同時啟用）
     // 情境 1：無優惠碼/無推薦關係 → 促成費 = 0
-    // 情境 2：有優惠碼 → 根據推廣者設定計算促成費
+    // 情境 2：僅固定金額 → 促成費 = commission_fixed
+    // 情境 3：僅百分比 → 促成費 = actualFinalPrice × commission_percent / 100
+    // 情境 4：兩者同時啟用 → 促成費 = commission_fixed + (actualFinalPrice × commission_percent / 100)
     let calculatedInfluencerCommission = 0;
     let commissionType: string | null = null;
     let commissionRate = 0;
     let commissionFixed = 0;
+    let fixedAmount = 0;
+    let percentAmount = 0;
 
     if (promoCode && influencerId) {
       // 查詢推廣者的佣金設定
@@ -243,21 +247,42 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         .single();
 
       if (influencerData) {
-        // 判斷使用哪種佣金類型
-        if (influencerData.is_commission_fixed_active) {
-          // 使用固定金額佣金
-          commissionType = 'fixed';
+        const isFixedActive = influencerData.is_commission_fixed_active === true;
+        const isPercentActive = influencerData.is_commission_percent_active === true;
+
+        // 計算固定金額佣金（如果啟用）
+        if (isFixedActive) {
           commissionFixed = influencerData.commission_fixed || 0;
-          calculatedInfluencerCommission = commissionFixed;
+          fixedAmount = commissionFixed;
+          calculatedInfluencerCommission += fixedAmount;
+        }
+
+        // 計算百分比佣金（如果啟用）
+        if (isPercentActive) {
+          commissionRate = influencerData.commission_percent || 0;
+          percentAmount = Math.round(actualFinalPrice * commissionRate / 100);
+          calculatedInfluencerCommission += percentAmount;
+        }
+
+        // 判斷佣金類型
+        if (isFixedActive && isPercentActive) {
+          commissionType = 'both';
+          console.log('[API] ✅ 使用固定金額 + 百分比佣金:', {
+            finalPrice: actualFinalPrice,
+            commissionFixed,
+            fixedAmount,
+            commissionRate,
+            percentAmount,
+            totalCommission: calculatedInfluencerCommission
+          });
+        } else if (isFixedActive) {
+          commissionType = 'fixed';
           console.log('[API] ✅ 使用固定金額佣金:', {
             commissionFixed,
             commission: calculatedInfluencerCommission
           });
-        } else if (influencerData.is_commission_percent_active) {
-          // 使用百分比佣金
+        } else if (isPercentActive) {
           commissionType = 'percent';
-          commissionRate = influencerData.commission_percent || 0;
-          calculatedInfluencerCommission = Math.round(actualFinalPrice * commissionRate / 100);
           console.log('[API] ✅ 使用百分比佣金:', {
             finalPrice: actualFinalPrice,
             commissionRate,
