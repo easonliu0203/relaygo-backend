@@ -214,13 +214,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     if (finalPrice && finalPrice > 0) {
       // 客戶使用了優惠碼
       actualOriginalPrice = originalPrice || totalAmount;
-      actualDiscountAmount = discountAmount || 0;
       actualFinalPrice = finalPrice;
+      // ✅ 自動計算折扣金額（支援固定金額和百分比折扣）
+      actualDiscountAmount = actualOriginalPrice - actualFinalPrice;
       totalAmount = finalPrice; // ✅ 使用折扣後的價格作為訂單總金額
       console.log('[API] ✅ 使用優惠碼折扣後價格:', {
         originalPrice: actualOriginalPrice,
         discountAmount: actualDiscountAmount,
-        finalPrice: actualFinalPrice
+        finalPrice: actualFinalPrice,
+        discountPercentage: ((actualDiscountAmount / actualOriginalPrice) * 100).toFixed(2) + '%'
       });
     }
 
