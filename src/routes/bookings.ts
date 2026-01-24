@@ -226,20 +226,47 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     const depositAmount = Math.round(totalAmount * depositRate);
 
-    // ✅ 計算訂單促成費（5% 比例制）
+    // ✅ 計算訂單促成費（支援固定金額和百分比兩種模式）
     // 情境 1：無優惠碼/無推薦關係 → 促成費 = 0
-    // 情境 2：有優惠碼→ 促成費 = 折後最終金額 × 5%
-    const COMMISSION_RATE = 0.05; // 5% 促成費比例
+    // 情境 2：有優惠碼 → 根據推廣者設定計算促成費
     let calculatedInfluencerCommission = 0;
+    let commissionType: string | null = null;
+    let commissionRate = 0;
+    let commissionFixed = 0;
 
     if (promoCode && influencerId) {
-      // 使用折扣後的最終金額作為計算基準
-      calculatedInfluencerCommission = Math.round(actualFinalPrice * COMMISSION_RATE);
-      console.log('[API] ✅ 計算訂單促成費 (5%):', {
-        finalPrice: actualFinalPrice,
-        commissionRate: COMMISSION_RATE,
-        commission: calculatedInfluencerCommission
-      });
+      // 查詢推廣者的佣金設定
+      const { data: influencerData } = await supabase
+        .from('influencers')
+        .select('commission_fixed, commission_percent, is_commission_fixed_active, is_commission_percent_active')
+        .eq('id', influencerId)
+        .single();
+
+      if (influencerData) {
+        // 判斷使用哪種佣金類型
+        if (influencerData.is_commission_fixed_active) {
+          // 使用固定金額佣金
+          commissionType = 'fixed';
+          commissionFixed = influencerData.commission_fixed || 0;
+          calculatedInfluencerCommission = commissionFixed;
+          console.log('[API] ✅ 使用固定金額佣金:', {
+            commissionFixed,
+            commission: calculatedInfluencerCommission
+          });
+        } else if (influencerData.is_commission_percent_active) {
+          // 使用百分比佣金
+          commissionType = 'percent';
+          commissionRate = influencerData.commission_percent || 0;
+          calculatedInfluencerCommission = Math.round(actualFinalPrice * commissionRate / 100);
+          console.log('[API] ✅ 使用百分比佣金:', {
+            finalPrice: actualFinalPrice,
+            commissionRate,
+            commission: calculatedInfluencerCommission
+          });
+        } else {
+          console.log('[API] ⚠️ 推廣者未啟用任何佣金類型');
+        }
+      }
     }
 
     console.log('[API] 計算費用:', {
@@ -350,7 +377,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           discount_amount_applied: actualDiscountAmount, // ✅ 修正：使用實際的折扣金額
           discount_percentage_applied: 0, // 百分比折扣（可以從前端傳遞）
           final_price: actualFinalPrice, // ✅ 修正：使用實際的折扣後價格
-          commission_amount: calculatedInfluencerCommission, // ✅ 訂單促成費（後端計算：5%）
+          commission_amount: calculatedInfluencerCommission, // ✅ 訂單促成費（支援固定金額和百分比）
+          commission_type: commissionType, // ✅ 新增：佣金類型（fixed 或 percent）
+          commission_rate: commissionRate, // ✅ 新增：百分比佣金率
+          commission_fixed_amount: commissionFixed, // ✅ 新增：固定金額佣金
+          order_amount: actualFinalPrice, // ✅ 訂單金額
         });
 
       if (usageError) {
@@ -398,17 +429,18 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             console.log('[API] ✅ 推薦關係建立成功');
 
             // ✅ 新增：立即更新 promo_code_usage 記錄，填寫佣金相關欄位
-            const commissionType = influencerData.is_commission_fixed_active ? 'fixed' :
+            const updateCommissionType = influencerData.is_commission_fixed_active ? 'fixed' :
                                   influencerData.is_commission_percent_active ? 'percent' : null;
-            const commissionRate = influencerData.is_commission_fixed_active ? influencerData.commission_fixed :
-                                  influencerData.is_commission_percent_active ? influencerData.commission_percent : 0;
+            const updateCommissionRate = influencerData.is_commission_percent_active ? influencerData.commission_percent : 0;
+            const updateCommissionFixed = influencerData.is_commission_fixed_active ? influencerData.commission_fixed : 0;
 
             const { error: updateError } = await supabase
               .from('promo_code_usage')
               .update({
                 referee_id: customer.id,
-                commission_type: commissionType,
-                commission_rate: commissionRate,
+                commission_type: updateCommissionType,
+                commission_rate: updateCommissionRate,
+                commission_fixed_amount: updateCommissionFixed,
                 order_amount: actualFinalPrice
               })
               .eq('booking_id', booking.id);
