@@ -1,5 +1,64 @@
 // 應用程式常數定義
 
+// 服務類型定義
+export const SERVICE_TYPES = {
+  CHARTER: 'charter',           // 包車旅遊
+  INSTANT_RIDE: 'instant_ride'  // 即時派車
+} as const;
+
+export type ServiceType = typeof SERVICE_TYPES[keyof typeof SERVICE_TYPES];
+
+// 支援的國家 (ISO 3166-1 alpha-2)
+export const SUPPORTED_COUNTRIES = {
+  TW: { code: 'TW', name: '台灣', name_en: 'Taiwan' },
+  JP: { code: 'JP', name: '日本', name_en: 'Japan' },
+  KR: { code: 'KR', name: '韓國', name_en: 'South Korea' },
+  VN: { code: 'VN', name: '越南', name_en: 'Vietnam' },
+  TH: { code: 'TH', name: '泰國', name_en: 'Thailand' },
+  MY: { code: 'MY', name: '馬來西亞', name_en: 'Malaysia' },
+  ID: { code: 'ID', name: '印尼', name_en: 'Indonesia' }
+} as const;
+
+export type CountryCode = keyof typeof SUPPORTED_COUNTRIES;
+
+// 各國家的地區/城市列表
+export const REGIONS_BY_COUNTRY = {
+  TW: [
+    { code: 'TPE', name: '台北市', name_en: 'Taipei City' },
+    { code: 'NWT', name: '新北市', name_en: 'New Taipei City' },
+    { code: 'TAO', name: '桃園市', name_en: 'Taoyuan City' },
+    { code: 'TXG', name: '台中市', name_en: 'Taichung City' },
+    { code: 'TNN', name: '台南市', name_en: 'Tainan City' },
+    { code: 'KHH', name: '高雄市', name_en: 'Kaohsiung City' }
+  ],
+  JP: [
+    { code: 'TYO', name: '東京', name_en: 'Tokyo' },
+    { code: 'OSA', name: '大阪', name_en: 'Osaka' },
+    { code: 'KYO', name: '京都', name_en: 'Kyoto' },
+    { code: 'FUK', name: '福岡', name_en: 'Fukuoka' }
+  ],
+  KR: [
+    { code: 'SEL', name: '首爾', name_en: 'Seoul' },
+    { code: 'PUS', name: '釜山', name_en: 'Busan' },
+    { code: 'ICN', name: '仁川', name_en: 'Incheon' }
+  ],
+  VN: [
+    { code: 'HAN', name: '河內', name_en: 'Hanoi' },
+    { code: 'SGN', name: '胡志明市', name_en: 'Ho Chi Minh City' }
+  ],
+  TH: [
+    { code: 'BKK', name: '曼谷', name_en: 'Bangkok' },
+    { code: 'CNX', name: '清邁', name_en: 'Chiang Mai' }
+  ],
+  MY: [
+    { code: 'KUL', name: '吉隆坡', name_en: 'Kuala Lumpur' }
+  ],
+  ID: [
+    { code: 'JKT', name: '雅加達', name_en: 'Jakarta' },
+    { code: 'DPS', name: '峇里島', name_en: 'Bali' }
+  ]
+} as const;
+
 // 車型定義
 export const VEHICLE_TYPES = {
   A: {
