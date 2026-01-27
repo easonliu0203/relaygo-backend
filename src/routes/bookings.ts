@@ -76,6 +76,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       taxId, // 統一編號（8 位數字）
       // ✅ 新增：取消政策同意狀態
       policyAgreed, // 客戶是否已同意取消政策
+      // ✅ 新增：多維度分潤配置欄位
+      serviceType = 'charter', // 服務類型: 'charter' (包車旅遊) | 'instant_ride' (即時派車)
+      country = 'TW', // 國家代碼 (ISO 3166-1 alpha-2)
     } = req.body;
 
     console.log('[API] 創建訂單:', {
@@ -85,6 +88,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       passengerCount,
       tourPackageId,
       tourPackageName,
+      serviceType,
+      country,
     });
 
     // 1. 驗證必填欄位
@@ -353,6 +358,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         policy_agreed: policyAgreed === true, // ✅ 新增：取消政策同意狀態
         policy_agreed_at: policyAgreed === true ? new Date().toISOString() : null, // ✅ 新增：同意時間戳記
         client_ip: clientIp, // ✅ 新增：客戶端 IP 地址（用於防範 Chargeback 爭議）
+        // ✅ 新增：多維度分潤配置欄位
+        service_type: serviceType, // 服務類型: 'charter' | 'instant_ride'
+        country: country, // 國家代碼: 'TW', 'JP', 'KR', etc.
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
