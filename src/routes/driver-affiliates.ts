@@ -204,7 +204,7 @@ router.get('/check-promo-code/:code', async (req: Request, res: Response) => {
     // 獲取推薦人名稱
     const { data: referrer } = await supabase
       .from('users')
-      .select('id, display_name, email')
+      .select('id, email')
       .eq('id', affiliate.driver_id)
       .single();
 
@@ -214,7 +214,7 @@ router.get('/check-promo-code/:code', async (req: Request, res: Response) => {
       message: '推薦碼有效',
       referrer: {
         id: affiliate.driver_id,
-        name: referrer?.display_name || referrer?.email || '司機推廣人'
+        name: referrer?.email || '司機推廣人'
       }
     });
 
@@ -473,7 +473,7 @@ router.get('/my-referrer', async (req: Request, res: Response) => {
     // 獲取推薦人名稱
     const { data: referrer } = await supabase
       .from('users')
-      .select('id, display_name, email')
+      .select('id, email')
       .eq('id', referral.referrer_driver_id)
       .single();
 
@@ -481,7 +481,7 @@ router.get('/my-referrer', async (req: Request, res: Response) => {
       success: true,
       data: {
         referrer_id: referral.referrer_driver_id,
-        referrer_name: referrer?.display_name || referrer?.email || '司機推廣人',
+        referrer_name: referrer?.email || '司機推廣人',
         promo_code: referral.promo_code,
         created_at: referral.created_at
       }
@@ -514,7 +514,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     let query = supabase
       .from('driver_affiliates')
-      .select('*, users!driver_affiliates_driver_id_fkey(display_name, email)')
+      .select('*, users!driver_affiliates_driver_id_fkey(email)')
       .order('created_at', { ascending: false });
 
     // 篩選狀態
@@ -583,14 +583,14 @@ router.get('/:id', async (req: Request, res: Response) => {
     // 獲取司機資訊
     const { data: driver } = await supabase
       .from('users')
-      .select('id, display_name, email')
+      .select('id, email')
       .eq('id', affiliate.driver_id)
       .single();
 
     // 獲取推薦的司機列表
     const { data: referrals } = await supabase
       .from('driver_referrals')
-      .select('*, users!driver_referrals_referee_driver_id_fkey(display_name, email)')
+      .select('*, users!driver_referrals_referee_driver_id_fkey(email)')
       .eq('referrer_driver_id', affiliate.driver_id);
 
     return res.json({
