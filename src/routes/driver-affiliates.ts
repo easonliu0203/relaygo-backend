@@ -709,11 +709,13 @@ router.put('/:id', async (req: Request, res: Response) => {
       commission_fixed,
       commission_percent_enabled,
       commission_percent,
+      commission_percent_charter,
+      commission_percent_instant_ride,
       is_active,
       affiliate_status
     } = req.body;
 
-    console.log(`[Driver Affiliates API] 更新司機推廣人: ${id}`);
+    console.log(`[Driver Affiliates API] 更新司機推廣人: ${id}`, req.body);
 
     // 檢查推廣人是否存在
     const { data: existingAffiliate, error: fetchError } = await supabase
@@ -747,6 +749,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (commission_percent_enabled !== undefined) {
       updateData.commission_percent_enabled = commission_percent_enabled;
     }
+    // 統一百分比（向後兼容）
     if (commission_percent !== undefined) {
       if (commission_percent < 0 || commission_percent > 100) {
         return res.status(400).json({
@@ -755,6 +758,26 @@ router.put('/:id', async (req: Request, res: Response) => {
         });
       }
       updateData.commission_percent = commission_percent;
+    }
+    // 包車旅遊分潤百分比
+    if (commission_percent_charter !== undefined) {
+      if (commission_percent_charter !== null && (commission_percent_charter < 0 || commission_percent_charter > 100)) {
+        return res.status(400).json({
+          success: false,
+          error: '包車旅遊分潤百分比必須在 0-100 之間'
+        });
+      }
+      updateData.commission_percent_charter = commission_percent_charter;
+    }
+    // 即時派車分潤百分比
+    if (commission_percent_instant_ride !== undefined) {
+      if (commission_percent_instant_ride !== null && (commission_percent_instant_ride < 0 || commission_percent_instant_ride > 100)) {
+        return res.status(400).json({
+          success: false,
+          error: '即時派車分潤百分比必須在 0-100 之間'
+        });
+      }
+      updateData.commission_percent_instant_ride = commission_percent_instant_ride;
     }
     if (is_active !== undefined) {
       updateData.is_active = is_active;
@@ -788,7 +811,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       throw updateError;
     }
 
-    console.log(`[Driver Affiliates API] ✅ 成功更新司機推廣人: ${id}`);
+    console.log(`[Driver Affiliates API] ✅ 成功更新司機推廣人: ${id}`, updateData);
 
     return res.json({
       success: true,
