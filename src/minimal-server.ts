@@ -17,6 +17,7 @@ import promoCodesRoutes from './routes/promoCodes'; // ✅ 新增：添加 promo
 import signaturesRoutes from './routes/signatures'; // ✅ 新增：添加 signatures 路由（2026-01-17）
 import affiliatesRoutes from './routes/affiliates'; // ✅ 新增：添加客戶推廣人路由（2026-01-18）
 import adminRoutes from './routes/admin'; // ✅ 新增：添加 admin 路由（2026-01-24）
+import driverAffiliatesRoutes from './routes/driver-affiliates'; // ✅ 新增：添加司機推廣人路由（2026-01-28）
 // import translationRoutes from './routes/translation'; // TODO: 翻譯路由檔案不存在，暫時註解
 import { initializeFirebase } from './config/firebase';
 import { initializePaymentProviders } from './services/payment';
@@ -111,6 +112,7 @@ app.use('/api/promo-codes', promoCodesRoutes); // ✅ 新增：註冊 promo code
 app.use('/api/signatures', signaturesRoutes); // ✅ 新增：註冊 signatures 路由（2026-01-17）
 app.use('/api/affiliates', affiliatesRoutes); // ✅ 新增：註冊客戶推廣人路由（2026-01-18）
 app.use('/api/admin', adminRoutes); // ✅ 新增：註冊 admin 路由（2026-01-24）
+app.use('/api/driver-affiliates', driverAffiliatesRoutes); // ✅ 新增：註冊司機推廣人路由（2026-01-28）
 app.use('/api', ratingsRoutes); // 保留舊的 ratings 路由以向後兼容
 // app.use('/api/translation', translationRoutes); // TODO: 翻譯路由檔案不存在，暫時註解
 
