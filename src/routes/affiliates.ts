@@ -790,6 +790,252 @@ router.get('/my-referrals', async (req: Request, res: Response) => {
 });
 
 /**
+ * @route GET /api/affiliates/referral-orders/:refereeId
+ * @desc 獲取下線的消費記錄（已完成訂單）
+ * @access Customer (需要認證 - 僅限推廣人查看自己的下線)
+ * @param refereeId - 下線的 user ID (UUID)
+ * @query user_id - 推廣人的 Firebase UID
+ * @query page - 頁碼（從 1 開始，默認 1）
+ * @query limit - 每頁數量（默認 10，最大 50）
+ */
+router.get('/referral-orders/:refereeId', async (req: Request, res: Response) => {
+  try {
+    const { refereeId } = req.params;
+    const { user_id, page = '1', limit = '10' } = req.query;
+
+    console.log(`[Affiliates API] 查詢下線消費記錄: refereeId=${refereeId}, user_id=${user_id}`);
+
+    // 驗證必填欄位
+    if (!user_id || !refereeId) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少必填欄位',
+        details: '用戶 ID 和下線 ID 為必填'
+      });
+    }
+
+    // 驗證分頁參數
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = Math.min(parseInt(limit as string, 10), 50);
+
+    if (isNaN(pageNum) || pageNum < 1) {
+      return res.status(400).json({
+        success: false,
+        error: '無效的頁碼',
+        details: '頁碼必須為大於 0 的整數'
+      });
+    }
+
+    if (isNaN(limitNum) || limitNum < 1) {
+      return res.status(400).json({
+        success: false,
+        error: '無效的每頁數量',
+        details: '每頁數量必須為大於 0 的整數'
+      });
+    }
+
+    // 查找當前用戶
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('firebase_uid', user_id)
+      .single();
+
+    if (userError || !user) {
+      console.error('[Affiliates API] 用戶查詢失敗:', userError);
+      return res.status(404).json({
+        success: false,
+        error: '用戶不存在',
+        details: userError?.message
+      });
+    }
+
+    // 查找推廣人資訊
+    const { data: influencer, error: influencerError } = await supabase
+      .from('influencers')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (influencerError || !influencer) {
+      console.error('[Affiliates API] 推廣人查詢失敗:', influencerError);
+      return res.status(404).json({
+        success: false,
+        error: '您不是推廣人',
+        details: influencerError?.message
+      });
+    }
+
+    // 驗證下線是否屬於此推廣人
+    const { data: referral, error: referralError } = await supabase
+      .from('referrals')
+      .select(`
+        id,
+        referee_id,
+        created_at,
+        users!referrals_referee_id_fkey (
+          email
+        )
+      `)
+      .eq('influencer_id', influencer.id)
+      .eq('referee_id', refereeId)
+      .single();
+
+    if (referralError || !referral) {
+      console.error('[Affiliates API] 下線驗證失敗:', referralError);
+      return res.status(403).json({
+        success: false,
+        error: '您沒有權限查看此下線的消費記錄',
+        details: '此用戶不是您的下線'
+      });
+    }
+
+    // 計算分頁偏移量
+    const offset = (pageNum - 1) * limitNum;
+
+    // 查詢下線的已完成訂單總數
+    const { count: totalCount, error: countError } = await supabase
+      .from('bookings')
+      .select('*', { count: 'exact', head: true })
+      .eq('customer_id', refereeId)
+      .eq('influencer_id', influencer.id)
+      .eq('status', 'completed');
+
+    if (countError) {
+      console.error('[Affiliates API] 查詢訂單總數失敗:', countError);
+      return res.status(500).json({
+        success: false,
+        error: '查詢訂單總數失敗',
+        details: countError.message
+      });
+    }
+
+    // 查詢下線的已完成訂單（分頁）
+    // 只查詢需要顯示的欄位，保護隱私
+    const { data: orders, error: ordersError } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        completed_at,
+        total_amount,
+        final_price,
+        influencer_commission,
+        influencer_commission_type,
+        influencer_commission_rate,
+        influencer_commission_fixed,
+        pickup_location,
+        destination
+      `)
+      .eq('customer_id', refereeId)
+      .eq('influencer_id', influencer.id)
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false })
+      .range(offset, offset + limitNum - 1);
+
+    if (ordersError) {
+      console.error('[Affiliates API] 查詢訂單失敗:', ordersError);
+      return res.status(500).json({
+        success: false,
+        error: '查詢訂單失敗',
+        details: ordersError.message
+      });
+    }
+
+    // 計算總分潤金額
+    const { data: totalCommissionData, error: totalCommissionError } = await supabase
+      .from('bookings')
+      .select('influencer_commission')
+      .eq('customer_id', refereeId)
+      .eq('influencer_id', influencer.id)
+      .eq('status', 'completed');
+
+    let totalCommission = 0;
+    if (!totalCommissionError && totalCommissionData) {
+      totalCommission = totalCommissionData.reduce((sum, order) => {
+        return sum + (parseFloat(order.influencer_commission) || 0);
+      }, 0);
+    }
+
+    // 處理訂單資料，保護隱私
+    const processedOrders = (orders || []).map(order => {
+      // 從地址中提取城市/區域（只顯示到城市層級）
+      const pickupRegion = extractRegion(order.pickup_location);
+      const destinationRegion = extractRegion(order.destination);
+
+      // 使用 final_price（折扣後價格）作為顯示金額，若無則使用 total_amount
+      const orderAmount = order.final_price || order.total_amount || 0;
+
+      return {
+        completed_at: order.completed_at,
+        order_amount: parseFloat(orderAmount) || 0,
+        commission_amount: parseFloat(order.influencer_commission) || 0,
+        commission_type: order.influencer_commission_type || 'percent',
+        commission_rate: parseFloat(order.influencer_commission_rate) || 0,
+        commission_fixed: parseFloat(order.influencer_commission_fixed) || 0,
+        pickup_region: pickupRegion,
+        destination_region: destinationRegion
+      };
+    });
+
+    // 計算總頁數
+    const totalPages = Math.ceil((totalCount || 0) / limitNum);
+
+    // 取得下線的遮罩信箱
+    const refereeEmail = (referral.users as any)?.email || '';
+    const maskedEmail = maskEmail(refereeEmail);
+
+    console.log(`[Affiliates API] ✅ 成功查詢下線消費記錄: ${processedOrders.length} 筆`);
+
+    return res.json({
+      success: true,
+      data: {
+        referral: {
+          referee_id: refereeId,
+          email: maskedEmail,
+          total_orders: totalCount || 0,
+          total_commission: totalCommission
+        },
+        orders: processedOrders,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: totalCount || 0,
+          totalPages
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('[Affiliates API] 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
+
+/**
+ * 從地址中提取區域（城市）
+ * 例如：「台北市中山區南京東路三段123號」 -> 「台北市」
+ * 例如：「新北市板橋區文化路123號」 -> 「新北市」
+ */
+function extractRegion(address: string | null | undefined): string {
+  if (!address) {
+    return '';
+  }
+
+  // 嘗試匹配台灣縣市
+  const cityMatch = address.match(/([\u4e00-\u9fa5]{2,3}(市|縣))/);
+  if (cityMatch) {
+    return cityMatch[1];
+  }
+
+  // 如果無法匹配，返回空字串
+  return '';
+}
+
+/**
  * 信箱遮罩函數
  * 只顯示前 3 個字符，中間用 *** 替代，保留 @ 及後續域名
  * 例如：123456789@gmail.com -> 123***@gmail.com
