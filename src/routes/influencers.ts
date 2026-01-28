@@ -272,7 +272,11 @@ router.put('/:id', async (req: Request, res: Response) => {
       commission_percent,
       is_commission_fixed_active,
       is_commission_percent_active,
-      is_active
+      is_active,
+      // ✅ 新增：服務類型維度分潤欄位
+      commission_type,                   // 'unified' 或 'by_service_type'
+      commission_percent_charter,        // 包車旅遊分潤百分比
+      commission_percent_instant_ride    // 即時派車分潤百分比
     } = req.body;
 
     // 檢查推廣人是否存在
@@ -300,6 +304,37 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (is_commission_fixed_active !== undefined) updateData.is_commission_fixed_active = is_commission_fixed_active;
     if (is_commission_percent_active !== undefined) updateData.is_commission_percent_active = is_commission_percent_active;
     if (is_active !== undefined) updateData.is_active = is_active;
+    // ✅ 新增：服務類型維度分潤欄位
+    if (commission_type !== undefined) {
+      // 驗證 commission_type 值
+      if (!['unified', 'by_service_type'].includes(commission_type)) {
+        return res.status(400).json({
+          success: false,
+          error: 'commission_type 必須是 "unified" 或 "by_service_type"'
+        });
+      }
+      updateData.commission_type = commission_type;
+    }
+    if (commission_percent_charter !== undefined) {
+      // 驗證百分比範圍
+      if (commission_percent_charter < 0 || commission_percent_charter > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'commission_percent_charter 必須在 0-100 之間'
+        });
+      }
+      updateData.commission_percent_charter = commission_percent_charter;
+    }
+    if (commission_percent_instant_ride !== undefined) {
+      // 驗證百分比範圍
+      if (commission_percent_instant_ride < 0 || commission_percent_instant_ride > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'commission_percent_instant_ride 必須在 0-100 之間'
+        });
+      }
+      updateData.commission_percent_instant_ride = commission_percent_instant_ride;
+    }
 
     // 更新推廣人資料
     const { data, error } = await supabase
