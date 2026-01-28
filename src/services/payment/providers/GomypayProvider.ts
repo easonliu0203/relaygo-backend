@@ -51,7 +51,9 @@ export class GomypayProvider implements PaymentProvider {
       console.log(`[GoMyPay] Callback URL: ${this.config.callbackUrl}`);
 
       // 生成交易驗證密碼（MD5）
-      const chkValue = this.generateCheckValue(request.orderId, request.amount);
+      // Send_Type = '0' 表示信用卡支付
+      const sendType = '0';
+      const chkValue = this.generateCheckValue(request.orderId, request.amount, sendType);
 
       // 構建支付 URL（使用系統預設付款頁面）
       const paymentUrl = this.buildPaymentUrl({
@@ -200,12 +202,19 @@ export class GomypayProvider implements PaymentProvider {
 
   /**
    * 生成交易驗證密碼（MD5）
-   * 
-   * 規則：MD5(商店代號 + 交易單號 + 交易金額 + 交易密碼)
+   *
+   * 規則：MD5(商店代號 + 交易單號 + 交易金額 + Send_Type + 交易密碼)
+   *
+   * 注意：根據 GOMYPAY 官方文件，ChkValue 計算必須包含 Send_Type 參數
+   * Send_Type = '0' 表示信用卡支付
    */
-  private generateCheckValue(orderNo: string, amount: number): string {
-    const str = `${this.config.merchantId}${orderNo}${amount}${this.config.apiKey}`;
-    return crypto.createHash('md5').update(str).digest('hex').toUpperCase();
+  private generateCheckValue(orderNo: string, amount: number, sendType: string = '0'): string {
+    const str = `${this.config.merchantId}${orderNo}${amount}${sendType}${this.config.apiKey}`;
+    console.log(`[GoMyPay] ChkValue 計算: merchantId=${this.config.merchantId}, orderNo=${orderNo}, amount=${amount}, sendType=${sendType}`);
+    console.log(`[GoMyPay] ChkValue 原始字串: ${str}`);
+    const chkValue = crypto.createHash('md5').update(str).digest('hex').toUpperCase();
+    console.log(`[GoMyPay] ChkValue 結果: ${chkValue}`);
+    return chkValue;
   }
 
   /**
@@ -220,7 +229,9 @@ export class GomypayProvider implements PaymentProvider {
       }
 
       // 驗證 MD5 簽名
-      const expectedCheckValue = this.generateCheckValue(data.e_orderno, parseFloat(data.e_money));
+      // Send_Type 可能在回調數據中，如果沒有則使用預設值 '0'
+      const sendType = data.Send_Type || data.send_type || '0';
+      const expectedCheckValue = this.generateCheckValue(data.e_orderno, parseFloat(data.e_money), sendType);
       const actualCheckValue = data.str_check;
 
       if (expectedCheckValue !== actualCheckValue) {
