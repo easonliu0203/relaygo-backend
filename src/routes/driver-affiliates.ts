@@ -143,7 +143,15 @@ router.post('/apply', async (req: Request, res: Response) => {
       message: '司機推廣人申請已提交，請等待管理員審核'
     });
 
-
+  } catch (error) {
+    console.error('[Driver Affiliates API] 申請推廣人錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
 
 /**
  * @route GET /api/driver-affiliates/check-promo-code/:code
