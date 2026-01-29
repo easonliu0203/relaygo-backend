@@ -54,8 +54,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       pickupLatitude,
       pickupLongitude,
       dropoffAddress,
-      // dropoffLatitude,
-      // dropoffLongitude,
+      dropoffLatitude,  // ✅ 啟用：下車地點緯度
+      dropoffLongitude, // ✅ 啟用：下車地點經度
       bookingTime,
       passengerCount,
       luggageCount, // ✅ 修復：取消註解，從請求中獲取行李數量
@@ -335,6 +335,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         pickup_latitude: pickupLatitude,
         pickup_longitude: pickupLongitude,
         destination: dropoffAddress || '',
+        dropoff_latitude: dropoffLatitude || null,   // ✅ 新增：下車地點緯度
+        dropoff_longitude: dropoffLongitude || null, // ✅ 新增：下車地點經度
         passenger_count: passengerCount || 1, // ✅ 新增：乘客數量（預設為 1）
         luggage_count: luggageCount || 0, // ✅ 新增：行李數量（預設為 0）
         special_requirements: notes || '',
