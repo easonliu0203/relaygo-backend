@@ -184,5 +184,232 @@ router.post('/ensure', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/drivers/submit-for-review
+ * 提交文件審核申請
+ *
+ * 功能：
+ * - 驗證司機是否已上傳所有必要文件
+ * - 更新 drivers 表的 review_status 為 'pending_review'
+ * - 記錄提交時間
+ *
+ * Request Body:
+ * - firebaseUid: Firebase 用戶 UID
+ *
+ * Response:
+ * - success: boolean
+ * - message: 成功或錯誤訊息
+ * - missingDocuments: 缺少的文件列表（如果有）
+ */
+router.post('/submit-for-review', async (req: Request, res: Response) => {
+  try {
+    const { firebaseUid } = req.body;
+
+    if (!firebaseUid) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少 firebaseUid 參數',
+      });
+    }
+
+    console.log('📥 [DriverService] 提交文件審核:', { firebaseUid });
+
+    // 1. 根據 Firebase UID 查找 Supabase user_id
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('firebase_uid', firebaseUid)
+      .maybeSingle();
+
+    if (userError || !user) {
+      console.error('❌ [DriverService] 用戶不存在:', userError);
+      return res.status(404).json({
+        success: false,
+        error: '用戶不存在',
+      });
+    }
+
+    const userId = user.id;
+
+    // 2. 檢查 drivers 表中是否有記錄
+    const { data: driver, error: driverError } = await supabaseAdmin
+      .from('drivers')
+      .select('id, review_status')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (driverError || !driver) {
+      console.error('❌ [DriverService] 司機記錄不存在:', driverError);
+      return res.status(404).json({
+        success: false,
+        error: '請先完成車輛管理頁面的基本設定',
+      });
+    }
+
+    // 3. 檢查是否已經在審核中或已通過
+    if (driver.review_status === 'pending_review') {
+      return res.status(400).json({
+        success: false,
+        error: '您的申請已在審核中，請耐心等待',
+      });
+    }
+
+    if (driver.review_status === 'approved') {
+      return res.status(400).json({
+        success: false,
+        error: '您的資格已通過審核',
+      });
+    }
+
+    // 4. 檢查必要文件是否已上傳
+    // 必要文件：自拍照、身分證正反面、駕照、行照
+    const requiredDocuments = [
+      'selfie_photo',
+      'id_card_front',
+      'id_card_back',
+      'drivers_license',
+      'vehicle_registration',
+    ];
+
+    const { data: documents, error: docError } = await supabaseAdmin
+      .from('driver_documents')
+      .select('type')
+      .eq('driver_id', firebaseUid);
+
+    if (docError) {
+      console.error('❌ [DriverService] 查詢文件失敗:', docError);
+      return res.status(500).json({
+        success: false,
+        error: '查詢文件失敗',
+      });
+    }
+
+    const uploadedTypes = documents?.map((d: any) => d.type) || [];
+    const missingDocuments = requiredDocuments.filter(
+      (type) => !uploadedTypes.includes(type)
+    );
+
+    // 文件類型中文名稱對照
+    const documentNames: Record<string, string> = {
+      selfie_photo: '自拍照片',
+      id_card_front: '身分證（正面）',
+      id_card_back: '身分證（背面）',
+      drivers_license: '駕照',
+      vehicle_registration: '行照',
+    };
+
+    if (missingDocuments.length > 0) {
+      const missingNames = missingDocuments.map((type) => documentNames[type] || type);
+      console.log('⚠️ [DriverService] 缺少必要文件:', missingNames);
+      return res.status(400).json({
+        success: false,
+        error: '請先上傳所有必要文件',
+        missingDocuments: missingNames,
+      });
+    }
+
+    // 5. 更新 review_status 為 pending_review
+    const { error: updateError } = await supabaseAdmin
+      .from('drivers')
+      .update({
+        review_status: 'pending_review',
+        review_submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('❌ [DriverService] 更新審核狀態失敗:', updateError);
+      return res.status(500).json({
+        success: false,
+        error: '提交審核失敗，請稍後再試',
+      });
+    }
+
+    console.log('✅ [DriverService] 文件審核申請已提交:', { firebaseUid, userId });
+
+    return res.json({
+      success: true,
+      message: '已提交審核，請等待工作人員審核',
+    });
+  } catch (error: any) {
+    console.error('❌ [DriverService] API 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/drivers/review-status
+ * 獲取司機的審核狀態
+ *
+ * Query Parameters:
+ * - firebaseUid: Firebase 用戶 UID
+ *
+ * Response:
+ * - success: boolean
+ * - reviewStatus: 審核狀態
+ * - reviewNotes: 審核備註（如果有）
+ */
+router.get('/review-status', async (req: Request, res: Response) => {
+  try {
+    const firebaseUid = req.query.firebaseUid as string;
+
+    if (!firebaseUid) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少 firebaseUid 參數',
+      });
+    }
+
+    // 1. 根據 Firebase UID 查找 Supabase user_id
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('firebase_uid', firebaseUid)
+      .maybeSingle();
+
+    if (userError || !user) {
+      return res.status(404).json({
+        success: false,
+        error: '用戶不存在',
+      });
+    }
+
+    // 2. 獲取司機的審核狀態
+    const { data: driver, error: driverError } = await supabaseAdmin
+      .from('drivers')
+      .select('review_status, review_notes, review_submitted_at, review_completed_at')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (driverError || !driver) {
+      return res.json({
+        success: true,
+        reviewStatus: 'not_submitted',
+        reviewNotes: null,
+      });
+    }
+
+    return res.json({
+      success: true,
+      reviewStatus: driver.review_status || 'not_submitted',
+      reviewNotes: driver.review_notes,
+      reviewSubmittedAt: driver.review_submitted_at,
+      reviewCompletedAt: driver.review_completed_at,
+    });
+  } catch (error: any) {
+    console.error('❌ [DriverService] API 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message,
+    });
+  }
+});
+
 export default router;
 
