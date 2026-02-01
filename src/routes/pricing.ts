@@ -518,5 +518,326 @@ router.delete('/admin/vehicle-pricing/:id', requireAdmin, async (req: Request, r
   }
 });
 
+// ============================================
+// 即時派車車型選項 API
+// ============================================
+
+/**
+ * 台灣地區邊界定義（用於判定上車地點所屬地區）
+ */
+const TAIWAN_REGIONS: Record<string, { name: string; bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number } }> = {
+  'taipei': {
+    name: '北北基',
+    bounds: { minLat: 24.7, maxLat: 25.3, minLng: 121.3, maxLng: 122.0 }
+  },
+  'taoyuan': {
+    name: '桃園',
+    bounds: { minLat: 24.7, maxLat: 25.1, minLng: 120.9, maxLng: 121.4 }
+  },
+  'taichung': {
+    name: '台中',
+    bounds: { minLat: 24.0, maxLat: 24.5, minLng: 120.4, maxLng: 121.0 }
+  },
+  'kaohsiung': {
+    name: '高雄',
+    bounds: { minLat: 22.4, maxLat: 23.0, minLng: 120.1, maxLng: 120.8 }
+  }
+};
+
+/**
+ * 根據經緯度判定所屬地區
+ */
+function determineRegion(lat: number, lng: number): string {
+  for (const [regionCode, region] of Object.entries(TAIWAN_REGIONS)) {
+    const { bounds } = region;
+    if (lat >= bounds.minLat && lat <= bounds.maxLat &&
+        lng >= bounds.minLng && lng <= bounds.maxLng) {
+      return regionCode;
+    }
+  }
+  // 預設返回 taipei（北北基）
+  return 'taipei';
+}
+
+/**
+ * 計算即時派車費用
+ */
+function calculateInstantRideFare(
+  distanceKm: number,
+  durationMinutes: number,
+  vehicleType: {
+    base_fare: number;
+    base_distance_km: number;
+    fare_per_km: number;
+    fare_per_minute: number;
+    night_surcharge_rate: number;
+    night_start_hour: number;
+    night_end_hour: number;
+    surge_multiplier: number;
+    min_fare: number;
+  },
+  pickupTime?: Date
+): { estimatedPrice: number; isNightTime: boolean } {
+  const now = pickupTime || new Date();
+  const hour = now.getHours();
+
+  // 判斷是否為夜間時段
+  const isNightTime = hour >= vehicleType.night_start_hour || hour < vehicleType.night_end_hour;
+
+  // 計算基本費用
+  let fare = vehicleType.base_fare;
+
+  // 計算超過起跳距離的里程費
+  if (distanceKm > vehicleType.base_distance_km) {
+    const extraDistance = distanceKm - vehicleType.base_distance_km;
+    fare += extraDistance * vehicleType.fare_per_km;
+  }
+
+  // 計算延滯計時費（如果有）
+  if (vehicleType.fare_per_minute > 0 && durationMinutes > 0) {
+    // 假設平均時速 30km/h，超過預期時間的部分計算延滯費
+    const expectedMinutes = (distanceKm / 30) * 60;
+    if (durationMinutes > expectedMinutes) {
+      const delayMinutes = durationMinutes - expectedMinutes;
+      fare += delayMinutes * vehicleType.fare_per_minute;
+    }
+  }
+
+  // 套用夜間加成
+  if (isNightTime) {
+    fare *= (1 + vehicleType.night_surcharge_rate);
+  }
+
+  // 套用尖峰時段倍數
+  if (vehicleType.surge_multiplier > 1) {
+    fare *= vehicleType.surge_multiplier;
+  }
+
+  // 確保不低於最低消費
+  fare = Math.max(fare, vehicleType.min_fare);
+
+  // 四捨五入到整數
+  return {
+    estimatedPrice: Math.round(fare),
+    isNightTime
+  };
+}
+
+/**
+ * Icon 名稱到顏色的映射（用於前端顯示）
+ */
+const ICON_COLORS: Record<string, string> = {
+  'directions_car': '#2196F3',
+  'local_taxi': '#FFC107',
+  'eco': '#4CAF50',
+  'airport_shuttle': '#424242',
+  'electric_car': '#00BCD4',
+};
+
+interface InstantRideVehicleType {
+  id: string;
+  vehicle_type_code: string;
+  display_name_i18n: Record<string, string>;
+  description_i18n: Record<string, string>;
+  seat_capacity: number;
+  icon_name: string;
+  icon_color: string;
+  country: string;
+  region: string;
+  base_fare: number;
+  base_distance_km: number;
+  fare_per_km: number;
+  fare_per_minute: number;
+  night_surcharge_rate: number;
+  night_start_hour: number;
+  night_end_hour: number;
+  surge_multiplier: number;
+  min_fare: number;
+  is_active: boolean;
+  display_order: number;
+}
+
+/**
+ * @route GET /api/pricing/instant-ride-options
+ * @desc 獲取即時派車車型選項（根據上車地點判定地區，計算各車型預估價格）
+ * @query pickup_lat - 上車地點緯度（必填）
+ * @query pickup_lng - 上車地點經度（必填）
+ * @query dropoff_lat - 下車地點緯度（可選，用於計算預估價格）
+ * @query dropoff_lng - 下車地點經度（可選）
+ * @query distance_km - 行駛距離（公里，可選，如果提供則直接使用）
+ * @query duration_minutes - 行駛時間（分鐘，可選）
+ * @query lang - 語言代碼（zh-TW, en, ja, ko）
+ * @access Public
+ */
+router.get('/instant-ride-options', async (req: Request, res: Response) => {
+  try {
+    const {
+      pickup_lat,
+      pickup_lng,
+      distance_km,
+      duration_minutes,
+      lang = 'zh-TW'
+    } = req.query;
+
+    // 驗證必填參數
+    if (!pickup_lat || !pickup_lng) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少必填參數',
+        message: '請提供 pickup_lat 和 pickup_lng'
+      });
+    }
+
+    const lat = parseFloat(pickup_lat as string);
+    const lng = parseFloat(pickup_lng as string);
+    const distanceKm = distance_km ? parseFloat(distance_km as string) : null;
+    const durationMinutes = duration_minutes ? parseFloat(duration_minutes as string) : null;
+    const language = lang as string;
+
+    console.log(`[Instant Ride API] 獲取車型選項 (lat: ${lat}, lng: ${lng}, distance: ${distanceKm}km, lang: ${language})`);
+
+    // 判定所屬地區
+    const region = determineRegion(lat, lng);
+    console.log(`[Instant Ride API] 判定地區: ${region}`);
+
+    // 查詢該地區的所有可用車型
+    const { data: vehicleTypes, error } = await supabase
+      .from('instant_ride_vehicle_types')
+      .select('*')
+      .eq('country', 'TW')
+      .eq('region', region)
+      .eq('is_active', true)
+      .order('display_order', { ascending: true });
+
+    if (error) {
+      console.error('[Instant Ride API] 查詢錯誤:', error);
+      return res.status(500).json({
+        success: false,
+        error: '獲取車型選項失敗',
+        message: error.message
+      });
+    }
+
+    if (!vehicleTypes || vehicleTypes.length === 0) {
+      // 如果該地區沒有車型，嘗試使用 taipei 作為預設
+      const { data: defaultTypes, error: defaultError } = await supabase
+        .from('instant_ride_vehicle_types')
+        .select('*')
+        .eq('country', 'TW')
+        .eq('region', 'taipei')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+
+      if (defaultError || !defaultTypes || defaultTypes.length === 0) {
+        return res.json({
+          success: true,
+          data: {
+            region: region,
+            region_name: TAIWAN_REGIONS[region]?.name || region,
+            options: []
+          },
+          message: '目前沒有可用的車型選項'
+        });
+      }
+
+      // 使用預設車型
+      vehicleTypes.push(...defaultTypes);
+    }
+
+    // 計算當前時間（用於 ETA 計算）
+    const now = new Date();
+
+    // 轉換為客戶端格式
+    const options = vehicleTypes.map((vt: InstantRideVehicleType, index: number) => {
+      // 獲取翻譯後的名稱和描述
+      const displayName = getTranslation(vt.display_name_i18n, language, vt.vehicle_type_code);
+      const description = getTranslation(vt.description_i18n, language, '');
+
+      // 計算預估價格（如果有距離資訊）
+      let estimatedPrice: number | null = null;
+      let priceRange: string | null = null;
+      let isNightTime = false;
+
+      if (distanceKm !== null) {
+        const fareResult = calculateInstantRideFare(
+          distanceKm,
+          durationMinutes || 0,
+          {
+            base_fare: Number(vt.base_fare),
+            base_distance_km: Number(vt.base_distance_km),
+            fare_per_km: Number(vt.fare_per_km),
+            fare_per_minute: Number(vt.fare_per_minute),
+            night_surcharge_rate: Number(vt.night_surcharge_rate),
+            night_start_hour: vt.night_start_hour || 23,
+            night_end_hour: vt.night_end_hour || 6,
+            surge_multiplier: Number(vt.surge_multiplier) || 1,
+            min_fare: Number(vt.min_fare) || 0
+          },
+          now
+        );
+        estimatedPrice = fareResult.estimatedPrice;
+        isNightTime = fareResult.isNightTime;
+
+        // 計程車類型顯示價格範圍
+        if (vt.vehicle_type_code === 'taxi') {
+          const minPrice = Math.round(estimatedPrice * 0.85);
+          const maxPrice = Math.round(estimatedPrice * 1.05);
+          priceRange = `${minPrice}-${maxPrice}`;
+          estimatedPrice = null; // 計程車不顯示固定價格
+        }
+      }
+
+      // 計算預估抵達時間（模擬：2-15 分鐘隨機）
+      const etaMinutes = 2 + index * 3 + Math.floor(Math.random() * 3);
+      const etaTime = new Date(now.getTime() + etaMinutes * 60 * 1000);
+      const etaTimeStr = etaTime.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+      return {
+        id: vt.id,
+        vehicle_type_code: vt.vehicle_type_code,
+        display_name: `${displayName} (${vt.seat_capacity}人座)`,
+        description: description,
+        icon_name: vt.icon_name,
+        icon_color: vt.icon_color || ICON_COLORS[vt.icon_name] || '#2196F3',
+        seat_capacity: vt.seat_capacity,
+        estimated_price: estimatedPrice,
+        price_range: priceRange,
+        is_night_time: isNightTime,
+        eta_minutes: etaMinutes,
+        eta_time: etaTimeStr,
+        // 計費參數（供前端顯示費用明細）
+        pricing: {
+          base_fare: Number(vt.base_fare),
+          base_distance_km: Number(vt.base_distance_km),
+          fare_per_km: Number(vt.fare_per_km),
+          fare_per_minute: Number(vt.fare_per_minute),
+          night_surcharge_rate: Number(vt.night_surcharge_rate),
+          min_fare: Number(vt.min_fare)
+        }
+      };
+    });
+
+    console.log(`[Instant Ride API] ✅ 成功返回 ${options.length} 個車型選項 (地區: ${region}, 語言: ${language})`);
+
+    return res.json({
+      success: true,
+      data: {
+        region: region,
+        region_name: TAIWAN_REGIONS[region]?.name || region,
+        options: options
+      },
+      lang: language
+    });
+
+  } catch (error: any) {
+    console.error('[Instant Ride API] 獲取車型選項失敗:', error);
+    return res.status(500).json({
+      success: false,
+      error: '獲取車型選項失敗',
+      message: error.message
+    });
+  }
+});
+
 export default router;
 
