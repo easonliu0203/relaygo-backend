@@ -561,6 +561,11 @@ function determineRegion(lat: number, lng: number): string {
 
 /**
  * 計算即時派車費用
+ * 依據台北市計程車費率規定（自112年4月1日起）：
+ * - 起程 1.25 公里 85 元
+ * - 續程每 200 公尺 5 元（不足 200 公尺以 200 公尺計）
+ * - 夜間加成（23:00-06:00）每趟次加收固定 20 元
+ * - 春節加成：每趟次加收固定 30 元
  */
 function calculateInstantRideFare(
   distanceKm: number,
@@ -568,9 +573,9 @@ function calculateInstantRideFare(
   vehicleType: {
     base_fare: number;
     base_distance_km: number;
-    fare_per_km: number;
+    fare_per_200m: number;        // 每 200 公尺費率（台北市規定 5 元）
     fare_per_minute: number;
-    night_surcharge_rate: number;
+    night_surcharge_amount: number; // 夜間加成固定金額（台北市規定 20 元）
     night_start_hour: number;
     night_end_hour: number;
     surge_multiplier: number;
@@ -585,7 +590,7 @@ function calculateInstantRideFare(
   const now = pickupTime || new Date();
   const hour = now.getHours();
 
-  // 判斷是否為夜間時段
+  // 判斷是否為夜間時段（以上車時間為準）
   const isNightTime = hour >= vehicleType.night_start_hour || hour < vehicleType.night_end_hour;
 
   // 判斷是否為春節期間
@@ -598,18 +603,21 @@ function calculateInstantRideFare(
                        today <= vehicleType.spring_festival_end_date;
   }
 
-  // 計算基本費用
+  // 計算基本費用（起跳價）
   let fare = vehicleType.base_fare;
 
-  // 計算超過起跳距離的里程費
+  // 計算超過起跳距離的里程費（按 200 公尺為單位計費）
   if (distanceKm > vehicleType.base_distance_km) {
-    const extraDistance = distanceKm - vehicleType.base_distance_km;
-    fare += extraDistance * vehicleType.fare_per_km;
+    const extraDistanceKm = distanceKm - vehicleType.base_distance_km;
+    const extraDistanceMeters = extraDistanceKm * 1000;
+    // 不足 200 公尺以 200 公尺計（無條件進位）
+    const units = Math.ceil(extraDistanceMeters / 200);
+    fare += units * vehicleType.fare_per_200m;
   }
 
-  // 計算延滯計時費（如果有）
+  // 計算延滯計時費（車速低於 5km/h 時，每 60 秒 5 元）
+  // 這裡簡化處理：假設平均時速 30km/h，超過預期時間的部分計算延滯費
   if (vehicleType.fare_per_minute > 0 && durationMinutes > 0) {
-    // 假設平均時速 30km/h，超過預期時間的部分計算延滯費
     const expectedMinutes = (distanceKm / 30) * 60;
     if (durationMinutes > expectedMinutes) {
       const delayMinutes = durationMinutes - expectedMinutes;
@@ -617,10 +625,9 @@ function calculateInstantRideFare(
     }
   }
 
-  // 套用夜間加成（依據台北市規定：夜間加收固定 20 元，而非百分比）
-  // 但為了保持彈性，這裡仍使用百分比計算
-  if (isNightTime) {
-    fare *= (1 + vehicleType.night_surcharge_rate);
+  // 套用夜間加成（固定金額，台北市規定 20 元）
+  if (isNightTime && vehicleType.night_surcharge_amount > 0) {
+    fare += vehicleType.night_surcharge_amount;
   }
 
   // 套用尖峰時段倍數
@@ -628,7 +635,7 @@ function calculateInstantRideFare(
     fare *= vehicleType.surge_multiplier;
   }
 
-  // 套用春節加成（每趟次加收固定金額）
+  // 套用春節加成（每趟次加收固定金額，台北市規定 30 元）
   if (isSpringFestival && vehicleType.spring_festival_surcharge) {
     fare += vehicleType.spring_festival_surcharge;
   }
@@ -667,9 +674,9 @@ interface InstantRideVehicleType {
   region: string;
   base_fare: number;
   base_distance_km: number;
-  fare_per_km: number;
+  fare_per_200m: number;           // 每 200 公尺費率（台北市規定 5 元）
   fare_per_minute: number;
-  night_surcharge_rate: number;
+  night_surcharge_amount: number;  // 夜間加成固定金額（台北市規定 20 元）
   night_start_hour: number;
   night_end_hour: number;
   surge_multiplier: number;
@@ -791,9 +798,9 @@ router.get('/instant-ride-options', async (req: Request, res: Response) => {
           {
             base_fare: Number(vt.base_fare),
             base_distance_km: Number(vt.base_distance_km),
-            fare_per_km: Number(vt.fare_per_km),
+            fare_per_200m: Number(vt.fare_per_200m) || 5,  // 每 200 公尺費率
             fare_per_minute: Number(vt.fare_per_minute),
-            night_surcharge_rate: Number(vt.night_surcharge_rate),
+            night_surcharge_amount: Number(vt.night_surcharge_amount) || 20,  // 夜間加成固定金額
             night_start_hour: vt.night_start_hour || 23,
             night_end_hour: vt.night_end_hour || 6,
             surge_multiplier: Number(vt.surge_multiplier) || 1,
@@ -841,9 +848,9 @@ router.get('/instant-ride-options', async (req: Request, res: Response) => {
         pricing: {
           base_fare: Number(vt.base_fare),
           base_distance_km: Number(vt.base_distance_km),
-          fare_per_km: Number(vt.fare_per_km),
+          fare_per_200m: Number(vt.fare_per_200m) || 5,  // 每 200 公尺費率
           fare_per_minute: Number(vt.fare_per_minute),
-          night_surcharge_rate: Number(vt.night_surcharge_rate),
+          night_surcharge_amount: Number(vt.night_surcharge_amount) || 20,  // 夜間加成固定金額
           min_fare: Number(vt.min_fare),
           spring_festival_surcharge: vt.spring_festival_surcharge || 0,
           spring_festival_enabled: vt.spring_festival_enabled || false

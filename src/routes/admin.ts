@@ -750,9 +750,9 @@ router.post('/instant-ride-pricing', async (req: Request, res: Response): Promis
       region,
       base_fare,
       base_distance_km,
-      fare_per_km,
+      fare_per_200m,           // 每 200 公尺費率
       fare_per_minute,
-      night_surcharge_rate,
+      night_surcharge_amount,  // 夜間加成固定金額
       night_start_hour,
       night_end_hour,
       surge_multiplier,
@@ -787,9 +787,9 @@ router.post('/instant-ride-pricing', async (req: Request, res: Response): Promis
         region,
         base_fare: base_fare || 85,
         base_distance_km: base_distance_km || 1.25,
-        fare_per_km: fare_per_km || 25,
+        fare_per_200m: fare_per_200m || 5,           // 每 200 公尺費率（台北市規定 5 元）
         fare_per_minute: fare_per_minute || 5,
-        night_surcharge_rate: night_surcharge_rate || 0.2,
+        night_surcharge_amount: night_surcharge_amount || 20,  // 夜間加成固定金額（台北市規定 20 元）
         night_start_hour: night_start_hour || 23,
         night_end_hour: night_end_hour || 6,
         surge_multiplier: surge_multiplier || 1.0,
@@ -846,9 +846,9 @@ router.put('/instant-ride-pricing/:id', async (req: Request, res: Response): Pro
       region,
       base_fare,
       base_distance_km,
-      fare_per_km,
+      fare_per_200m,           // 每 200 公尺費率
       fare_per_minute,
-      night_surcharge_rate,
+      night_surcharge_amount,  // 夜間加成固定金額
       night_start_hour,
       night_end_hour,
       surge_multiplier,
@@ -876,9 +876,9 @@ router.put('/instant-ride-pricing/:id', async (req: Request, res: Response): Pro
     if (region !== undefined) updateData.region = region;
     if (base_fare !== undefined) updateData.base_fare = base_fare;
     if (base_distance_km !== undefined) updateData.base_distance_km = base_distance_km;
-    if (fare_per_km !== undefined) updateData.fare_per_km = fare_per_km;
+    if (fare_per_200m !== undefined) updateData.fare_per_200m = fare_per_200m;
     if (fare_per_minute !== undefined) updateData.fare_per_minute = fare_per_minute;
-    if (night_surcharge_rate !== undefined) updateData.night_surcharge_rate = night_surcharge_rate;
+    if (night_surcharge_amount !== undefined) updateData.night_surcharge_amount = night_surcharge_amount;
     if (night_start_hour !== undefined) updateData.night_start_hour = night_start_hour;
     if (night_end_hour !== undefined) updateData.night_end_hour = night_end_hour;
     if (surge_multiplier !== undefined) updateData.surge_multiplier = surge_multiplier;
@@ -1036,9 +1036,9 @@ router.post('/instant-ride-pricing/copy', async (req: Request, res: Response): P
       region: target_region,
       base_fare: config.base_fare,
       base_distance_km: config.base_distance_km,
-      fare_per_km: config.fare_per_km,
+      fare_per_200m: config.fare_per_200m,           // 每 200 公尺費率
       fare_per_minute: config.fare_per_minute,
-      night_surcharge_rate: config.night_surcharge_rate,
+      night_surcharge_amount: config.night_surcharge_amount,  // 夜間加成固定金額
       night_start_hour: config.night_start_hour,
       night_end_hour: config.night_end_hour,
       surge_multiplier: config.surge_multiplier,
@@ -1163,23 +1163,31 @@ router.post('/instant-ride-pricing/preview', async (req: Request, res: Response)
       return;
     }
 
-    // 計算價格
+    // 計算價格（依據台北市計程車費率規定）
     let price = config.base_fare;
 
-    // 超過基本里程的部分
+    // 超過基本里程的部分（按 200 公尺為單位計費）
+    let distanceFare = 0;
     if (distance_km > config.base_distance_km) {
-      price += (distance_km - config.base_distance_km) * config.fare_per_km;
+      const extraDistanceKm = distance_km - config.base_distance_km;
+      const extraDistanceMeters = extraDistanceKm * 1000;
+      // 不足 200 公尺以 200 公尺計（無條件進位）
+      const units = Math.ceil(extraDistanceMeters / 200);
+      distanceFare = units * (config.fare_per_200m || 5);
+      price += distanceFare;
     }
 
-    // 時間費用
+    // 時間費用（延滯計時費）
+    let timeFare = 0;
     if (duration_minutes && config.fare_per_minute > 0) {
-      price += duration_minutes * config.fare_per_minute;
+      timeFare = duration_minutes * config.fare_per_minute;
+      price += timeFare;
     }
 
-    // 夜間加成
+    // 夜間加成（固定金額，台北市規定 20 元）
     let nightSurcharge = 0;
-    if (is_night_time && config.night_surcharge_rate > 0) {
-      nightSurcharge = price * config.night_surcharge_rate;
+    if (is_night_time && (config.night_surcharge_amount || 0) > 0) {
+      nightSurcharge = config.night_surcharge_amount;
       price += nightSurcharge;
     }
 
@@ -1188,7 +1196,7 @@ router.post('/instant-ride-pricing/preview', async (req: Request, res: Response)
       price *= config.surge_multiplier;
     }
 
-    // 春節加成（每趟次加收固定金額）
+    // 春節加成（每趟次加收固定金額，台北市規定 30 元）
     let springFestivalSurcharge = 0;
     if (is_spring_festival && config.spring_festival_enabled && config.spring_festival_surcharge > 0) {
       springFestivalSurcharge = config.spring_festival_surcharge;
@@ -1211,10 +1219,8 @@ router.post('/instant-ride-pricing/preview', async (req: Request, res: Response)
         is_spring_festival,
         breakdown: {
           base_fare: config.base_fare,
-          distance_fare: distance_km > config.base_distance_km
-            ? (distance_km - config.base_distance_km) * config.fare_per_km
-            : 0,
-          time_fare: duration_minutes ? duration_minutes * config.fare_per_minute : 0,
+          distance_fare: distanceFare,
+          time_fare: timeFare,
           night_surcharge: nightSurcharge,
           spring_festival_surcharge: springFestivalSurcharge,
           surge_multiplier: config.surge_multiplier
