@@ -575,14 +575,28 @@ function calculateInstantRideFare(
     night_end_hour: number;
     surge_multiplier: number;
     min_fare: number;
+    spring_festival_surcharge?: number;
+    spring_festival_start_date?: string;
+    spring_festival_end_date?: string;
+    spring_festival_enabled?: boolean;
   },
   pickupTime?: Date
-): { estimatedPrice: number; isNightTime: boolean } {
+): { estimatedPrice: number; isNightTime: boolean; isSpringFestival: boolean } {
   const now = pickupTime || new Date();
   const hour = now.getHours();
 
   // 判斷是否為夜間時段
   const isNightTime = hour >= vehicleType.night_start_hour || hour < vehicleType.night_end_hour;
+
+  // 判斷是否為春節期間
+  let isSpringFestival = false;
+  if (vehicleType.spring_festival_enabled &&
+      vehicleType.spring_festival_start_date &&
+      vehicleType.spring_festival_end_date) {
+    const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    isSpringFestival = today >= vehicleType.spring_festival_start_date &&
+                       today <= vehicleType.spring_festival_end_date;
+  }
 
   // 計算基本費用
   let fare = vehicleType.base_fare;
@@ -603,7 +617,8 @@ function calculateInstantRideFare(
     }
   }
 
-  // 套用夜間加成
+  // 套用夜間加成（依據台北市規定：夜間加收固定 20 元，而非百分比）
+  // 但為了保持彈性，這裡仍使用百分比計算
   if (isNightTime) {
     fare *= (1 + vehicleType.night_surcharge_rate);
   }
@@ -613,13 +628,19 @@ function calculateInstantRideFare(
     fare *= vehicleType.surge_multiplier;
   }
 
+  // 套用春節加成（每趟次加收固定金額）
+  if (isSpringFestival && vehicleType.spring_festival_surcharge) {
+    fare += vehicleType.spring_festival_surcharge;
+  }
+
   // 確保不低於最低消費
   fare = Math.max(fare, vehicleType.min_fare);
 
   // 四捨五入到整數
   return {
     estimatedPrice: Math.round(fare),
-    isNightTime
+    isNightTime,
+    isSpringFestival
   };
 }
 
@@ -653,6 +674,10 @@ interface InstantRideVehicleType {
   night_end_hour: number;
   surge_multiplier: number;
   min_fare: number;
+  spring_festival_surcharge?: number;
+  spring_festival_start_date?: string;
+  spring_festival_end_date?: string;
+  spring_festival_enabled?: boolean;
   is_active: boolean;
   display_order: number;
 }
@@ -757,6 +782,7 @@ router.get('/instant-ride-options', async (req: Request, res: Response) => {
       let estimatedPrice: number | null = null;
       let priceRange: string | null = null;
       let isNightTime = false;
+      let isSpringFestival = false;
 
       if (distanceKm !== null) {
         const fareResult = calculateInstantRideFare(
@@ -771,12 +797,17 @@ router.get('/instant-ride-options', async (req: Request, res: Response) => {
             night_start_hour: vt.night_start_hour || 23,
             night_end_hour: vt.night_end_hour || 6,
             surge_multiplier: Number(vt.surge_multiplier) || 1,
-            min_fare: Number(vt.min_fare) || 0
+            min_fare: Number(vt.min_fare) || 0,
+            spring_festival_surcharge: vt.spring_festival_surcharge,
+            spring_festival_start_date: vt.spring_festival_start_date,
+            spring_festival_end_date: vt.spring_festival_end_date,
+            spring_festival_enabled: vt.spring_festival_enabled
           },
           now
         );
         estimatedPrice = fareResult.estimatedPrice;
         isNightTime = fareResult.isNightTime;
+        isSpringFestival = fareResult.isSpringFestival;
 
         // 計程車類型顯示價格範圍
         if (vt.vehicle_type_code === 'taxi') {
@@ -803,6 +834,7 @@ router.get('/instant-ride-options', async (req: Request, res: Response) => {
         estimated_price: estimatedPrice,
         price_range: priceRange,
         is_night_time: isNightTime,
+        is_spring_festival: isSpringFestival,
         eta_minutes: etaMinutes,
         eta_time: etaTimeStr,
         // 計費參數（供前端顯示費用明細）
@@ -812,7 +844,9 @@ router.get('/instant-ride-options', async (req: Request, res: Response) => {
           fare_per_km: Number(vt.fare_per_km),
           fare_per_minute: Number(vt.fare_per_minute),
           night_surcharge_rate: Number(vt.night_surcharge_rate),
-          min_fare: Number(vt.min_fare)
+          min_fare: Number(vt.min_fare),
+          spring_festival_surcharge: vt.spring_festival_surcharge || 0,
+          spring_festival_enabled: vt.spring_festival_enabled || false
         }
       };
     });

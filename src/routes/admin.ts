@@ -1134,9 +1134,9 @@ router.delete('/instant-ride-pricing/:id', async (req: Request, res: Response): 
  */
 router.post('/instant-ride-pricing/preview', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { config_id, distance_km, duration_minutes, is_night_time } = req.body;
+    const { config_id, distance_km, duration_minutes, is_night_time, is_spring_festival } = req.body;
 
-    console.log('[Admin API] 預覽價格計算:', { config_id, distance_km, duration_minutes, is_night_time });
+    console.log('[Admin API] 預覽價格計算:', { config_id, distance_km, duration_minutes, is_night_time, is_spring_festival });
 
     if (!config_id || distance_km === undefined) {
       res.status(400).json({
@@ -1188,6 +1188,13 @@ router.post('/instant-ride-pricing/preview', async (req: Request, res: Response)
       price *= config.surge_multiplier;
     }
 
+    // 春節加成（每趟次加收固定金額）
+    let springFestivalSurcharge = 0;
+    if (is_spring_festival && config.spring_festival_enabled && config.spring_festival_surcharge > 0) {
+      springFestivalSurcharge = config.spring_festival_surcharge;
+      price += springFestivalSurcharge;
+    }
+
     // 最低車資
     if (config.min_fare > 0 && price < config.min_fare) {
       price = config.min_fare;
@@ -1201,6 +1208,7 @@ router.post('/instant-ride-pricing/preview', async (req: Request, res: Response)
         distance_km,
         duration_minutes,
         is_night_time,
+        is_spring_festival,
         breakdown: {
           base_fare: config.base_fare,
           distance_fare: distance_km > config.base_distance_km
@@ -1208,10 +1216,17 @@ router.post('/instant-ride-pricing/preview', async (req: Request, res: Response)
             : 0,
           time_fare: duration_minutes ? duration_minutes * config.fare_per_minute : 0,
           night_surcharge: nightSurcharge,
+          spring_festival_surcharge: springFestivalSurcharge,
           surge_multiplier: config.surge_multiplier
         },
         estimated_price: Math.round(price),
-        min_fare: config.min_fare
+        min_fare: config.min_fare,
+        spring_festival_config: {
+          enabled: config.spring_festival_enabled || false,
+          surcharge: config.spring_festival_surcharge || 0,
+          start_date: config.spring_festival_start_date || null,
+          end_date: config.spring_festival_end_date || null
+        }
       }
     });
   } catch (error: any) {
