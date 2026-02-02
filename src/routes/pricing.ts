@@ -2,14 +2,9 @@ import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import {
   REGION_SETTINGS,
-  getLocalTime,
   getRegionSettings,
   calculateSurcharges,
   determineRegionFromCoords,
-  isNightTime as checkNightTime,
-  getActiveFestival,
-  type RegionSettings,
-  type RegionTimeInfo
 } from '../../shared/constants/region_settings';
 
 const router = Router();
@@ -588,21 +583,26 @@ function calculateInstantRideFare(
   const surchargeInfo = calculateSurcharges(pickupLat, pickupLng, pickupTime);
   const regionSettings = getRegionSettings(surchargeInfo.regionCode);
 
+  // 夜間加成仍使用 region_settings（基於時區計算）
+  const isNightTime = surchargeInfo.isNightTime;
+
+  // 春節加成改為使用資料庫配置（動態讀取）
+  // 不再使用 region_settings 中的硬編碼日期
+  const currentDateString = surchargeInfo.localTimeInfo.dateString;
+  const isSpringFestival = vehicleType.spring_festival_enabled === true &&
+    vehicleType.spring_festival_start_date != null &&
+    vehicleType.spring_festival_end_date != null &&
+    currentDateString >= vehicleType.spring_festival_start_date &&
+    currentDateString <= vehicleType.spring_festival_end_date;
+
   console.log(`[calculateInstantRideFare] 時間判斷 (國際化):`);
   console.log(`[calculateInstantRideFare]   座標: (${pickupLat}, ${pickupLng})`);
   console.log(`[calculateInstantRideFare]   地區: ${surchargeInfo.regionCode} (${surchargeInfo.regionName})`);
   console.log(`[calculateInstantRideFare]   時區: ${surchargeInfo.timezone}`);
-  console.log(`[calculateInstantRideFare]   當地時間: ${surchargeInfo.localTimeInfo.dateString} ${surchargeInfo.localTimeInfo.hour}:00`);
+  console.log(`[calculateInstantRideFare]   當地時間: ${currentDateString} ${surchargeInfo.localTimeInfo.hour}:00`);
   console.log(`[calculateInstantRideFare]   夜間時段: ${regionSettings.nightStartHour}:00 - ${regionSettings.nightEndHour}:00`);
-  console.log(`[calculateInstantRideFare]   isNightTime: ${surchargeInfo.isNightTime}`);
-  console.log(`[calculateInstantRideFare]   isSpringFestival: ${surchargeInfo.isSpringFestival}`);
-  if (surchargeInfo.festivalName) {
-    console.log(`[calculateInstantRideFare]   節日: ${surchargeInfo.festivalName}`);
-  }
-
-  // 使用地區設定的加成資訊
-  const isNightTime = surchargeInfo.isNightTime;
-  const isSpringFestival = surchargeInfo.isSpringFestival;
+  console.log(`[calculateInstantRideFare]   isNightTime: ${isNightTime}`);
+  console.log(`[calculateInstantRideFare]   isSpringFestival: ${isSpringFestival} (資料庫配置: ${vehicleType.spring_festival_start_date} - ${vehicleType.spring_festival_end_date}, enabled: ${vehicleType.spring_festival_enabled})`);
 
   // 計算基本費用（起跳價）
   let fare = vehicleType.base_fare;
@@ -794,24 +794,36 @@ router.get('/instant-ride-options', async (req: Request, res: Response) => {
 
       if (distanceKm !== null) {
         // 使用上車座標計算費用（國際化：根據座標判斷時區）
+        // 構建車型費率配置，春節配置從資料庫讀取（動態配置）
+        const vehicleTypeConfig: Parameters<typeof calculateInstantRideFare>[2] = {
+          base_fare: Number(vt.base_fare),
+          base_distance_km: Number(vt.base_distance_km),
+          fare_per_200m: Number(vt.fare_per_200m) || 5,  // 每 200 公尺費率
+          fare_per_minute: Number(vt.fare_per_minute),
+          night_surcharge_amount: Number(vt.night_surcharge_amount) || 20,  // 夜間加成固定金額
+          night_start_hour: vt.night_start_hour || 23,
+          night_end_hour: vt.night_end_hour || 6,
+          surge_multiplier: Number(vt.surge_multiplier) || 1,
+          min_fare: Number(vt.min_fare) || 0,
+        };
+        // 只有當資料庫有春節配置時才添加
+        if (vt.spring_festival_surcharge != null) {
+          vehicleTypeConfig.spring_festival_surcharge = Number(vt.spring_festival_surcharge);
+        }
+        if (vt.spring_festival_start_date) {
+          vehicleTypeConfig.spring_festival_start_date = vt.spring_festival_start_date;
+        }
+        if (vt.spring_festival_end_date) {
+          vehicleTypeConfig.spring_festival_end_date = vt.spring_festival_end_date;
+        }
+        if (vt.spring_festival_enabled != null) {
+          vehicleTypeConfig.spring_festival_enabled = vt.spring_festival_enabled === true;
+        }
+
         const fareResult = calculateInstantRideFare(
           distanceKm,
           durationMinutes || 0,
-          {
-            base_fare: Number(vt.base_fare),
-            base_distance_km: Number(vt.base_distance_km),
-            fare_per_200m: Number(vt.fare_per_200m) || 5,  // 每 200 公尺費率
-            fare_per_minute: Number(vt.fare_per_minute),
-            night_surcharge_amount: Number(vt.night_surcharge_amount) || 20,  // 夜間加成固定金額
-            night_start_hour: vt.night_start_hour || 23,
-            night_end_hour: vt.night_end_hour || 6,
-            surge_multiplier: Number(vt.surge_multiplier) || 1,
-            min_fare: Number(vt.min_fare) || 0,
-            spring_festival_surcharge: vt.spring_festival_surcharge,
-            spring_festival_start_date: vt.spring_festival_start_date,
-            spring_festival_end_date: vt.spring_festival_end_date,
-            spring_festival_enabled: vt.spring_festival_enabled
-          },
+          vehicleTypeConfig,
           lat,   // 上車地點緯度
           lng,   // 上車地點經度
           now
