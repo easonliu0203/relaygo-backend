@@ -5,7 +5,7 @@ import {
   getRegionSettings,
   calculateSurcharges,
   determineRegionFromCoords,
-} from '../../shared/constants/region_settings';
+} from '../constants/region_settings';
 
 const router = Router();
 
