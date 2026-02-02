@@ -1,5 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
+import {
+  REGION_SETTINGS,
+  getLocalTime,
+  getRegionSettings,
+  calculateSurcharges,
+  determineRegionFromCoords,
+  isNightTime as checkNightTime,
+  getActiveFestival,
+  type RegionSettings,
+  type RegionTimeInfo
+} from '../../shared/constants/region_settings';
 
 const router = Router();
 
@@ -523,49 +534,33 @@ router.delete('/admin/vehicle-pricing/:id', requireAdmin, async (req: Request, r
 // ============================================
 
 /**
- * 台灣地區邊界定義（用於判定上車地點所屬地區）
+ * 地區設定已移至 shared/constants/region_settings.ts
+ * 使用 REGION_SETTINGS 取代舊的 TAIWAN_REGIONS
+ * 使用 determineRegionFromCoords 取代舊的 determineRegion
+ * 使用 getLocalTime 取代舊的 getTaiwanTime
  */
-const TAIWAN_REGIONS: Record<string, { name: string; bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number } }> = {
-  'taipei': {
-    name: '北北基',
-    bounds: { minLat: 24.7, maxLat: 25.3, minLng: 121.3, maxLng: 122.0 }
-  },
-  'taoyuan': {
-    name: '桃園',
-    bounds: { minLat: 24.7, maxLat: 25.1, minLng: 120.9, maxLng: 121.4 }
-  },
-  'taichung': {
-    name: '台中',
-    bounds: { minLat: 24.0, maxLat: 24.5, minLng: 120.4, maxLng: 121.0 }
-  },
-  'kaohsiung': {
-    name: '高雄',
-    bounds: { minLat: 22.4, maxLat: 23.0, minLng: 120.1, maxLng: 120.8 }
-  }
-};
 
-/**
- * 根據經緯度判定所屬地區
- */
+// 向後相容：保留舊的函數名稱，內部呼叫新的實作
 function determineRegion(lat: number, lng: number): string {
-  for (const [regionCode, region] of Object.entries(TAIWAN_REGIONS)) {
-    const { bounds } = region;
-    if (lat >= bounds.minLat && lat <= bounds.maxLat &&
-        lng >= bounds.minLng && lng <= bounds.maxLng) {
-      return regionCode;
-    }
-  }
-  // 預設返回 taipei（北北基）
-  return 'taipei';
+  return determineRegionFromCoords(lat, lng);
 }
 
 /**
  * 計算即時派車費用
- * 依據台北市計程車費率規定（自112年4月1日起）：
- * - 起程 1.25 公里 85 元
- * - 續程每 200 公尺 5 元（不足 200 公尺以 200 公尺計）
- * - 夜間加成（23:00-06:00）每趟次加收固定 20 元
- * - 春節加成：每趟次加收固定 30 元
+ * 依據各地區計程車費率規定計算：
+ * - 起程費用（依地區設定）
+ * - 續程費用（每 200 公尺計費）
+ * - 夜間加成（依地區設定的時段和金額）
+ * - 節日加成（依地區設定的日期和金額）
+ *
+ * 注意：時間判斷使用上車地點座標對應的地區時區
+ *
+ * @param distanceKm 路程距離（公里）
+ * @param durationMinutes 預估時間（分鐘）
+ * @param vehicleType 車型費率設定
+ * @param pickupLat 上車地點緯度
+ * @param pickupLng 上車地點經度
+ * @param pickupTime 上車時間（可選，預設為當前時間）
  */
 function calculateInstantRideFare(
   distanceKm: number,
@@ -573,9 +568,9 @@ function calculateInstantRideFare(
   vehicleType: {
     base_fare: number;
     base_distance_km: number;
-    fare_per_200m: number;        // 每 200 公尺費率（台北市規定 5 元）
+    fare_per_200m: number;        // 每 200 公尺費率
     fare_per_minute: number;
-    night_surcharge_amount: number; // 夜間加成固定金額（台北市規定 20 元）
+    night_surcharge_amount: number; // 夜間加成固定金額
     night_start_hour: number;
     night_end_hour: number;
     surge_multiplier: number;
@@ -585,23 +580,29 @@ function calculateInstantRideFare(
     spring_festival_end_date?: string;
     spring_festival_enabled?: boolean;
   },
+  pickupLat: number,
+  pickupLng: number,
   pickupTime?: Date
 ): { estimatedPrice: number; isNightTime: boolean; isSpringFestival: boolean } {
-  const now = pickupTime || new Date();
-  const hour = now.getHours();
+  // 使用座標獲取當地時區時間（國際化支援）
+  const surchargeInfo = calculateSurcharges(pickupLat, pickupLng, pickupTime);
+  const regionSettings = getRegionSettings(surchargeInfo.regionCode);
 
-  // 判斷是否為夜間時段（以上車時間為準）
-  const isNightTime = hour >= vehicleType.night_start_hour || hour < vehicleType.night_end_hour;
-
-  // 判斷是否為春節期間
-  let isSpringFestival = false;
-  if (vehicleType.spring_festival_enabled &&
-      vehicleType.spring_festival_start_date &&
-      vehicleType.spring_festival_end_date) {
-    const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
-    isSpringFestival = today >= vehicleType.spring_festival_start_date &&
-                       today <= vehicleType.spring_festival_end_date;
+  console.log(`[calculateInstantRideFare] 時間判斷 (國際化):`);
+  console.log(`[calculateInstantRideFare]   座標: (${pickupLat}, ${pickupLng})`);
+  console.log(`[calculateInstantRideFare]   地區: ${surchargeInfo.regionCode} (${surchargeInfo.regionName})`);
+  console.log(`[calculateInstantRideFare]   時區: ${surchargeInfo.timezone}`);
+  console.log(`[calculateInstantRideFare]   當地時間: ${surchargeInfo.localTimeInfo.dateString} ${surchargeInfo.localTimeInfo.hour}:00`);
+  console.log(`[calculateInstantRideFare]   夜間時段: ${regionSettings.nightStartHour}:00 - ${regionSettings.nightEndHour}:00`);
+  console.log(`[calculateInstantRideFare]   isNightTime: ${surchargeInfo.isNightTime}`);
+  console.log(`[calculateInstantRideFare]   isSpringFestival: ${surchargeInfo.isSpringFestival}`);
+  if (surchargeInfo.festivalName) {
+    console.log(`[calculateInstantRideFare]   節日: ${surchargeInfo.festivalName}`);
   }
+
+  // 使用地區設定的加成資訊
+  const isNightTime = surchargeInfo.isNightTime;
+  const isSpringFestival = surchargeInfo.isSpringFestival;
 
   // 計算基本費用（起跳價）
   let fare = vehicleType.base_fare;
@@ -765,7 +766,7 @@ router.get('/instant-ride-options', async (req: Request, res: Response) => {
           success: true,
           data: {
             region: region,
-            region_name: TAIWAN_REGIONS[region]?.name || region,
+            region_name: REGION_SETTINGS[region]?.name || region,
             options: []
           },
           message: '目前沒有可用的車型選項'
@@ -792,6 +793,7 @@ router.get('/instant-ride-options', async (req: Request, res: Response) => {
       let isSpringFestival = false;
 
       if (distanceKm !== null) {
+        // 使用上車座標計算費用（國際化：根據座標判斷時區）
         const fareResult = calculateInstantRideFare(
           distanceKm,
           durationMinutes || 0,
@@ -810,6 +812,8 @@ router.get('/instant-ride-options', async (req: Request, res: Response) => {
             spring_festival_end_date: vt.spring_festival_end_date,
             spring_festival_enabled: vt.spring_festival_enabled
           },
+          lat,   // 上車地點緯度
+          lng,   // 上車地點經度
           now
         );
         estimatedPrice = fareResult.estimatedPrice;
@@ -864,7 +868,7 @@ router.get('/instant-ride-options', async (req: Request, res: Response) => {
       success: true,
       data: {
         region: region,
-        region_name: TAIWAN_REGIONS[region]?.name || region,
+        region_name: REGION_SETTINGS[region]?.name || region,
         options: options
       },
       lang: language
