@@ -16,9 +16,9 @@ const supabase = createClient(
  */
 router.post('/validate', async (req: Request, res: Response) => {
   try {
-    const { promo_code, original_price, user_id } = req.body;
+    const { promo_code, original_price, user_id, service_type } = req.body;
 
-    console.log(`[Promo Code API] 驗證優惠碼: ${promo_code}, 原價: ${original_price}, 用戶: ${user_id || '未提供'}`);
+    console.log(`[Promo Code API] 驗證優惠碼: ${promo_code}, 原價: ${original_price}, 用戶: ${user_id || '未提供'}, 服務類型: ${service_type || '未提供'}`);
 
     // 驗證必填欄位
     if (!promo_code || !original_price) {
@@ -75,13 +75,30 @@ router.post('/validate', async (req: Request, res: Response) => {
     }
 
     // 2. 再計算百分比折扣
-    if (influencer.discount_percentage_enabled && influencer.discount_percentage > 0) {
-      discountPercentageApplied = influencer.discount_percentage;
-      const discountMultiplier = 1 - (discountPercentageApplied / 100);
-      currentPrice = currentPrice * discountMultiplier;
-      calculationSteps.push(
-        `百分比折扣：${(100 - discountPercentageApplied).toFixed(0)} 折 = NT$ ${Math.round(currentPrice).toLocaleString()}`
-      );
+    if (influencer.discount_percentage_enabled) {
+      // ✅ 根據 discount_type 和 service_type 決定使用哪個折扣百分比
+      if (influencer.discount_type === 'by_service_type' && service_type) {
+        // 依服務類型模式：根據 service_type 選擇對應的折扣百分比
+        if (service_type === 'charter' && influencer.discount_percent_charter > 0) {
+          discountPercentageApplied = influencer.discount_percent_charter;
+        } else if (service_type === 'instant_ride' && influencer.discount_percent_instant_ride > 0) {
+          discountPercentageApplied = influencer.discount_percent_instant_ride;
+        }
+      } else {
+        // 統一模式：使用 discount_percentage
+        discountPercentageApplied = influencer.discount_percentage || 0;
+      }
+
+      // 如果有折扣百分比，則計算折扣
+      if (discountPercentageApplied > 0) {
+        const discountMultiplier = 1 - (discountPercentageApplied / 100);
+        currentPrice = currentPrice * discountMultiplier;
+        const serviceTypeLabel = service_type === 'charter' ? '（包車旅遊）' :
+                                 service_type === 'instant_ride' ? '（即時派車）' : '';
+        calculationSteps.push(
+          `百分比折扣${serviceTypeLabel}：${(100 - discountPercentageApplied).toFixed(0)} 折 = NT$ ${Math.round(currentPrice).toLocaleString()}`
+        );
+      }
     }
 
     // 四捨五入到整數

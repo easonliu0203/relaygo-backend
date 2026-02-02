@@ -268,12 +268,16 @@ router.put('/:id', async (req: Request, res: Response) => {
       discount_amount,
       discount_percentage_enabled,
       discount_percentage,
+      // ✅ 新增：服務類型維度折扣欄位
+      discount_type,                     // 'unified' 或 'by_service_type'
+      discount_percent_charter,          // 包車旅遊折扣百分比
+      discount_percent_instant_ride,     // 即時派車折扣百分比
       commission_fixed,
       commission_percent,
       is_commission_fixed_active,
       is_commission_percent_active,
       is_active,
-      // ✅ 新增：服務類型維度分潤欄位
+      // ✅ 服務類型維度分潤欄位
       commission_type,                   // 'unified' 或 'by_service_type'
       commission_percent_charter,        // 包車旅遊分潤百分比
       commission_percent_instant_ride    // 即時派車分潤百分比
@@ -299,6 +303,37 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (discount_amount !== undefined) updateData.discount_amount = discount_amount;
     if (discount_percentage_enabled !== undefined) updateData.discount_percentage_enabled = discount_percentage_enabled;
     if (discount_percentage !== undefined) updateData.discount_percentage = discount_percentage;
+    // ✅ 新增：服務類型維度折扣欄位
+    if (discount_type !== undefined) {
+      // 驗證 discount_type 值
+      if (!['unified', 'by_service_type'].includes(discount_type)) {
+        return res.status(400).json({
+          success: false,
+          error: 'discount_type 必須是 "unified" 或 "by_service_type"'
+        });
+      }
+      updateData.discount_type = discount_type;
+    }
+    if (discount_percent_charter !== undefined) {
+      // 驗證百分比範圍
+      if (discount_percent_charter < 0 || discount_percent_charter > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'discount_percent_charter 必須在 0-100 之間'
+        });
+      }
+      updateData.discount_percent_charter = discount_percent_charter;
+    }
+    if (discount_percent_instant_ride !== undefined) {
+      // 驗證百分比範圍
+      if (discount_percent_instant_ride < 0 || discount_percent_instant_ride > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'discount_percent_instant_ride 必須在 0-100 之間'
+        });
+      }
+      updateData.discount_percent_instant_ride = discount_percent_instant_ride;
+    }
     if (commission_fixed !== undefined) updateData.commission_fixed = commission_fixed;
     if (commission_percent !== undefined) updateData.commission_percent = commission_percent;
     if (is_commission_fixed_active !== undefined) updateData.is_commission_fixed_active = is_commission_fixed_active;
