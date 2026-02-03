@@ -156,11 +156,22 @@ router.get('/gomypay-callback', async (_req: Request, res: Response): Promise<vo
  * @access Public
  */
 router.get('/gomypay/return', async (req: Request, res: Response): Promise<void> => {
-  console.log('[GoMyPay Return] 用戶返回:', req.query);
+  console.log('[GoMyPay Return] ========================================');
+  console.log('[GoMyPay Return] ✅ 收到 GOMYPAY 即時回調（Return_url）');
+  console.log('[GoMyPay Return] ========================================');
+  console.log('[GoMyPay Return] 完整參數:', req.query);
 
-  // 解析訂單編號（從 query 參數中）
-  // ✅ 修復：確保 e_orderno 正確解析，即使是錯誤情況
-  const { e_orderno, result, ret_msg, Order_No } = req.query;
+  // 解析所有參數
+  const {
+    e_orderno,
+    result,
+    ret_msg,
+    Order_No,
+    OrderID,
+    AvCode,
+    str_check,
+    Send_Type
+  } = req.query;
 
   // GOMYPAY 可能使用 e_orderno 或 Order_No 參數
   const orderNo = (e_orderno || Order_No || '') as string;
@@ -168,8 +179,86 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
   console.log('[GoMyPay Return] 訂單編號:', orderNo);
   console.log('[GoMyPay Return] 支付結果:', result);
   console.log('[GoMyPay Return] 返回訊息:', ret_msg);
+  console.log('[GoMyPay Return] 授權碼:', AvCode);
 
-  // 返回一個 HTML 頁面，立即通知 Flutter WebView 並輪詢訂單狀態
+  // ✅ 2026-02-03: 修復回調延遲問題
+  // 在返回 HTML 之前，先處理支付結果（更新資料庫）
+  try {
+    if (result === '1' && orderNo) {
+      console.log('[GoMyPay Return] 🔄 開始處理支付成功...');
+
+      // 解析訂單編號格式
+      let bookingId: string = '';
+      let paymentType: string = 'deposit';
+
+      if (orderNo.startsWith('BK')) {
+        // BK 格式：BK{timestamp}-DEPOSIT 或 BK{timestamp}-BALANCE
+        const parts = orderNo.split('-');
+        const bookingNumber = parts[0]; // BK1770123847838
+        paymentType = parts[1]?.toLowerCase() || 'deposit';
+
+        console.log('[GoMyPay Return] BK 格式，查詢 booking_number:', bookingNumber);
+
+        // 使用 booking_number 查詢訂單
+        const { data: booking, error: bookingError } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('booking_number', bookingNumber)
+          .single();
+
+        if (bookingError || !booking) {
+          console.error('[GoMyPay Return] ❌ 找不到訂單:', bookingNumber, bookingError);
+        } else {
+          bookingId = booking.id;
+          console.log('[GoMyPay Return] ✅ 找到訂單:', bookingId);
+
+          // 查詢現有支付記錄
+          const { data: existingPayment } = await supabase
+            .from('payments')
+            .select('*')
+            .eq('booking_id', bookingId)
+            .eq('type', paymentType)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          // 計算金額
+          let amount = 0;
+          if (paymentType === 'deposit') {
+            amount = booking.deposit_amount || 0;
+          } else if (paymentType === 'balance') {
+            amount = booking.balance_amount ||
+                     (booking.total_price ? booking.total_price - (booking.deposit_amount || 0) : 0) ||
+                     booking.deposit_amount || 0;
+          }
+
+          console.log('[GoMyPay Return] 支付金額:', amount);
+
+          // 調用 handlePaymentSuccess 更新訂單狀態
+          await handlePaymentSuccess({
+            bookingId: booking.id,
+            paymentType,
+            amount: amount,
+            transactionId: (OrderID as string) || '',
+            authCode: (AvCode as string) || '',
+            payTime: new Date().toISOString(),
+            existingPayment,
+            customerId: booking.customer_id
+          });
+
+          console.log('[GoMyPay Return] ✅ 訂單狀態已更新！');
+        }
+      } else {
+        console.log('[GoMyPay Return] ⚠️ 非 BK 格式訂單，跳過處理');
+      }
+    } else if (result === '0' && orderNo) {
+      console.log('[GoMyPay Return] ❌ 支付失敗:', ret_msg);
+    }
+  } catch (error: any) {
+    console.error('[GoMyPay Return] ❌ 處理支付結果時發生錯誤:', error.message);
+  }
+
+  // 返回一個 HTML 頁面，通知 Flutter WebView
   res.send(`
     <!DOCTYPE html>
     <html>
