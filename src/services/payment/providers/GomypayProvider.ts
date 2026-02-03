@@ -47,8 +47,8 @@ export class GomypayProvider implements PaymentProvider {
   async initiatePayment(request: PaymentRequest): Promise<PaymentResponse> {
     try {
       console.log(`[GoMyPay] 發起支付 - 訂單: ${request.orderId}, 金額: ${request.amount}`);
-      console.log(`[GoMyPay] Return URL: ${this.config.returnUrl}`);
-      console.log(`[GoMyPay] Callback URL: ${this.config.callbackUrl}`);
+      console.log(`[GoMyPay] Return URL (即時回調): ${this.config.returnUrl}`);
+      console.log(`[GoMyPay] App Deep Link: ${this.config.appDeepLink}`);
 
       // 生成交易驗證密碼（MD5）
       // Send_Type = '0' 表示信用卡支付
@@ -273,8 +273,11 @@ export class GomypayProvider implements PaymentProvider {
       Buyer_Telm: params.buyerTelm,            // 消費者手機
       Buyer_Mail: params.buyerMail,            // 消費者 Email
       Buyer_Memo: params.buyerMemo,            // 交易備註
-      Return_url: this.config.returnUrl || '', // 授權結果回傳網址
-      Callback_Url: this.config.callbackUrl || '', // 背景對帳網址
+      // ✅ 2026-02-03: 修復回調延遲問題
+      // 根據 GOMYPAY 工程師建議：移除 Callback_Url（會導致 5 分鐘延遲）
+      // 改用 Return_url 接收即時回調（1-3 秒內）
+      Return_url: this.config.returnUrl || '', // 授權結果回傳網址（即時回調）
+      // ❌ Callback_Url: 不再使用，此參數會導致 5 分鐘延遲
       Str_Check: params.chkValue               // 交易驗證密碼
     });
 
@@ -284,12 +287,17 @@ export class GomypayProvider implements PaymentProvider {
 
 /**
  * GoMyPay 配置介面
+ *
+ * ✅ 2026-02-03: 修復回調延遲問題
+ * - 移除 callbackUrl 欄位（Callback_Url 會導致 5 分鐘延遲）
+ * - 現在只使用 returnUrl 接收即時回調（1-3 秒內）
+ * - returnUrl 應指向後端 API 端點，處理完成後重定向到 App Deep Link
  */
 export interface GomypayConfig {
   merchantId: string;      // 商店代號
   apiKey: string;          // 交易密碼
   isTestMode: boolean;     // 是否為測試環境
-  returnUrl?: string;      // 授權結果回傳網址
-  callbackUrl?: string;    // 背景對帳網址
+  returnUrl?: string;      // 授權結果回傳網址（即時回調 + 重定向）
+  appDeepLink?: string;    // App Deep Link（處理完成後重定向目標）
 }
 

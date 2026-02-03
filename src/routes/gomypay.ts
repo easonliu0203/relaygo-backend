@@ -14,6 +14,123 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
+// ✅ 2026-02-03: 修復回調延遲問題 - App Deep Link 配置
+// 現在使用 Return_url 接收即時回調（1-3秒），處理完成後重定向到 App
+const APP_DEEP_LINK = process.env.GOMYPAY_APP_DEEP_LINK || 'ridebooking://payment-result';
+
+/**
+ * 生成 App Deep Link 重定向 URL
+ * @param success 支付是否成功
+ * @param orderNo 訂單編號
+ * @param message 訊息
+ */
+function buildAppRedirectUrl(success: boolean, orderNo: string, message?: string): string {
+  const params = new URLSearchParams({
+    success: success ? '1' : '0',
+    order_no: orderNo,
+  });
+  if (message) {
+    params.append('message', message);
+  }
+  return `${APP_DEEP_LINK}?${params.toString()}`;
+}
+
+/**
+ * 生成重定向 HTML 頁面
+ * 用於在處理完成後將用戶重定向回 App
+ */
+function generateRedirectHtml(success: boolean, orderNo: string, message?: string): string {
+  const redirectUrl = buildAppRedirectUrl(success, orderNo, message);
+  const statusText = success ? '支付成功' : '支付失敗';
+  const statusColor = success ? '#4CAF50' : '#f44336';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${statusText} - RelayGo</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 100vh;
+          margin: 0;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+          text-align: center;
+          background: white;
+          padding: 40px;
+          border-radius: 16px;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+          max-width: 400px;
+          margin: 20px;
+        }
+        .icon {
+          font-size: 64px;
+          margin-bottom: 20px;
+        }
+        h1 {
+          color: ${statusColor};
+          margin-bottom: 16px;
+        }
+        p {
+          color: #666;
+          margin-bottom: 24px;
+        }
+        .loading {
+          display: inline-block;
+          width: 20px;
+          height: 20px;
+          border: 2px solid #ddd;
+          border-top-color: #667eea;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        .btn {
+          display: inline-block;
+          padding: 12px 32px;
+          background: #667eea;
+          color: white;
+          text-decoration: none;
+          border-radius: 8px;
+          font-weight: bold;
+          margin-top: 16px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="icon">${success ? '✅' : '❌'}</div>
+        <h1>${statusText}</h1>
+        <p>${message || (success ? '您的支付已完成，正在返回 App...' : '支付未完成，請重試。')}</p>
+        <div class="loading"></div>
+        <br>
+        <a href="${redirectUrl}" class="btn">返回 App</a>
+      </div>
+      <script>
+        // 自動嘗試跳轉回 App
+        setTimeout(function() {
+          window.location.href = '${redirectUrl}';
+        }, 1500);
+
+        // 3秒後如果還沒跳轉，顯示手動按鈕
+        setTimeout(function() {
+          document.querySelector('.loading').style.display = 'none';
+        }, 3000);
+      </script>
+    </body>
+    </html>
+  `;
+}
+
 /**
  * GOMYPAY 支付回調端點測試
  *
@@ -231,14 +348,16 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
       console.error('[GOMYPAY Callback] result:', result);
       console.error('[GOMYPAY Callback] e_orderno:', e_orderno);
       console.error('[GOMYPAY Callback] str_check:', str_check);
-      res.status(400).send('Missing required parameters');
+      // ✅ 2026-02-03: 返回重定向頁面
+      res.status(200).send(generateRedirectHtml(false, e_orderno || 'unknown', '缺少必要參數'));
       return;
     }
 
     // 3. 檢查支付結果
     if (result !== '1') {
       console.error('[GOMYPAY Callback] 支付失敗:', ret_msg);
-      res.status(200).send('Payment failed');
+      // ✅ 2026-02-03: 返回重定向頁面
+      res.status(200).send(generateRedirectHtml(false, e_orderno, ret_msg || '支付失敗'));
       return;
     }
 
@@ -292,7 +411,8 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
       const orderParts = e_orderno.split('_');
       if (orderParts.length < 3) {
         console.error('[GOMYPAY Callback] 訂單編號格式錯誤:', e_orderno);
-        res.status(400).send('Invalid OrderID format');
+        // ✅ 2026-02-03: 返回重定向頁面
+        res.status(200).send(generateRedirectHtml(false, e_orderno, '訂單編號格式錯誤'));
         return;
       }
       bookingId = orderParts[1];
@@ -318,12 +438,14 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
         paymentType = paymentTypeCode === 'D' ? 'deposit' : 'balance';
       } else {
         console.error('[GOMYPAY Callback] 無法識別訂單編號格式:', e_orderno);
-        res.status(400).send('Invalid OrderID format');
+        // ✅ 2026-02-03: 返回重定向頁面
+        res.status(200).send(generateRedirectHtml(false, e_orderno, '無法識別訂單編號格式'));
         return;
       }
     } else {
       console.error('[GOMYPAY Callback] 無法識別訂單編號格式:', e_orderno, '長度:', e_orderno.length);
-      res.status(400).send('Invalid OrderID format');
+      // ✅ 2026-02-03: 返回重定向頁面
+      res.status(200).send(generateRedirectHtml(false, e_orderno, '無法識別訂單編號格式'));
       return;
     }
 
@@ -351,7 +473,8 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
         status: result === '1' ? '成功' : '失敗'
       });
 
-      res.status(200).send('OK');
+      // ✅ 2026-02-03: 返回重定向頁面
+      res.status(200).send(generateRedirectHtml(true, e_orderno, '測試訂單處理成功'));
       return;
     }
 
@@ -446,7 +569,8 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
       console.error('[GOMYPAY Callback] ❌ 查詢訂單失敗');
       console.error('[GOMYPAY Callback]    錯誤:', bookingError);
       console.error('[GOMYPAY Callback]    bookingId:', bookingId);
-      res.status(404).send('Booking not found');
+      // ✅ 2026-02-03: 返回重定向頁面
+      res.status(200).send(generateRedirectHtml(false, e_orderno, '找不到訂單，請聯繫客服'));
       return;
     }
 
@@ -503,7 +627,10 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
         customerId: booking.customer_id
       });
 
-      res.status(200).send('OK');
+      // ✅ 2026-02-03: 修復回調延遲問題
+      // 使用 Return_url 接收即時回調時，需要返回重定向頁面將用戶導回 App
+      console.log('[GOMYPAY Callback] ✅ 支付成功，返回重定向頁面');
+      res.status(200).send(generateRedirectHtml(true, e_orderno, '支付成功！正在返回 App...'));
     } else {
       // 支付失敗
       console.log('[GOMYPAY Callback] 支付失敗:', ret_msg);
@@ -514,7 +641,10 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
         existingPayment
       });
 
-      res.status(200).send('OK');
+      // ✅ 2026-02-03: 修復回調延遲問題
+      // 支付失敗時也返回重定向頁面
+      console.log('[GOMYPAY Callback] ❌ 支付失敗，返回重定向頁面');
+      res.status(200).send(generateRedirectHtml(false, e_orderno, ret_msg || '支付失敗，請重試。'));
     }
 
   } catch (error: any) {
@@ -524,7 +654,9 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
     console.error('[GOMYPAY Callback] 錯誤訊息:', (error as Error).message);
     console.error('[GOMYPAY Callback] 錯誤堆疊:', (error as Error).stack);
     console.error('[GOMYPAY Callback] ========================================');
-    res.status(500).send('Internal server error');
+
+    // ✅ 2026-02-03: 錯誤情況也返回重定向頁面
+    res.status(200).send(generateRedirectHtml(false, 'unknown', '處理支付時發生錯誤，請稍後重試。'));
   }
 }
 

@@ -28,14 +28,21 @@ export function initializePaymentProviders(): void {
   );
 
   // 註冊 GoMyPay 支付提供者
+  // ✅ 2026-02-03: 修復回調延遲問題
+  // - 移除 callbackUrl（Callback_Url 會導致 5 分鐘延遲）
+  // - 使用 returnUrl 接收即時回調（1-3 秒內）
+  // - returnUrl 指向後端 API，處理完成後重定向到 appDeepLink
   PaymentProviderFactory.registerProvider(
     PaymentProviderType.GOMYPAY,
     new GomypayProvider({
       merchantId: process.env.GOMYPAY_MERCHANT_ID || '478A0C2370B2C364AACB347DE0754E14',
       apiKey: process.env.GOMYPAY_API_KEY || 'f0qbvm3c0qb2qdjxwku59wimwh495271',
       isTestMode: process.env.GOMYPAY_TEST_MODE === 'true',
-      returnUrl: process.env.GOMYPAY_RETURN_URL || 'https://api.relaygo.pro/api/payment/gomypay/return',
-      callbackUrl: process.env.GOMYPAY_CALLBACK_URL || 'https://api.relaygo.pro/api/payment/gomypay/callback'
+      // ✅ Return_url 用於即時回調（1-3 秒內收到支付結果）
+      returnUrl: process.env.GOMYPAY_RETURN_URL || 'https://api.relaygo.pro/api/payment/gomypay-callback',
+      // ✅ App Deep Link（處理完成後重定向回 App）
+      appDeepLink: process.env.GOMYPAY_APP_DEEP_LINK || 'ridebooking://payment-result'
+      // ❌ callbackUrl: 不再使用，此參數（Callback_Url）會導致 5 分鐘延遲
     })
   );
 
