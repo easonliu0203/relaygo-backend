@@ -260,6 +260,15 @@ export class GomypayProvider implements PaymentProvider {
     buyerMemo: string;
     chkValue: string;
   }): string {
+    // ✅ 2026-02-03: 修復支付失敗時無法識別訂單的問題
+    // 在 Return_url 中加入訂單編號參數，確保即使 GOMYPAY 不返回訂單編號，
+    // 後端也能從 URL 參數中獲取
+    const returnUrlWithOrderNo = this.config.returnUrl
+      ? `${this.config.returnUrl}?booking_order_no=${encodeURIComponent(params.orderNo)}`
+      : '';
+
+    console.log(`[GoMyPay] Return URL (含訂單編號): ${returnUrlWithOrderNo}`);
+
     const queryParams = new URLSearchParams({
       Send_Type: '0',                          // 信用卡
       Pay_Mode_No: '2',                        // 付款模式
@@ -276,7 +285,9 @@ export class GomypayProvider implements PaymentProvider {
       // ✅ 2026-02-03: 修復回調延遲問題
       // 根據 GOMYPAY 工程師建議：移除 Callback_Url（會導致 5 分鐘延遲）
       // 改用 Return_url 接收即時回調（1-3 秒內）
-      Return_url: this.config.returnUrl || '', // 授權結果回傳網址（即時回調）
+      // ✅ 2026-02-03: 修復支付失敗時無法識別訂單的問題
+      // Return_url 現在包含 booking_order_no 參數
+      Return_url: returnUrlWithOrderNo,        // 授權結果回傳網址（即時回調，含訂單編號）
       // ❌ Callback_Url: 不再使用，此參數會導致 5 分鐘延遲
       Str_Check: params.chkValue               // 交易驗證密碼
     });

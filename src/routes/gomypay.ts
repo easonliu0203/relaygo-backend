@@ -170,13 +170,17 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
     OrderID,
     AvCode,
     str_check,
-    Send_Type
+    Send_Type,
+    booking_order_no  // ✅ 2026-02-03: 從 URL 參數獲取訂單編號（支付失敗時 GOMYPAY 不返回訂單編號）
   } = req.query;
 
-  // GOMYPAY 可能使用 e_orderno 或 Order_No 參數
-  const orderNo = (e_orderno || Order_No || '') as string;
+  // ✅ 2026-02-03: 修復支付失敗時無法識別訂單的問題
+  // 優先使用 GOMYPAY 返回的訂單編號，如果沒有則使用 URL 參數中的 booking_order_no
+  // 這樣即使 GOMYPAY 支付失敗不返回訂單編號，我們也能從 URL 參數中獲取
+  const orderNo = (e_orderno || Order_No || booking_order_no || '') as string;
 
   console.log('[GoMyPay Return] 訂單編號:', orderNo);
+  console.log('[GoMyPay Return] 訂單編號來源:', e_orderno ? 'e_orderno' : Order_No ? 'Order_No' : booking_order_no ? 'booking_order_no (URL參數)' : '無');
   console.log('[GoMyPay Return] 支付結果:', result);
   console.log('[GoMyPay Return] 返回訊息:', ret_msg);
   console.log('[GoMyPay Return] 授權碼:', AvCode);
