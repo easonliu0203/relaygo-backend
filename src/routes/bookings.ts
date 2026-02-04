@@ -612,11 +612,12 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
     // 8. 發起支付（使用從 user_profiles 獲取的完整客戶資料）
     // ✅ 2026-02-04: 修復重複 Order_No 導致 GOMYPAY 卡住的問題
     // GOMYPAY 要求每筆交易的 Order_No 必須唯一，即使是同一訂單的重試支付
-    // 新格式: BK{timestamp}-DEPOSIT-{uniqueSuffix}
-    // 例如: BK1770199618207-DEPOSIT-A3B9F2
-    const uniqueSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const orderId = `${booking.booking_number}-DEPOSIT-${uniqueSuffix}`;
-    console.log('[API] 生成唯一 Order_No:', orderId);
+    // ⚠️ GOMYPAY 限制 Order_No 最大長度為 25 字符
+    // 新格式: BK{timestamp}D{4位隨機} (D=Deposit, 總長度 20 字符)
+    // 例如: BK1770199618207D7L7Y
+    const uniqueSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const orderId = `${booking.booking_number}D${uniqueSuffix}`;
+    console.log('[API] 生成唯一 Order_No:', orderId, '長度:', orderId.length);
 
     const paymentRequest = {
       orderId,  // ✅ 每次支付嘗試都使用唯一的 Order_No

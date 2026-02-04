@@ -196,18 +196,27 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
       let paymentType: string = 'deposit';
 
       if (orderNo.startsWith('BK')) {
-        // ✅ 2026-02-04: 支持帶唯一後綴的新格式
-        // 新格式：BK{timestamp}-DEPOSIT-{uniqueSuffix} 或 BK{timestamp}-BALANCE-{uniqueSuffix}
-        // 舊格式：BK{timestamp}-DEPOSIT 或 BK{timestamp}-BALANCE
-        const depositMatch = orderNo.match(/^(BK\d+)-DEPOSIT(-[A-Z0-9]+)?$/i);
-        const balanceMatch = orderNo.match(/^(BK\d+)-BALANCE(-[A-Z0-9]+)?$/i);
+        // ✅ 2026-02-04: 支持多種格式
+        // 最新格式（25字符限制）: BK{timestamp}D{4位} 或 BK{timestamp}B{4位}
+        // 舊格式：BK{timestamp}-DEPOSIT-{uniqueSuffix} 或 BK{timestamp}-BALANCE-{uniqueSuffix}
+        // 更舊格式：BK{timestamp}-DEPOSIT 或 BK{timestamp}-BALANCE
+        const newDepositMatch = orderNo.match(/^(BK\d+)D([A-Z0-9]{4})$/i);
+        const newBalanceMatch = orderNo.match(/^(BK\d+)B([A-Z0-9]{4})$/i);
+        const oldDepositMatch = orderNo.match(/^(BK\d+)-DEPOSIT(-[A-Z0-9]+)?$/i);
+        const oldBalanceMatch = orderNo.match(/^(BK\d+)-BALANCE(-[A-Z0-9]+)?$/i);
 
         let bookingNumber: string;
-        if (depositMatch) {
-          bookingNumber = depositMatch[1];
+        if (newDepositMatch) {
+          bookingNumber = newDepositMatch[1];
           paymentType = 'deposit';
-        } else if (balanceMatch) {
-          bookingNumber = balanceMatch[1];
+        } else if (newBalanceMatch) {
+          bookingNumber = newBalanceMatch[1];
+          paymentType = 'balance';
+        } else if (oldDepositMatch) {
+          bookingNumber = oldDepositMatch[1];
+          paymentType = 'deposit';
+        } else if (oldBalanceMatch) {
+          bookingNumber = oldBalanceMatch[1];
           paymentType = 'balance';
         } else {
           // 最舊格式（向後兼容）：只有 BK{timestamp}
@@ -343,19 +352,26 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
         // 立即通知 Flutter WebView（不等待回調）
         function notifyFlutter(status) {
           try {
-            // ✅ 2026-02-04: 支持帶唯一後綴的新格式
-            // 新格式：BK1763186275643-DEPOSIT-A3B9F2 → BK1763186275643
-            // 舊格式：BK1763186275643-DEPOSIT → BK1763186275643
+            // ✅ 2026-02-04: 支持多種格式
+            // 最新格式（25字符限制）: BK1763186275643D7L7Y → BK1763186275643
+            // 舊格式：BK1763186275643-DEPOSIT-A3B9F2 → BK1763186275643
+            // 更舊格式：BK1763186275643-DEPOSIT → BK1763186275643
             let bookingNumber = orderNo;
 
             // 使用正則表達式匹配並提取 booking_number
-            const depositMatch = orderNo.match(/^(BK\\d+)-DEPOSIT(-[A-Z0-9]+)?$/i);
-            const balanceMatch = orderNo.match(/^(BK\\d+)-BALANCE(-[A-Z0-9]+)?$/i);
+            const newDepositMatch = orderNo.match(/^(BK\\d+)D([A-Z0-9]{4})$/i);
+            const newBalanceMatch = orderNo.match(/^(BK\\d+)B([A-Z0-9]{4})$/i);
+            const oldDepositMatch = orderNo.match(/^(BK\\d+)-DEPOSIT(-[A-Z0-9]+)?$/i);
+            const oldBalanceMatch = orderNo.match(/^(BK\\d+)-BALANCE(-[A-Z0-9]+)?$/i);
 
-            if (depositMatch) {
-              bookingNumber = depositMatch[1];
-            } else if (balanceMatch) {
-              bookingNumber = balanceMatch[1];
+            if (newDepositMatch) {
+              bookingNumber = newDepositMatch[1];
+            } else if (newBalanceMatch) {
+              bookingNumber = newBalanceMatch[1];
+            } else if (oldDepositMatch) {
+              bookingNumber = oldDepositMatch[1];
+            } else if (oldBalanceMatch) {
+              bookingNumber = oldBalanceMatch[1];
             }
 
             // 方法 1: 使用 Deep Link
@@ -492,32 +508,44 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
     let paymentType: string;
 
     if (e_orderno.startsWith('BK')) {
-      // ✅ 2026-02-04: 支持 BK 格式的訂單編號，包含 -DEPOSIT/-BALANCE 後綴和唯一標識符
-      // 格式：
-      // - 訂金（新格式）: BK1763186275643-DEPOSIT-A3B9F2 (帶唯一後綴)
-      // - 尾款（新格式）: BK1763186275643-BALANCE-A3B9F2 (帶唯一後綴)
-      // - 訂金（舊格式）: BK1763186275643-DEPOSIT
-      // - 尾款（舊格式）: BK1763186275643-BALANCE
-      // - 更舊格式（向後兼容）: BK1763186275643
+      // ✅ 2026-02-04: 支持 BK 格式的訂單編號
+      // 格式（按優先順序匹配）：
+      // - 最新格式（25字符限制）: BK1763186275643D7L7Y (D=Deposit) 或 BK1763186275643B7L7Y (B=Balance)
+      // - 舊格式（帶後綴）: BK1763186275643-DEPOSIT-A3B9F2 或 BK1763186275643-BALANCE-A3B9F2
+      // - 更舊格式: BK1763186275643-DEPOSIT 或 BK1763186275643-BALANCE
+      // - 最舊格式（向後兼容）: BK1763186275643
       console.log('[GOMYPAY Callback] 檢測到 BK 格式訂單編號:', e_orderno);
 
       // 使用正則表達式解析訂單編號
-      // 匹配模式: BK{timestamp}-DEPOSIT(-{uniqueSuffix})? 或 BK{timestamp}-BALANCE(-{uniqueSuffix})?
-      const depositMatch = e_orderno.match(/^(BK\d+)-DEPOSIT(-[A-Z0-9]+)?$/);
-      const balanceMatch = e_orderno.match(/^(BK\d+)-BALANCE(-[A-Z0-9]+)?$/);
+      // 最新格式: BK{timestamp}D{4位隨機} 或 BK{timestamp}B{4位隨機}
+      const newDepositMatch = e_orderno.match(/^(BK\d+)D([A-Z0-9]{4})$/);
+      const newBalanceMatch = e_orderno.match(/^(BK\d+)B([A-Z0-9]{4})$/);
+      // 舊格式: BK{timestamp}-DEPOSIT(-{uniqueSuffix})? 或 BK{timestamp}-BALANCE(-{uniqueSuffix})?
+      const oldDepositMatch = e_orderno.match(/^(BK\d+)-DEPOSIT(-[A-Z0-9]+)?$/);
+      const oldBalanceMatch = e_orderno.match(/^(BK\d+)-BALANCE(-[A-Z0-9]+)?$/);
 
-      if (depositMatch) {
-        // 訂金支付（支持帶或不帶唯一後綴）
-        bookingId = depositMatch[1]; // BK{timestamp}
+      if (newDepositMatch) {
+        // 最新格式訂金支付
+        bookingId = newDepositMatch[1]; // BK{timestamp}
         paymentType = 'deposit';
-        console.log('[GOMYPAY Callback] 訂金支付，唯一後綴:', depositMatch[2] || '無');
-      } else if (balanceMatch) {
-        // 尾款支付（支持帶或不帶唯一後綴）
-        bookingId = balanceMatch[1]; // BK{timestamp}
+        console.log('[GOMYPAY Callback] 訂金支付（新短格式），唯一後綴:', newDepositMatch[2]);
+      } else if (newBalanceMatch) {
+        // 最新格式尾款支付
+        bookingId = newBalanceMatch[1]; // BK{timestamp}
         paymentType = 'balance';
-        console.log('[GOMYPAY Callback] 尾款支付，唯一後綴:', balanceMatch[2] || '無');
+        console.log('[GOMYPAY Callback] 尾款支付（新短格式），唯一後綴:', newBalanceMatch[2]);
+      } else if (oldDepositMatch) {
+        // 舊格式訂金支付
+        bookingId = oldDepositMatch[1]; // BK{timestamp}
+        paymentType = 'deposit';
+        console.log('[GOMYPAY Callback] 訂金支付（舊格式），唯一後綴:', oldDepositMatch[2] || '無');
+      } else if (oldBalanceMatch) {
+        // 舊格式尾款支付
+        bookingId = oldBalanceMatch[1]; // BK{timestamp}
+        paymentType = 'balance';
+        console.log('[GOMYPAY Callback] 尾款支付（舊格式），唯一後綴:', oldBalanceMatch[2] || '無');
       } else {
-        // 舊格式（向後兼容）：沒有後綴，預設為訂金
+        // 最舊格式（向後兼容）：沒有後綴，預設為訂金
         bookingId = e_orderno;
         paymentType = 'deposit';
       }
