@@ -1010,12 +1010,16 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
       });
 
       // 8. 發起支付（使用從 user_profiles 獲取的完整客戶資料）
-      // ✅ 修復：為尾款支付添加 -BALANCE 後綴，避免與訂金支付的 Order_No 重複
-      // GOMYPAY 要求每筆交易的 Order_No 必須唯一
-      // 訂金: BK1763186275643-DEPOSIT
-      // 尾款: BK1763186275643-BALANCE
+      // ✅ 2026-02-04: 修復重複 Order_No 導致 GOMYPAY 卡住的問題
+      // GOMYPAY 要求每筆交易的 Order_No 必須唯一，即使是同一訂單的重試支付
+      // 新格式: BK{timestamp}-BALANCE-{uniqueSuffix}
+      // 例如: BK1770199618207-BALANCE-A3B9F2
+      const uniqueSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const orderId = `${booking.booking_number}-BALANCE-${uniqueSuffix}`;
+      console.log('[API] 生成唯一 Order_No:', orderId);
+
       const paymentRequest = {
-        orderId: `${booking.booking_number}-BALANCE`,  // ✅ 添加 -BALANCE 後綴
+        orderId,  // ✅ 每次支付嘗試都使用唯一的 Order_No
         amount: totalPayable,  // ✅ 使用包含小費的總金額
         currency: 'TWD',
         description: tipAmount > 0

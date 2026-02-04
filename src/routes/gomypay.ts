@@ -196,10 +196,24 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
       let paymentType: string = 'deposit';
 
       if (orderNo.startsWith('BK')) {
-        // BK 格式：BK{timestamp}-DEPOSIT 或 BK{timestamp}-BALANCE
-        const parts = orderNo.split('-');
-        const bookingNumber = parts[0]; // BK1770123847838
-        paymentType = parts[1]?.toLowerCase() || 'deposit';
+        // ✅ 2026-02-04: 支持帶唯一後綴的新格式
+        // 新格式：BK{timestamp}-DEPOSIT-{uniqueSuffix} 或 BK{timestamp}-BALANCE-{uniqueSuffix}
+        // 舊格式：BK{timestamp}-DEPOSIT 或 BK{timestamp}-BALANCE
+        const depositMatch = orderNo.match(/^(BK\d+)-DEPOSIT(-[A-Z0-9]+)?$/i);
+        const balanceMatch = orderNo.match(/^(BK\d+)-BALANCE(-[A-Z0-9]+)?$/i);
+
+        let bookingNumber: string;
+        if (depositMatch) {
+          bookingNumber = depositMatch[1];
+          paymentType = 'deposit';
+        } else if (balanceMatch) {
+          bookingNumber = balanceMatch[1];
+          paymentType = 'balance';
+        } else {
+          // 最舊格式（向後兼容）：只有 BK{timestamp}
+          bookingNumber = orderNo;
+          paymentType = 'deposit';
+        }
 
         console.log('[GoMyPay Return] BK 格式，查詢 booking_number:', bookingNumber);
 
@@ -329,13 +343,19 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
         // 立即通知 Flutter WebView（不等待回調）
         function notifyFlutter(status) {
           try {
-            // ✅ 修復：移除 -DEPOSIT 或 -BALANCE 後綴，只傳遞 booking_number
-            // 例如：BK1763186275643-BALANCE → BK1763186275643
+            // ✅ 2026-02-04: 支持帶唯一後綴的新格式
+            // 新格式：BK1763186275643-DEPOSIT-A3B9F2 → BK1763186275643
+            // 舊格式：BK1763186275643-DEPOSIT → BK1763186275643
             let bookingNumber = orderNo;
-            if (orderNo.endsWith('-DEPOSIT')) {
-              bookingNumber = orderNo.replace('-DEPOSIT', '');
-            } else if (orderNo.endsWith('-BALANCE')) {
-              bookingNumber = orderNo.replace('-BALANCE', '');
+
+            // 使用正則表達式匹配並提取 booking_number
+            const depositMatch = orderNo.match(/^(BK\\d+)-DEPOSIT(-[A-Z0-9]+)?$/i);
+            const balanceMatch = orderNo.match(/^(BK\\d+)-BALANCE(-[A-Z0-9]+)?$/i);
+
+            if (depositMatch) {
+              bookingNumber = depositMatch[1];
+            } else if (balanceMatch) {
+              bookingNumber = balanceMatch[1];
             }
 
             // 方法 1: 使用 Deep Link
@@ -472,22 +492,30 @@ async function handleGomypayCallback(req: Request, res: Response): Promise<void>
     let paymentType: string;
 
     if (e_orderno.startsWith('BK')) {
-      // ✅ 修復：支持 BK 格式的訂單編號，包含 -DEPOSIT 和 -BALANCE 後綴
+      // ✅ 2026-02-04: 支持 BK 格式的訂單編號，包含 -DEPOSIT/-BALANCE 後綴和唯一標識符
       // 格式：
-      // - 訂金: BK1763186275643-DEPOSIT
-      // - 尾款: BK1763186275643-BALANCE
-      // - 舊格式（向後兼容）: BK1763186275643
+      // - 訂金（新格式）: BK1763186275643-DEPOSIT-A3B9F2 (帶唯一後綴)
+      // - 尾款（新格式）: BK1763186275643-BALANCE-A3B9F2 (帶唯一後綴)
+      // - 訂金（舊格式）: BK1763186275643-DEPOSIT
+      // - 尾款（舊格式）: BK1763186275643-BALANCE
+      // - 更舊格式（向後兼容）: BK1763186275643
       console.log('[GOMYPAY Callback] 檢測到 BK 格式訂單編號:', e_orderno);
 
-      // 檢查是否有後綴
-      if (e_orderno.endsWith('-DEPOSIT')) {
-        // 訂金支付
-        bookingId = e_orderno.replace('-DEPOSIT', ''); // 移除後綴，獲取 booking_number
+      // 使用正則表達式解析訂單編號
+      // 匹配模式: BK{timestamp}-DEPOSIT(-{uniqueSuffix})? 或 BK{timestamp}-BALANCE(-{uniqueSuffix})?
+      const depositMatch = e_orderno.match(/^(BK\d+)-DEPOSIT(-[A-Z0-9]+)?$/);
+      const balanceMatch = e_orderno.match(/^(BK\d+)-BALANCE(-[A-Z0-9]+)?$/);
+
+      if (depositMatch) {
+        // 訂金支付（支持帶或不帶唯一後綴）
+        bookingId = depositMatch[1]; // BK{timestamp}
         paymentType = 'deposit';
-      } else if (e_orderno.endsWith('-BALANCE')) {
-        // 尾款支付
-        bookingId = e_orderno.replace('-BALANCE', ''); // 移除後綴，獲取 booking_number
+        console.log('[GOMYPAY Callback] 訂金支付，唯一後綴:', depositMatch[2] || '無');
+      } else if (balanceMatch) {
+        // 尾款支付（支持帶或不帶唯一後綴）
+        bookingId = balanceMatch[1]; // BK{timestamp}
         paymentType = 'balance';
+        console.log('[GOMYPAY Callback] 尾款支付，唯一後綴:', balanceMatch[2] || '無');
       } else {
         // 舊格式（向後兼容）：沒有後綴，預設為訂金
         bookingId = e_orderno;
