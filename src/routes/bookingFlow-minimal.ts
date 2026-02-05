@@ -741,8 +741,8 @@ router.post('/bookings/:bookingId/end-trip', async (req: Request, res: Response)
 
       console.log('[API] 總超時時間（分鐘）:', totalOvertimeMinutes);
 
-      // 5.3 扣除寬限時間（10 分鐘）
-      const GRACE_PERIOD_MINUTES = 10;
+      // 5.3 扣除寬限時間（15 分鐘）
+      const GRACE_PERIOD_MINUTES = 15;
       overtimeMinutes = Math.max(0, totalOvertimeMinutes - GRACE_PERIOD_MINUTES);
 
       console.log('[API] 扣除寬限時間後的超時時間（分鐘）:', overtimeMinutes);
