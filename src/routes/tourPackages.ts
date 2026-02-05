@@ -156,9 +156,12 @@ router.get('/:id', async (req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, description, name_i18n, description_i18n, is_active, display_order } = req.body;
+    const {
+      name, description, name_i18n, description_i18n, is_active, display_order,
+      country, region, country_i18n, region_i18n
+    } = req.body;
 
-    console.log('[Tour Packages API] 新增旅遊方案:', { name, description, name_i18n, description_i18n });
+    console.log('[Tour Packages API] 新增旅遊方案:', { name, country, region, name_i18n, description_i18n });
 
     // 驗證必填欄位
     if (!name) {
@@ -176,7 +179,11 @@ router.post('/', async (req: Request, res: Response) => {
         name_i18n: name_i18n || {},
         description_i18n: description_i18n || {},
         is_active: is_active !== undefined ? is_active : true,
-        display_order: display_order || 0
+        display_order: display_order || 0,
+        country: country || 'TW',
+        region: region || 'taipei',
+        country_i18n: country_i18n || {},
+        region_i18n: region_i18n || {}
       }])
       .select()
       .single();
@@ -215,9 +222,12 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, description, name_i18n, description_i18n, is_active, display_order } = req.body;
+    const {
+      name, description, name_i18n, description_i18n, is_active, display_order,
+      country, region, country_i18n, region_i18n
+    } = req.body;
 
-    console.log(`[Tour Packages API] 更新旅遊方案: ${id}`, { name, description, name_i18n, description_i18n });
+    console.log(`[Tour Packages API] 更新旅遊方案: ${id}`, { name, country, region, name_i18n, description_i18n });
 
     // 驗證必填欄位
     if (!name) {
@@ -241,6 +251,19 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     if (description_i18n !== undefined) {
       updateData.description_i18n = description_i18n;
+    }
+    // 更新國家和地區欄位
+    if (country !== undefined) {
+      updateData.country = country;
+    }
+    if (region !== undefined) {
+      updateData.region = region;
+    }
+    if (country_i18n !== undefined) {
+      updateData.country_i18n = country_i18n;
+    }
+    if (region_i18n !== undefined) {
+      updateData.region_i18n = region_i18n;
     }
 
     const { data, error } = await supabase
