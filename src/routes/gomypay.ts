@@ -250,16 +250,23 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
             .single();
 
           // 計算金額
+          // ✅ 2026-02-05: 優先使用支付記錄中的金額（包含小費），因為這是實際發起支付時的金額
           let amount = 0;
-          if (paymentType === 'deposit') {
+          if (existingPayment && existingPayment.amount) {
+            // 優先使用支付記錄中的金額（這是發起支付時包含小費的總金額）
+            amount = existingPayment.amount;
+            console.log('[GoMyPay Return] 使用支付記錄金額（包含小費）:', amount);
+          } else if (paymentType === 'deposit') {
             amount = booking.deposit_amount || 0;
+            console.log('[GoMyPay Return] 使用訂金金額:', amount);
           } else if (paymentType === 'balance') {
             amount = booking.balance_amount ||
                      (booking.total_price ? booking.total_price - (booking.deposit_amount || 0) : 0) ||
                      booking.deposit_amount || 0;
+            console.log('[GoMyPay Return] 使用尾款金額（無小費記錄）:', amount);
           }
 
-          console.log('[GoMyPay Return] 支付金額:', amount);
+          console.log('[GoMyPay Return] 最終支付金額:', amount);
 
           // 調用 handlePaymentSuccess 更新訂單狀態
           await handlePaymentSuccess({
