@@ -84,10 +84,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       pickupFlightNumber,
       pickupAirportCode,
       pickupScheduledTime,
+      pickupTerminal,
       addAirportDropoff = false,
       dropoffFlightNumber,
       dropoffAirportCode,
       dropoffScheduledTime,
+      dropoffTerminal,
     } = req.body;
 
     console.log('[API] 創建訂單:', {
@@ -354,12 +356,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         vehicle_type: vehicleCategory, // ✅ 修復：使用 vehicleCategory ('small' 或 'large')，不是 packageName
         // ✅ 修正：機場模式下使用航班資訊作為地點描述
         pickup_location: addAirportPickup
-          ? `機場接機 ${pickupAirportCode || ''} ${pickupFlightNumber || ''}`
+          ? `機場接機 ${pickupAirportCode || ''}${pickupTerminal ? ' ' + pickupTerminal : ''} ${pickupFlightNumber || ''}`
           : pickupAddress,
         pickup_latitude: addAirportPickup ? null : pickupLatitude,
         pickup_longitude: addAirportPickup ? null : pickupLongitude,
         destination: addAirportDropoff
-          ? `機場送機 ${dropoffAirportCode || ''} ${dropoffFlightNumber || ''}`
+          ? `機場送機 ${dropoffAirportCode || ''}${dropoffTerminal ? ' ' + dropoffTerminal : ''} ${dropoffFlightNumber || ''}`
           : (dropoffAddress || ''),
         dropoff_latitude: addAirportDropoff ? null : (dropoffLatitude || null),
         dropoff_longitude: addAirportDropoff ? null : (dropoffLongitude || null),
@@ -394,10 +396,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         pickup_flight_number: pickupFlightNumber || null,
         pickup_airport_code: pickupAirportCode || null,
         pickup_scheduled_time: pickupScheduledTime || null,
+        pickup_terminal: pickupTerminal || null,
         add_airport_dropoff: addAirportDropoff || false,
         dropoff_flight_number: dropoffFlightNumber || null,
         dropoff_airport_code: dropoffAirportCode || null,
         dropoff_scheduled_time: dropoffScheduledTime || null,
+        dropoff_terminal: dropoffTerminal || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
