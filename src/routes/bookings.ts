@@ -79,6 +79,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // ✅ 新增：多維度分潤配置欄位
       serviceType = 'charter', // 服務類型: 'charter' (包車旅遊) | 'instant_ride' (即時派車)
       country = 'TW', // 國家代碼 (ISO 3166-1 alpha-2)
+      // ✅ 新增：機場接送欄位
+      addAirportPickup = false,
+      pickupFlightNumber,
+      pickupAirportCode,
+      pickupScheduledTime,
+      addAirportDropoff = false,
+      dropoffFlightNumber,
+      dropoffAirportCode,
+      dropoffScheduledTime,
     } = req.body;
 
     console.log('[API] 創建訂單:', {
@@ -101,12 +110,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    if (!pickupAddress || !pickupLatitude || !pickupLongitude) {
-      res.status(400).json({
-        success: false,
-        error: '缺少上車地點資訊'
-      });
-      return;
+    // ✅ 修正：機場模式需要航班資訊，地址模式需要地址+座標
+    // 注意：原 `!pickupLatitude` 在 lat=0 時為 true（JS falsy），改用 == null 檢查
+    if (addAirportPickup) {
+      if (!pickupFlightNumber) {
+        res.status(400).json({
+          success: false,
+          error: '缺少接機航班資訊'
+        });
+        return;
+      }
+    } else {
+      if (!pickupAddress || pickupLatitude == null || pickupLongitude == null) {
+        res.status(400).json({
+          success: false,
+          error: '缺少上車地點資訊'
+        });
+        return;
+      }
     }
 
     if (!bookingTime) {
@@ -331,12 +352,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         start_time: startTime,
         duration_hours: 8, // 預設 8 小時，可以從套餐資訊中獲取
         vehicle_type: vehicleCategory, // ✅ 修復：使用 vehicleCategory ('small' 或 'large')，不是 packageName
-        pickup_location: pickupAddress,
-        pickup_latitude: pickupLatitude,
-        pickup_longitude: pickupLongitude,
-        destination: dropoffAddress || '',
-        dropoff_latitude: dropoffLatitude || null,   // ✅ 新增：下車地點緯度
-        dropoff_longitude: dropoffLongitude || null, // ✅ 新增：下車地點經度
+        // ✅ 修正：機場模式下使用航班資訊作為地點描述
+        pickup_location: addAirportPickup
+          ? `機場接機 ${pickupAirportCode || ''} ${pickupFlightNumber || ''}`
+          : pickupAddress,
+        pickup_latitude: addAirportPickup ? null : pickupLatitude,
+        pickup_longitude: addAirportPickup ? null : pickupLongitude,
+        destination: addAirportDropoff
+          ? `機場送機 ${dropoffAirportCode || ''} ${dropoffFlightNumber || ''}`
+          : (dropoffAddress || ''),
+        dropoff_latitude: addAirportDropoff ? null : (dropoffLatitude || null),
+        dropoff_longitude: addAirportDropoff ? null : (dropoffLongitude || null),
         passenger_count: passengerCount || 1, // ✅ 新增：乘客數量（預設為 1）
         luggage_count: luggageCount || 0, // ✅ 新增：行李數量（預設為 0）
         special_requirements: notes || '',
@@ -363,6 +389,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         // ✅ 新增：多維度分潤配置欄位
         service_type: serviceType, // 服務類型: 'charter' | 'instant_ride'
         country: country, // 國家代碼: 'TW', 'JP', 'KR', etc.
+        // ✅ 新增：機場接送欄位
+        add_airport_pickup: addAirportPickup || false,
+        pickup_flight_number: pickupFlightNumber || null,
+        pickup_airport_code: pickupAirportCode || null,
+        pickup_scheduled_time: pickupScheduledTime || null,
+        add_airport_dropoff: addAirportDropoff || false,
+        dropoff_flight_number: dropoffFlightNumber || null,
+        dropoff_airport_code: dropoffAirportCode || null,
+        dropoff_scheduled_time: dropoffScheduledTime || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
