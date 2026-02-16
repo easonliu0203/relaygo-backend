@@ -90,6 +90,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       dropoffAirportCode,
       dropoffScheduledTime,
       dropoffTerminal,
+      // ✅ 新增：機場接送成交價快照
+      pickupTransferPrice,
+      pickupTransferRegion,
+      pickupTransferVehicleType,
+      dropoffTransferPrice,
+      dropoffTransferRegion,
+      dropoffTransferVehicleType,
     } = req.body;
 
     console.log('[API] 創建訂單:', {
@@ -233,8 +240,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const overtimeFee = 0; // 超時費用
     const tipAmount = 0; // 小費
 
+    // ✅ 加入機場接送加購費用
+    const pickupAddonPrice = (addAirportPickup && pickupTransferPrice) ? Number(pickupTransferPrice) : 0;
+    const dropoffAddonPrice = (addAirportDropoff && dropoffTransferPrice) ? Number(dropoffTransferPrice) : 0;
+
     // ✅ 修正：如果有使用優惠碼，使用折扣後的價格
-    let totalAmount = basePrice + foreignLanguageSurcharge + overtimeFee + tipAmount;
+    let totalAmount = basePrice + foreignLanguageSurcharge + overtimeFee + tipAmount + pickupAddonPrice + dropoffAddonPrice;
     let actualOriginalPrice = totalAmount; // 原始價格（未折扣前）
     let actualDiscountAmount = 0; // 折扣金額
     let actualFinalPrice = totalAmount; // 折扣後最終價格
@@ -251,6 +262,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         discountAmount: actualDiscountAmount,
         finalPrice: actualFinalPrice,
         discountPercentage: ((actualDiscountAmount / actualOriginalPrice) * 100).toFixed(2) + '%'
+      });
+    }
+
+    if (pickupAddonPrice > 0 || dropoffAddonPrice > 0) {
+      console.log('[API] ✅ 機場接送加購:', {
+        pickupAddonPrice,
+        dropoffAddonPrice,
+        totalAmount,
       });
     }
 
@@ -402,6 +421,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         dropoff_airport_code: dropoffAirportCode || null,
         dropoff_scheduled_time: dropoffScheduledTime || null,
         dropoff_terminal: dropoffTerminal || null,
+        // ✅ 新增：機場接送成交價快照
+        pickup_transfer_price: pickupTransferPrice ?? null,
+        pickup_transfer_region: pickupTransferRegion || null,
+        pickup_transfer_vehicle_type: pickupTransferVehicleType || null,
+        dropoff_transfer_price: dropoffTransferPrice ?? null,
+        dropoff_transfer_region: dropoffTransferRegion || null,
+        dropoff_transfer_vehicle_type: dropoffTransferVehicleType || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
