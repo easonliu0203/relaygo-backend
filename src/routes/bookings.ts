@@ -290,8 +290,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           .eq('is_active', true)
           .limit(1)
           .maybeSingle();
-        if (row && row[col] != null) {
-          verifiedPickupPrice = Number(row[col]);
+        const r = row as Record<string, unknown> | null;
+        if (r && r[col] != null) {
+          verifiedPickupPrice = Number(r[col]);
         }
       }
       if (pickupTransferPrice && verifiedPickupPrice !== Number(pickupTransferPrice)) {
@@ -313,8 +314,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           .eq('is_active', true)
           .limit(1)
           .maybeSingle();
-        if (row && row[col] != null) {
-          verifiedDropoffPrice = Number(row[col]);
+        const r = row as Record<string, unknown> | null;
+        if (r && r[col] != null) {
+          verifiedDropoffPrice = Number(r[col]);
         }
       }
       if (dropoffTransferPrice && verifiedDropoffPrice !== Number(dropoffTransferPrice)) {
