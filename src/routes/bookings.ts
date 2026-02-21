@@ -93,6 +93,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       packageId,
       packageName,
       estimatedFare,
+      vehicleType, // 標準車型代碼：XS / S / M / L / XL
       tourPackageId,
       tourPackageName,
       // 優惠碼相關欄位（如果客戶使用優惠碼）
@@ -465,7 +466,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         start_date: startDate,
         start_time: startTime,
         duration_hours: 8, // 預設 8 小時，可以從套餐資訊中獲取
-        vehicle_type: vehicleCategory, // ✅ 修復：使用 vehicleCategory ('small' 或 'large')，不是 packageName
+        vehicle_type: vehicleType  // Mobile 傳入的標準車型代碼 (XS/S/M/L/XL)
+          || (isAirportTransfer ? (pickupTransferVehicleType || dropoffTransferVehicleType) : null)  // 機場接送 fallback
+          || vehicleCategory,  // 舊版 Mobile 相容 fallback
         // ✅ 修正：機場模式下使用航班資訊作為地點描述
         pickup_location: addAirportPickup
           ? `機場接機 ${pickupAirportCode || ''}${pickupTerminal ? ' ' + pickupTerminal : ''} ${pickupFlightNumber || ''}`
