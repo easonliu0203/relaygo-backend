@@ -288,6 +288,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           .eq('vehicle_type', pickupTransferVehicleType)
           .eq('region', verifiedPickupRegion)
           .eq('is_active', true)
+          .order('updated_at', { ascending: false })
           .limit(1)
           .maybeSingle();
         const r = row as Record<string, unknown> | null;
@@ -312,6 +313,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           .eq('vehicle_type', dropoffTransferVehicleType)
           .eq('region', verifiedDropoffRegion)
           .eq('is_active', true)
+          .order('updated_at', { ascending: false })
           .limit(1)
           .maybeSingle();
         const r = row as Record<string, unknown> | null;
