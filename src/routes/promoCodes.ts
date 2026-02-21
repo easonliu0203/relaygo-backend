@@ -94,7 +94,8 @@ router.post('/validate', async (req: Request, res: Response) => {
         const discountMultiplier = 1 - (discountPercentageApplied / 100);
         currentPrice = currentPrice * discountMultiplier;
         const serviceTypeLabel = service_type === 'charter' ? '（包車旅遊）' :
-                                 service_type === 'instant_ride' ? '（即時派車）' : '';
+                                 service_type === 'instant_ride' ? '（即時派車）' :
+                                 service_type === 'airport_transfer' ? '（機場接送）' : '';
         calculationSteps.push(
           `百分比折扣${serviceTypeLabel}：${(100 - discountPercentageApplied).toFixed(0)} 折 = NT$ ${Math.round(currentPrice).toLocaleString()}`
         );

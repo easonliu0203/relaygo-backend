@@ -41,6 +41,36 @@ function getClientIp(req: Request): string {
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
+// ✅ 機場接送後端驗價：從地址判定地區
+function detectRegion(address: string): string | null {
+  if (!address) return null;
+  const mapping: [string, string][] = [
+    ['墾丁', '墾丁'],
+    ['新北', '新北'], ['台北', '台北'], ['臺北', '台北'],
+    ['桃園', '桃園'], ['新竹', '新竹'], ['苗栗', '苗栗'],
+    ['台中', '台中'], ['臺中', '台中'],
+    ['彰化', '彰化'], ['南投', '南投'], ['雲林', '雲林'],
+    ['嘉義', '嘉義'], ['台南', '台南'], ['臺南', '台南'],
+    ['高雄', '高雄'], ['屏東', '屏東'], ['基隆', '基隆'],
+    ['宜蘭', '宜蘭'], ['花蓮', '花蓮'],
+    ['台東', '台東'], ['臺東', '台東'],
+  ];
+  for (const [key, value] of mapping) {
+    if (address.includes(key)) return value;
+  }
+  return null;
+}
+
+function airportPriceColumn(airportCode: string): string | null {
+  switch (airportCode?.toUpperCase()) {
+    case 'TSA': return 'tsa_price';
+    case 'TPE': return 'tpe_price';
+    case 'RMQ': return 'rmq_price';
+    case 'KHH': return 'khh_price';
+    default: return null;
+  }
+}
+
 /**
  * @route POST /api/bookings
  * @desc 創建新訂單
@@ -240,12 +270,62 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const overtimeFee = 0; // 超時費用
     const tipAmount = 0; // 小費
 
-    // ✅ 加入機場接送加購費用
-    const pickupAddonPrice = (addAirportPickup && pickupTransferPrice) ? Number(pickupTransferPrice) : 0;
-    const dropoffAddonPrice = (addAirportDropoff && dropoffTransferPrice) ? Number(dropoffTransferPrice) : 0;
+    // ✅ 機場接送加購/獨立服務：後端驗價（不信任手機端傳來的金額）
+    let verifiedPickupPrice = 0;
+    let verifiedDropoffPrice = 0;
+    let verifiedPickupRegion: string | null = null;
+    let verifiedDropoffRegion: string | null = null;
+
+    if (addAirportPickup && pickupAirportCode) {
+      // 接機：地區來自下車地址
+      const col = airportPriceColumn(pickupAirportCode);
+      verifiedPickupRegion = detectRegion(dropoffAddress || '');
+      if (col && verifiedPickupRegion && pickupTransferVehicleType) {
+        const { data: row } = await supabase
+          .from('airport_transfer_pricing')
+          .select(col)
+          .eq('country', country || 'TW')
+          .eq('vehicle_type', pickupTransferVehicleType)
+          .eq('region', verifiedPickupRegion)
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
+        if (row && row[col] != null) {
+          verifiedPickupPrice = Number(row[col]);
+        }
+      }
+      if (pickupTransferPrice && verifiedPickupPrice !== Number(pickupTransferPrice)) {
+        console.warn('[API] ⚠️ 接機價格不一致: 手機端=%d, 後端驗價=%d', pickupTransferPrice, verifiedPickupPrice);
+      }
+    }
+
+    if (addAirportDropoff && dropoffAirportCode) {
+      // 送機：地區來自上車地址
+      const col = airportPriceColumn(dropoffAirportCode);
+      verifiedDropoffRegion = detectRegion(pickupAddress || '');
+      if (col && verifiedDropoffRegion && dropoffTransferVehicleType) {
+        const { data: row } = await supabase
+          .from('airport_transfer_pricing')
+          .select(col)
+          .eq('country', country || 'TW')
+          .eq('vehicle_type', dropoffTransferVehicleType)
+          .eq('region', verifiedDropoffRegion)
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
+        if (row && row[col] != null) {
+          verifiedDropoffPrice = Number(row[col]);
+        }
+      }
+      if (dropoffTransferPrice && verifiedDropoffPrice !== Number(dropoffTransferPrice)) {
+        console.warn('[API] ⚠️ 送機價格不一致: 手機端=%d, 後端驗價=%d', dropoffTransferPrice, verifiedDropoffPrice);
+      }
+    }
 
     // ✅ 修正：如果有使用優惠碼，使用折扣後的價格
-    let totalAmount = basePrice + foreignLanguageSurcharge + overtimeFee + tipAmount + pickupAddonPrice + dropoffAddonPrice;
+    // 機場接送獨立服務：basePrice = 0，totalAmount = 驗價結果
+    // 包車加購：basePrice = 套餐價，totalAmount = basePrice + 驗價結果
+    let totalAmount = basePrice + foreignLanguageSurcharge + overtimeFee + tipAmount + verifiedPickupPrice + verifiedDropoffPrice;
     let actualOriginalPrice = totalAmount; // 原始價格（未折扣前）
     let actualDiscountAmount = 0; // 折扣金額
     let actualFinalPrice = totalAmount; // 折扣後最終價格
@@ -265,10 +345,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       });
     }
 
-    if (pickupAddonPrice > 0 || dropoffAddonPrice > 0) {
-      console.log('[API] ✅ 機場接送加購:', {
-        pickupAddonPrice,
-        dropoffAddonPrice,
+    if (verifiedPickupPrice > 0 || verifiedDropoffPrice > 0) {
+      console.log('[API] ✅ 機場接送（後端驗價）:', {
+        verifiedPickupPrice,
+        verifiedDropoffPrice,
+        serviceType,
         totalAmount,
       });
     }
@@ -421,12 +502,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         dropoff_airport_code: dropoffAirportCode || null,
         dropoff_scheduled_time: dropoffScheduledTime || null,
         dropoff_terminal: dropoffTerminal || null,
-        // ✅ 新增：機場接送成交價快照
-        pickup_transfer_price: pickupTransferPrice ?? null,
-        pickup_transfer_region: pickupTransferRegion || null,
+        // ✅ 機場接送成交價快照（使用後端驗價結果）
+        pickup_transfer_price: verifiedPickupPrice || null,
+        pickup_transfer_region: verifiedPickupRegion || pickupTransferRegion || null,
         pickup_transfer_vehicle_type: pickupTransferVehicleType || null,
-        dropoff_transfer_price: dropoffTransferPrice ?? null,
-        dropoff_transfer_region: dropoffTransferRegion || null,
+        dropoff_transfer_price: verifiedDropoffPrice || null,
+        dropoff_transfer_region: verifiedDropoffRegion || dropoffTransferRegion || null,
         dropoff_transfer_vehicle_type: dropoffTransferVehicleType || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
