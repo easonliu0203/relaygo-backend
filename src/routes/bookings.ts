@@ -90,7 +90,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       passengerCount,
       luggageCount, // ✅ 修復：取消註解，從請求中獲取行李數量
       notes,
-      // packageId,
+      packageId,
       packageName,
       estimatedFare,
       tourPackageId,
@@ -329,7 +329,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     // ✅ 修正：機場接送獨立服務時，basePrice（= estimatedFare）已是接送價格，
     // 不可再疊加 verifiedPickupPrice/verifiedDropoffPrice，否則會重複計算。
     // 此時以後端驗價結果為準，basePrice 歸零。
-    if (serviceType === 'airport_transfer') {
+    // packageId === 'airport_transfer' 是機場接送頁面傳來的識別
+    // serviceType === 'airport_transfer' 是正式的服務類型
+    const isAirportTransfer = serviceType === 'airport_transfer' || packageId === 'airport_transfer';
+    const effectiveServiceType = isAirportTransfer ? 'airport_transfer' : serviceType;
+    if (isAirportTransfer) {
       basePrice = 0;
       console.log('[API] 機場接送獨立服務：basePrice 歸零，改用後端驗價結果 pickup=%d dropoff=%d', verifiedPickupPrice, verifiedDropoffPrice);
     }
@@ -497,7 +501,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         policy_agreed_at: policyAgreed === true ? new Date().toISOString() : null, // ✅ 新增：同意時間戳記
         client_ip: clientIp, // ✅ 新增：客戶端 IP 地址（用於防範 Chargeback 爭議）
         // ✅ 新增：多維度分潤配置欄位
-        service_type: serviceType, // 服務類型: 'charter' | 'instant_ride'
+        service_type: effectiveServiceType, // 服務類型: 'charter' | 'instant_ride' | 'airport_transfer'
         country: country, // 國家代碼: 'TW', 'JP', 'KR', etc.
         // ✅ 新增：機場接送欄位
         add_airport_pickup: addAirportPickup || false,
