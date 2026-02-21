@@ -324,9 +324,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    // ✅ 修正：如果有使用優惠碼，使用折扣後的價格
-    // 機場接送獨立服務：basePrice = 0，totalAmount = 驗價結果
-    // 包車加購：basePrice = 套餐價，totalAmount = basePrice + 驗價結果
+    // ✅ 修正：機場接送獨立服務時，basePrice（= estimatedFare）已是接送價格，
+    // 不可再疊加 verifiedPickupPrice/verifiedDropoffPrice，否則會重複計算。
+    // 此時以後端驗價結果為準，basePrice 歸零。
+    if (serviceType === 'airport_transfer') {
+      basePrice = 0;
+      console.log('[API] 機場接送獨立服務：basePrice 歸零，改用後端驗價結果 pickup=%d dropoff=%d', verifiedPickupPrice, verifiedDropoffPrice);
+    }
     let totalAmount = basePrice + foreignLanguageSurcharge + overtimeFee + tipAmount + verifiedPickupPrice + verifiedDropoffPrice;
     let actualOriginalPrice = totalAmount; // 原始價格（未折扣前）
     let actualDiscountAmount = 0; // 折扣金額
