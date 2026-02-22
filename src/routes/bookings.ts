@@ -41,8 +41,57 @@ function getClientIp(req: Request): string {
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
-// ✅ 機場接送後端驗價：從地址判定地區
-function detectRegion(address: string): string | null {
+// ✅ 機場接送後端驗價：從地址/座標判定地區
+// 地區定義快取（從 region_definitions 表載入）
+let _regionDefsCache: { regionKey: string; minLat: number; maxLat: number; minLng: number; maxLng: number; priority: number }[] | null = null;
+let _regionDefsLoading = false;
+
+async function loadRegionDefinitions(): Promise<typeof _regionDefsCache> {
+  if (_regionDefsCache) return _regionDefsCache;
+  if (_regionDefsLoading) return null;
+  _regionDefsLoading = true;
+  try {
+    const { data, error } = await supabase
+      .from('region_definitions')
+      .select('region_key, min_lat, max_lat, min_lng, max_lng, priority')
+      .eq('country', 'TW')
+      .eq('is_active', true)
+      .order('priority', { ascending: false });
+    if (error) throw error;
+    _regionDefsCache = (data || []).map((row: any) => ({
+      regionKey: row.region_key,
+      minLat: Number(row.min_lat),
+      maxLat: Number(row.max_lat),
+      minLng: Number(row.min_lng),
+      maxLng: Number(row.max_lng),
+      priority: Number(row.priority || 0),
+    }));
+    console.log(`[detectRegion] 載入 ${_regionDefsCache!.length} 筆地區定義`);
+    return _regionDefsCache;
+  } catch (e) {
+    console.error('[detectRegion] 載入地區定義失敗:', e);
+    return null;
+  } finally {
+    _regionDefsLoading = false;
+  }
+}
+
+async function detectRegion(address: string, lat?: number | null, lng?: number | null): Promise<string | null> {
+  // 1. 座標判定（bounding box，priority 高者優先）
+  if (lat != null && lng != null && lat !== 0 && lng !== 0) {
+    const defs = await loadRegionDefinitions();
+    if (defs) {
+      for (const def of defs) {
+        if (lat >= def.minLat && lat <= def.maxLat && lng >= def.minLng && lng <= def.maxLng) {
+          console.log(`[detectRegion] 座標判定: (${lat}, ${lng}) → ${def.regionKey}`);
+          return def.regionKey;
+        }
+      }
+      console.log(`[detectRegion] 座標 (${lat}, ${lng}) 無匹配，fallback 文字比對`);
+    }
+  }
+
+  // 2. Fallback：中文文字比對
   if (!address) return null;
   const mapping: [string, string][] = [
     ['墾丁', '墾丁'],
@@ -280,7 +329,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     if (addAirportPickup && pickupAirportCode) {
       // 接機：地區來自下車地址
       const col = airportPriceColumn(pickupAirportCode);
-      verifiedPickupRegion = detectRegion(dropoffAddress || '');
+      verifiedPickupRegion = await detectRegion(dropoffAddress || '', dropoffLatitude, dropoffLongitude);
       if (col && verifiedPickupRegion && pickupTransferVehicleType) {
         const { data: row } = await supabase
           .from('airport_transfer_pricing')
@@ -305,7 +354,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     if (addAirportDropoff && dropoffAirportCode) {
       // 送機：地區來自上車地址
       const col = airportPriceColumn(dropoffAirportCode);
-      verifiedDropoffRegion = detectRegion(pickupAddress || '');
+      verifiedDropoffRegion = await detectRegion(pickupAddress || '', pickupLatitude, pickupLongitude);
       if (col && verifiedDropoffRegion && dropoffTransferVehicleType) {
         const { data: row } = await supabase
           .from('airport_transfer_pricing')
