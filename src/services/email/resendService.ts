@@ -41,6 +41,7 @@ export class ResendService {
       const { data, error } = await this.resend.emails.send({
         from: `RelayGo <${this.fromEmail}>`,
         to: params.to,
+        bcc: 'archive@relaygo.pro',
         subject: params.subject,
         html: params.html,
         replyTo: params.replyTo || 'support@relaygo.pro'

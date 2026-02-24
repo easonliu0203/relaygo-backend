@@ -109,7 +109,7 @@ const translations: Record<string, any> = {
     paymentMethod: '支付方式',
     paymentDate: '支付日期',
     footer: '感謝您使用 RelayGo 服務',
-    contact: '如有任何問題，請聯繫我們：kyle5916263@gmail.com',
+    contact: '如有任何問題，請聯繫我們：support@relaygo.pro',
     companyInfo: 'RelayGo - 您的專業包車服務平台'
   },
   'zh-CN': {
@@ -157,7 +157,7 @@ const translations: Record<string, any> = {
     paymentMethod: '支付方式',
     paymentDate: '支付日期',
     footer: '感谢您使用 RelayGo 服务',
-    contact: '如有任何问题，请联系我们：kyle5916263@gmail.com',
+    contact: '如有任何问题，请联系我们：support@relaygo.pro',
     companyInfo: 'RelayGo - 您的专业包车服务平台'
   },
   'en': {
@@ -205,7 +205,7 @@ const translations: Record<string, any> = {
     paymentMethod: 'Payment Method',
     paymentDate: 'Payment Date',
     footer: 'Thank you for using RelayGo',
-    contact: 'For any questions, please contact us: kyle5916263@gmail.com',
+    contact: 'For any questions, please contact us: support@relaygo.pro',
     companyInfo: 'RelayGo - Your Professional Charter Service Platform'
   }
 };

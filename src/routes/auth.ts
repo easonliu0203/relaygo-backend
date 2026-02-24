@@ -97,8 +97,8 @@ router.post('/register-or-login', async (req: Request, res: Response) => {
         return res.status(403).json({
           success: false,
           error: '此帳號已申請刪除，無法登入',
-          message: '如需恢復請聯繫客服：kyle5916263@gmail.com',
-          message_en: 'This account has been deleted. Please contact support at kyle5916263@gmail.com to restore.',
+          message: '如需恢復請聯繫客服：support@relaygo.pro',
+          message_en: 'This account has been deleted. Please contact support at support@relaygo.pro to restore.',
         });
       }
 

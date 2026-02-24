@@ -61,9 +61,13 @@ export class ReceiptEmailService {
       }
 
       // 3. 準備收據資料
-      const customerProfile = booking.customer?.user_profiles?.[0] || {};
-      const driverProfile = booking.driver?.user_profiles?.[0] || {};
-      const driverInfo = booking.driver?.drivers?.[0] || {};
+      // user_profiles 可能是陣列（一對多）或物件（一對一），需同時處理
+      const rawCustomerProfile = booking.customer?.user_profiles;
+      const customerProfile = Array.isArray(rawCustomerProfile) ? rawCustomerProfile[0] || {} : rawCustomerProfile || {};
+      const rawDriverProfile = booking.driver?.user_profiles;
+      const driverProfile = Array.isArray(rawDriverProfile) ? rawDriverProfile[0] || {} : rawDriverProfile || {};
+      const rawDriverInfo = booking.driver?.drivers;
+      const driverInfo = Array.isArray(rawDriverInfo) ? rawDriverInfo[0] || {} : rawDriverInfo || {};
 
       // ✅ 修復：確保客戶姓名正確顯示，如果沒有姓名則使用郵箱前綴
       const customerName = `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim()

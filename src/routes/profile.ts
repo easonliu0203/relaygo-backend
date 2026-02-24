@@ -313,7 +313,7 @@ router.post('/delete-account', async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         error: '此帳號已申請刪除',
-        message: '如需恢復請聯繫客服：kyle5916263@gmail.com',
+        message: '如需恢復請聯繫客服：support@relaygo.pro',
       });
     }
 

