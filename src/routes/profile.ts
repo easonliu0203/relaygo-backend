@@ -79,6 +79,8 @@ router.get('/upsert', async (req: Request, res: Response) => {
           firstName: null,
           lastName: null,
           phone: null,
+          nationalityCode: null,
+          phoneCountryCode: null,
           avatarUrl: null,
           dateOfBirth: null,
           gender: null,
@@ -101,6 +103,8 @@ router.get('/upsert', async (req: Request, res: Response) => {
         firstName: profile.first_name,
         lastName: profile.last_name,
         phone: profile.phone,
+        nationalityCode: profile.nationality_code,
+        phoneCountryCode: profile.phone_country_code,
         avatarUrl: profile.avatar_url,
         dateOfBirth: profile.date_of_birth,
         gender: profile.gender,
@@ -131,6 +135,8 @@ router.post('/upsert', async (req: Request, res: Response) => {
       firstName,
       lastName,
       phone,
+      nationalityCode,
+      phoneCountryCode,
       avatarUrl,
       dateOfBirth,
       gender,
@@ -181,6 +187,8 @@ router.post('/upsert', async (req: Request, res: Response) => {
     if (firstName !== undefined) profileData.first_name = firstName;
     if (lastName !== undefined) profileData.last_name = lastName;
     if (phone !== undefined) profileData.phone = phone;
+    if (nationalityCode !== undefined) profileData.nationality_code = nationalityCode;
+    if (phoneCountryCode !== undefined) profileData.phone_country_code = phoneCountryCode;
     if (avatarUrl !== undefined) profileData.avatar_url = avatarUrl;
     if (dateOfBirth !== undefined) profileData.date_of_birth = dateOfBirth;
     if (gender !== undefined) profileData.gender = gender;
@@ -235,6 +243,8 @@ router.post('/upsert', async (req: Request, res: Response) => {
         firstName: profile.first_name,
         lastName: profile.last_name,
         phone: profile.phone,
+        nationalityCode: profile.nationality_code,
+        phoneCountryCode: profile.phone_country_code,
         avatarUrl: profile.avatar_url,
         dateOfBirth: profile.date_of_birth,
         gender: profile.gender,
