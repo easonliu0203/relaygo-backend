@@ -268,10 +268,11 @@ router.put('/:id', async (req: Request, res: Response) => {
       discount_amount,
       discount_percentage_enabled,
       discount_percentage,
-      // ✅ 新增：服務類型維度折扣欄位
+      // ✅ 服務類型維度折扣欄位
       discount_type,                     // 'unified' 或 'by_service_type'
       discount_percent_charter,          // 包車旅遊折扣百分比
       discount_percent_instant_ride,     // 即時派車折扣百分比
+      discount_percent_airport_transfer, // 機場接送折扣百分比
       commission_fixed,
       commission_percent,
       is_commission_fixed_active,
@@ -280,7 +281,8 @@ router.put('/:id', async (req: Request, res: Response) => {
       // ✅ 服務類型維度分潤欄位
       commission_type,                   // 'unified' 或 'by_service_type'
       commission_percent_charter,        // 包車旅遊分潤百分比
-      commission_percent_instant_ride    // 即時派車分潤百分比
+      commission_percent_instant_ride,   // 即時派車分潤百分比
+      commission_percent_airport_transfer // 機場接送分潤百分比
     } = req.body;
 
     // 檢查推廣人是否存在
@@ -334,6 +336,16 @@ router.put('/:id', async (req: Request, res: Response) => {
       }
       updateData.discount_percent_instant_ride = discount_percent_instant_ride;
     }
+    if (discount_percent_airport_transfer !== undefined) {
+      // 驗證百分比範圍
+      if (discount_percent_airport_transfer < 0 || discount_percent_airport_transfer > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'discount_percent_airport_transfer 必須在 0-100 之間'
+        });
+      }
+      updateData.discount_percent_airport_transfer = discount_percent_airport_transfer;
+    }
     if (commission_fixed !== undefined) updateData.commission_fixed = commission_fixed;
     if (commission_percent !== undefined) updateData.commission_percent = commission_percent;
     if (is_commission_fixed_active !== undefined) updateData.is_commission_fixed_active = is_commission_fixed_active;
@@ -369,6 +381,16 @@ router.put('/:id', async (req: Request, res: Response) => {
         });
       }
       updateData.commission_percent_instant_ride = commission_percent_instant_ride;
+    }
+    if (commission_percent_airport_transfer !== undefined) {
+      // 驗證百分比範圍
+      if (commission_percent_airport_transfer < 0 || commission_percent_airport_transfer > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'commission_percent_airport_transfer 必須在 0-100 之間'
+        });
+      }
+      updateData.commission_percent_airport_transfer = commission_percent_airport_transfer;
     }
 
     // 更新推廣人資料

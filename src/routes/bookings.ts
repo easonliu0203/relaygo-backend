@@ -391,6 +391,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let actualOriginalPrice = totalAmount; // 原始價格（未折扣前）
     let actualDiscountAmount = 0; // 折扣金額
     let actualFinalPrice = totalAmount; // 折扣後最終價格
+    let snapshotDiscountPercentage = 0; // ✅ 快照：實際套用的折扣百分比
 
     if (finalPrice && finalPrice > 0) {
       // 客戶使用了優惠碼
@@ -431,16 +432,31 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let percentAmount = 0;
 
     if (promoCode && influencerId) {
-      // 查詢推廣者的佣金設定
+      // 查詢推廣者的佣金與折扣設定（含服務類型維度欄位）
       const { data: influencerData } = await supabase
         .from('influencers')
-        .select('commission_fixed, commission_percent, is_commission_fixed_active, is_commission_percent_active')
+        .select('commission_fixed, commission_percent, is_commission_fixed_active, is_commission_percent_active, commission_type, commission_percent_charter, commission_percent_instant_ride, commission_percent_airport_transfer, discount_type, discount_percentage, discount_percent_charter, discount_percent_instant_ride, discount_percent_airport_transfer, discount_percentage_enabled')
         .eq('id', influencerId)
         .single();
 
       if (influencerData) {
         const isFixedActive = influencerData.is_commission_fixed_active === true;
         const isPercentActive = influencerData.is_commission_percent_active === true;
+
+        // ✅ 快照：查詢實際套用的折扣百分比（用於 bookings 和 promo_code_usage 快照）
+        if (influencerData.discount_percentage_enabled) {
+          if (influencerData.discount_type === 'by_service_type' && effectiveServiceType) {
+            if (effectiveServiceType === 'charter') {
+              snapshotDiscountPercentage = influencerData.discount_percent_charter || 0;
+            } else if (effectiveServiceType === 'instant_ride') {
+              snapshotDiscountPercentage = influencerData.discount_percent_instant_ride || 0;
+            } else if (effectiveServiceType === 'airport_transfer') {
+              snapshotDiscountPercentage = influencerData.discount_percent_airport_transfer || 0;
+            }
+          } else {
+            snapshotDiscountPercentage = influencerData.discount_percentage || 0;
+          }
+        }
 
         // 計算固定金額佣金（如果啟用）
         if (isFixedActive) {
@@ -449,9 +465,21 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           calculatedInfluencerCommission += fixedAmount;
         }
 
-        // 計算百分比佣金（如果啟用）
+        // ✅ 計算百分比佣金（支援 by_service_type 模式）
         if (isPercentActive) {
-          commissionRate = influencerData.commission_percent || 0;
+          if (influencerData.commission_type === 'by_service_type' && effectiveServiceType) {
+            // 依服務類型模式：根據 effectiveServiceType 選擇對應的分潤百分比
+            if (effectiveServiceType === 'charter') {
+              commissionRate = influencerData.commission_percent_charter || 0;
+            } else if (effectiveServiceType === 'instant_ride') {
+              commissionRate = influencerData.commission_percent_instant_ride || 0;
+            } else if (effectiveServiceType === 'airport_transfer') {
+              commissionRate = influencerData.commission_percent_airport_transfer || 0;
+            }
+          } else {
+            // 統一模式：使用 commission_percent
+            commissionRate = influencerData.commission_percent || 0;
+          }
           percentAmount = Math.round(actualFinalPrice * commissionRate / 100);
           calculatedInfluencerCommission += percentAmount;
         }
@@ -465,7 +493,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             fixedAmount,
             commissionRate,
             percentAmount,
-            totalCommission: calculatedInfluencerCommission
+            totalCommission: calculatedInfluencerCommission,
+            serviceType: effectiveServiceType,
+            commissionMode: influencerData.commission_type
           });
         } else if (isFixedActive) {
           commissionType = 'fixed';
@@ -478,7 +508,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           console.log('[API] ✅ 使用百分比佣金:', {
             finalPrice: actualFinalPrice,
             commissionRate,
-            commission: calculatedInfluencerCommission
+            commission: calculatedInfluencerCommission,
+            serviceType: effectiveServiceType,
+            commissionMode: influencerData.commission_type
           });
         } else {
           console.log('[API] ⚠️ 推廣者未啟用任何佣金類型');
@@ -539,13 +571,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         tip_amount: tipAmount,
         total_amount: totalAmount,
         deposit_amount: depositAmount,
-        // ✅ 新增：優惠碼相關欄位
-        promo_code: promoCode || null, // 優惠碼
-        influencer_id: influencerId || null, // 網紅 ID
-        influencer_commission: calculatedInfluencerCommission, // ✅ 訂單促成費（後端計算：折後最終金額 × 5%）
-        original_price: actualOriginalPrice, // 原始價格（未使用優惠碼前）
-        discount_amount: actualDiscountAmount, // 折扣金額
-        final_price: actualFinalPrice, // 折扣後最終價格
+        // ✅ 優惠碼相關欄位
+        promo_code: promoCode || null,
+        influencer_id: influencerId || null,
+        influencer_commission: calculatedInfluencerCommission,
+        // ✅ 推廣分潤快照欄位
+        influencer_commission_type: commissionType,
+        influencer_commission_rate: commissionRate,
+        influencer_commission_fixed: commissionFixed,
+        // ✅ 推廣折扣快照欄位
+        promo_discount_percentage: snapshotDiscountPercentage,
+        promo_discount_amount: actualDiscountAmount,
+        original_price: actualOriginalPrice,
+        discount_amount: actualDiscountAmount,
+        final_price: actualFinalPrice,
         tax_id: taxId || null, // ✅ 新增：統一編號（選填）
         tour_package_id: tourPackageId || null, // ✅ 新增：旅遊方案 ID
         tour_package_name: tourPackageName || null, // ✅ 新增：旅遊方案名稱
@@ -617,18 +656,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const { error: usageError } = await supabase
         .from('promo_code_usage')
         .insert({
-          influencer_id: actualCommissionInfluencerId, // ✅ 修復：使用實際分潤對象
+          influencer_id: actualCommissionInfluencerId,
           booking_id: booking.id,
           promo_code: promoCode,
-          original_price: actualOriginalPrice, // ✅ 修正：使用實際的原始價格
-          discount_amount_applied: actualDiscountAmount, // ✅ 修正：使用實際的折扣金額
-          discount_percentage_applied: 0, // 百分比折扣（可以從前端傳遞）
-          final_price: actualFinalPrice, // ✅ 修正：使用實際的折扣後價格
-          commission_amount: calculatedInfluencerCommission, // ✅ 訂單促成費（支援固定金額和百分比）
-          commission_type: commissionType, // ✅ 新增：佣金類型（fixed 或 percent）
-          commission_rate: commissionRate, // ✅ 新增：百分比佣金率
-          commission_fixed_amount: commissionFixed, // ✅ 新增：固定金額佣金
-          order_amount: actualFinalPrice, // ✅ 訂單金額
+          original_price: actualOriginalPrice,
+          discount_amount_applied: actualDiscountAmount,
+          discount_percentage_applied: snapshotDiscountPercentage, // ✅ 修正：使用實際折扣百分比快照
+          final_price: actualFinalPrice,
+          commission_amount: calculatedInfluencerCommission,
+          commission_type: commissionType,
+          commission_rate: commissionRate,
+          commission_fixed_amount: commissionFixed,
+          order_amount: actualFinalPrice,
+          service_type: effectiveServiceType, // ✅ 新增：服務類型快照
         });
 
       if (usageError) {

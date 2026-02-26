@@ -83,6 +83,8 @@ router.post('/validate', async (req: Request, res: Response) => {
           discountPercentageApplied = influencer.discount_percent_charter;
         } else if (service_type === 'instant_ride' && influencer.discount_percent_instant_ride > 0) {
           discountPercentageApplied = influencer.discount_percent_instant_ride;
+        } else if (service_type === 'airport_transfer' && influencer.discount_percent_airport_transfer > 0) {
+          discountPercentageApplied = influencer.discount_percent_airport_transfer;
         }
       } else {
         // 統一模式：使用 discount_percentage
@@ -175,7 +177,8 @@ router.post('/record-usage', async (req: Request, res: Response) => {
       discount_amount_applied,
       discount_percentage_applied,
       final_price,
-      commission_amount
+      commission_amount,
+      service_type
     } = req.body;
 
     console.log(`[Promo Code API] 記錄優惠碼使用: ${promo_code} for booking ${booking_id}`);
@@ -211,7 +214,8 @@ router.post('/record-usage', async (req: Request, res: Response) => {
         discount_amount_applied: discount_amount_applied || 0,
         discount_percentage_applied: discount_percentage_applied || 0,
         final_price: final_price || 0,
-        commission_amount: commissionToRecord
+        commission_amount: commissionToRecord,
+        service_type: service_type || null,
       })
       .select()
       .single();
