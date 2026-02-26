@@ -207,6 +207,102 @@ const translations: Record<string, any> = {
     footer: 'Thank you for using RelayGo',
     contact: 'For any questions, please contact us: support@relaygo.pro',
     companyInfo: 'RelayGo - Your Professional Charter Service Platform'
+  },
+  'ja': {
+    title: '電子領収書',
+    receiptFor: '領収書の種類',
+    depositReceipt: 'デポジット領収書',
+    fullReceipt: '最終領収書',
+    orderInfo: '予約情報',
+    bookingNumber: '予約番号',
+    bookingDate: '予約日',
+    bookingTime: '予約時刻',
+    customerInfo: 'お客様情報',
+    name: 'お名前',
+    email: 'メールアドレス',
+    phone: '電話番号',
+    serviceDetails: 'サービス内容',
+    pickupLocation: '乗車場所',
+    dropoffLocation: '降車場所',
+    vehicleType: '車種',
+    duration: '利用時間',
+    hours: '時間',
+    driverInfo: 'ドライバー情報',
+    driverName: 'ドライバー名',
+    driverPhone: 'ドライバー電話番号',
+    vehiclePlate: 'ナンバープレート',
+    feeBreakdown: '料金明細',
+    basePrice: '基本料金',
+    promoCodeDiscount: 'プロモーションコード割引',
+    promoCode: 'プロモーションコード',
+    discountedAmount: '割引後金額',
+    depositAmount: 'デポジット金額',
+    depositPercentage: 'デポジット割合',
+    balanceAmount: '残額',
+    overtimeFee: '延長料金',
+    tipAmount: 'チップ',
+    totalAmount: '合計金額',
+    paidAmount: 'お支払い金額',
+    taxId: '統一発票番号',
+    policyAgreement: 'RelayGo キャンセルポリシーに同意済み',
+    authorizationTime: '承認日時',
+    digitalSignature: 'お客様の電子署名',
+    signatureNote: 'この署名は残額のお支払いを確認するものです',
+    paymentInfo: 'お支払い情報',
+    transactionId: '取引番号',
+    paymentMethod: 'お支払い方法',
+    paymentDate: 'お支払い日',
+    footer: 'RelayGo をご利用いただきありがとうございます',
+    contact: 'ご不明な点がございましたら、お気軽にお問い合わせください：support@relaygo.pro',
+    companyInfo: 'RelayGo — プロフェッショナルなチャーターサービス'
+  },
+  'ko': {
+    title: '전자 영수증',
+    receiptFor: '영수증 유형',
+    depositReceipt: '예약금 영수증',
+    fullReceipt: '최종 영수증',
+    orderInfo: '예약 정보',
+    bookingNumber: '예약 번호',
+    bookingDate: '예약 날짜',
+    bookingTime: '예약 시간',
+    customerInfo: '고객 정보',
+    name: '성명',
+    email: '이메일',
+    phone: '연락처',
+    serviceDetails: '서비스 내역',
+    pickupLocation: '탑승 장소',
+    dropoffLocation: '하차 장소',
+    vehicleType: '차종',
+    duration: '이용 시간',
+    hours: '시간',
+    driverInfo: '드라이버 정보',
+    driverName: '드라이버 이름',
+    driverPhone: '드라이버 연락처',
+    vehiclePlate: '차량 번호',
+    feeBreakdown: '요금 내역',
+    basePrice: '기본 요금',
+    promoCodeDiscount: '프로모션 코드 할인',
+    promoCode: '프로모션 코드',
+    discountedAmount: '할인 적용 금액',
+    depositAmount: '예약금',
+    depositPercentage: '예약금 비율',
+    balanceAmount: '잔액',
+    overtimeFee: '초과 요금',
+    tipAmount: '팁',
+    totalAmount: '총 금액',
+    paidAmount: '결제 금액',
+    taxId: '사업자등록번호',
+    policyAgreement: 'RelayGo 취소 정책에 동의하셨습니다',
+    authorizationTime: '승인 일시',
+    digitalSignature: '고객 전자 서명',
+    signatureNote: '본 서명은 잔액 결제를 확인하기 위한 것입니다',
+    paymentInfo: '결제 정보',
+    transactionId: '거래 번호',
+    paymentMethod: '결제 수단',
+    paymentDate: '결제 일자',
+    footer: 'RelayGo를 이용해 주셔서 감사합니다',
+    contact: '문의 사항이 있으시면 연락해 주십시오: support@relaygo.pro',
+    companyInfo: 'RelayGo — 프리미엄 전세 차량 서비스'
   }
 };
 
@@ -216,6 +312,12 @@ const translations: Record<string, any> = {
 function formatCurrency(amount: number, language: string): string {
   if (language.startsWith('zh')) {
     return `NT$ ${amount.toLocaleString('zh-TW')}`;
+  }
+  if (language === 'ja') {
+    return `NT$ ${amount.toLocaleString('ja-JP')}`;
+  }
+  if (language === 'ko') {
+    return `NT$ ${amount.toLocaleString('ko-KR')}`;
   }
   return `NT$ ${amount.toLocaleString('en-US')}`;
 }
@@ -238,7 +340,7 @@ export function generateReceiptHtml(data: ReceiptData): string {
   <title>${t.title} - ${data.bookingNumber}</title>
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', 'Hiragino Sans', 'Meiryo', 'Malgun Gothic', sans-serif;
       line-height: 1.6;
       color: #333;
       max-width: 600px;
