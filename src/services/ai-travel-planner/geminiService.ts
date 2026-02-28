@@ -261,10 +261,16 @@ export async function chat(
     for (const fc of functionCalls) {
       const call = (fc as any).functionCall;
       const toolResult = await executeTool(call.name, call.args || {});
+      // Gemini API 要求 response 必須是 object，不能是 array
+      const wrappedResult = Array.isArray(toolResult)
+        ? { results: toolResult }
+        : (typeof toolResult === 'object' && toolResult !== null)
+          ? toolResult
+          : { value: toolResult };
       functionResponses.push({
         functionResponse: {
           name: call.name,
-          response: toolResult as object,
+          response: wrappedResult as object,
         },
       } as Part);
     }
