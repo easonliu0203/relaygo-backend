@@ -232,11 +232,7 @@ export async function chat(
   const model = genAI.getGenerativeModel({
     model: 'gemini-3-flash-preview',
     systemInstruction: SYSTEM_INSTRUCTION,
-    tools: [
-      ...tools,
-      // Search Grounding — 讓 Gemini 能搜尋即時資訊（天氣、新聞等）
-      { googleSearch: {} } as unknown as Tool,
-    ],
+    tools,
   });
 
   const chatSession = model.startChat({ history });
