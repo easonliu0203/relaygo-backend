@@ -31,6 +31,7 @@
   "author": "Ride Booking Team",
   "license": "MIT",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.38.4",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
@@ -55,6 +56,7 @@
     "qrcode": "^1.5.3",
     "redis": "^4.6.10",
     "resend": "^6.7.0",
+    "serpapi": "^2.2.1",
     "sharp": "^0.32.6",
     "socket.io": "^4.7.4",
     "twilio": "^4.19.0",
