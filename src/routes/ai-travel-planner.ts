@@ -130,6 +130,43 @@ router.get('/sessions', async (req: Request, res: Response) => {
 });
 
 // ============================================
+// GET /api/ai-travel-planner/sessions/:sessionId/messages
+// 取得指定 session 的訊息歷史
+// ============================================
+router.get('/sessions/:sessionId/messages', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.uid;
+    const { sessionId } = req.params;
+    const firestore = getFirestore();
+
+    // 驗證 session 歸屬
+    const sessionDoc = await firestore.collection('ai_travel_sessions').doc(sessionId).get();
+    if (!sessionDoc.exists || sessionDoc.data()?.userId !== userId) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const messagesSnap = await firestore
+      .collection('ai_travel_sessions')
+      .doc(sessionId)
+      .collection('messages')
+      .orderBy('timestamp', 'asc')
+      .get();
+
+    const messages = messagesSnap.docs.map(doc => ({
+      id: doc.id,
+      role: doc.data().role,
+      content: doc.data().content,
+      timestamp: doc.data().timestamp?.toDate?.()?.toISOString(),
+    }));
+
+    return res.json({ messages });
+  } catch (error) {
+    console.error('[AI Travel] ❌ Get messages error:', error);
+    return res.status(500).json({ error: 'Failed to get messages' });
+  }
+});
+
+// ============================================
 // DELETE /api/ai-travel-planner/sessions/:sessionId
 // 刪除指定 session
 // ============================================
