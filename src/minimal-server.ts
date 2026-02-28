@@ -24,6 +24,7 @@ import googleGeocodingRoutes from './routes/google-geocoding'; // ✅ 新增：�
 // import translationRoutes from './routes/translation'; // TODO: 翻譯路由檔案不存在，暫時註解
 import { initializeFirebase } from './config/firebase';
 import { initializePaymentProviders } from './services/payment';
+import { optionalAuth } from './middleware/auth';
 
 // Load environment variables
 dotenv.config();
@@ -97,6 +98,9 @@ app.get('/api/translation/test', (_req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// Firebase Auth Token 驗證（全域可選）
+app.use(optionalAuth);
 
 // API routes
 app.use('/api/auth', authRoutes); // ✅ 新增：註冊 auth 路由（2025-12-01）
