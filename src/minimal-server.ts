@@ -22,6 +22,7 @@ import placesRoutes from './routes/places'; // ✅ 新增：添加 Places API �
 import googleRoutesRoutes from './routes/google-routes'; // ✅ 新增：添加 Routes API 代理路由（2026-01-31）
 import googleGeocodingRoutes from './routes/google-geocoding'; // ✅ 新增：添加 Geocoding API 代理路由（2026-01-31）
 import aiTravelPlannerRoutes from './routes/ai-travel-planner'; // ✅ 新增：AI 旅遊行程規劃師（2026-02-28）
+import legalRoutes from './routes/legal'; // ✅ 新增：法律文件 API（2026-03-01）
 // import translationRoutes from './routes/translation'; // TODO: 翻譯路由檔案不存在，暫時註解
 import { initializeFirebase } from './config/firebase';
 import { initializePaymentProviders } from './services/payment';
@@ -125,6 +126,7 @@ app.use('/api/places', placesRoutes); // ✅ 新增：註冊 Places API 代理�
 app.use('/api/routes', googleRoutesRoutes); // ✅ 新增：註冊 Routes API 代理路由（2026-01-31）
 app.use('/api/geocoding', googleGeocodingRoutes); // ✅ 新增：註冊 Geocoding API 代理路由（2026-01-31）
 app.use('/api/ai-travel-planner', aiTravelPlannerRoutes); // ✅ 新增：AI 旅遊行程規劃師（2026-02-28）
+app.use('/api/legal', legalRoutes); // ✅ 新增：法律文件 API（2026-03-01）
 app.use('/api', ratingsRoutes); // 保留舊的 ratings 路由以向後兼容
 // app.use('/api/translation', translationRoutes); // TODO: 翻譯路由檔案不存在，暫時註解
 
