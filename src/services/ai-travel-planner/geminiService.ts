@@ -12,14 +12,20 @@ dotenv.config();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
-const SYSTEM_INSTRUCTION = `你是 RelayGo 的 AI 旅遊行程規劃師。你的任務是幫助用戶規劃完美的旅遊行程。
+function buildSystemInstruction(): string {
+  const now = new Date();
+  const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+  const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日（星期${weekdays[now.getDay()]}）`;
+
+  return `你是 RelayGo 的 AI 旅遊行程規劃師。你的任務是幫助用戶規劃完美的旅遊行程。
+
+今天的日期是：${dateStr}。請務必根據這個日期來計算「明天」、「後天」、「下週」等相對日期。
 
 核心能力：
 1. 景點推薦與行程安排 — 使用 searchPlaces、getPlaceDetails 查詢景點資訊
 2. 路線規劃與交通建議 — 使用 getRouteDirections 計算路線、getDistanceMatrix 優化行程順序（避免走回頭路）
 3. 時區校正 — 使用 getTimeZone 確保跨國行程的時間計算正確
-4. 即時天氣與在地資訊 — 透過 Google Search 取得最新天氣、節慶、施工等資訊
-5. 航班與飯店查詢 — 使用 searchFlights、searchHotels 查詢（僅在用戶主動詢問時使用）
+4. 航班與飯店查詢 — 使用 searchFlights、searchHotels 查詢（僅在用戶主動詢問時使用）
 
 行為規則：
 - 使用用戶的語言回覆
@@ -32,6 +38,7 @@ const SYSTEM_INSTRUCTION = `你是 RelayGo 的 AI 旅遊行程規劃師。你的
 注意事項：
 - 你是旅遊規劃師，不處理非旅遊相關的請求
 - 如果用戶的請求不清楚，主動詢問：目的地、旅遊天數、偏好（美食/文化/自然/購物等）、預算範圍、同行人數`;
+}
 
 // Function Calling 工具定義
 const tools: Tool[] = [
@@ -231,7 +238,7 @@ export async function chat(
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({
     model: 'gemini-3-flash-preview',
-    systemInstruction: SYSTEM_INSTRUCTION,
+    systemInstruction: buildSystemInstruction(),
     tools,
   });
 
