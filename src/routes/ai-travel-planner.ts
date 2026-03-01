@@ -107,20 +107,23 @@ router.get('/sessions', async (req: Request, res: Response) => {
     const userId = req.user!.uid;
     const firestore = getFirestore();
 
+    // 只用 where 查詢，不加 orderBy 避免需要 Firestore 複合索引
     const snap = await firestore
       .collection('ai_travel_sessions')
       .where('userId', '==', userId)
-      .orderBy('updatedAt', 'desc')
-      .limit(20)
       .get();
 
-    const sessions = snap.docs.map(doc => ({
-      id: doc.id,
-      title: doc.data().title,
-      language: doc.data().language,
-      createdAt: doc.data().createdAt?.toDate?.()?.toISOString(),
-      updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString(),
-    }));
+    const sessions = snap.docs
+      .map(doc => ({
+        id: doc.id,
+        title: doc.data().title,
+        language: doc.data().language,
+        createdAt: doc.data().createdAt?.toDate?.()?.toISOString(),
+        updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString(),
+      }))
+      // 在記憶體中按 updatedAt 排序（最新在前）
+      .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+      .slice(0, 20);
 
     return res.json({ sessions });
   } catch (error) {
