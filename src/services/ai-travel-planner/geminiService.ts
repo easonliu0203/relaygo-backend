@@ -87,9 +87,13 @@ function getLocalizedName(link: AffiliateLink, lang: string): string {
 function buildAffiliatePromptSection(links: AffiliateLink[], userLang: string): string {
   if (links.length === 0) return '';
 
+  // 過濾掉租車類連結 — AI 反覆無視禁止規則，直接不提供給 AI
+  const filtered = links.filter(l => l.category !== 'car_rental');
+  if (filtered.length === 0) return '';
+
   // 按用戶語言優先排序連結（相同語言的排前面）
   const baseLang = userLang.split('-')[0];
-  const sorted = [...links].sort((a, b) => {
+  const sorted = [...filtered].sort((a, b) => {
     const aLangMatch = a.site_language === userLang || a.site_language.split('-')[0] === baseLang ? 1 : 0;
     const bLangMatch = b.site_language === userLang || b.site_language.split('-')[0] === baseLang ? 1 : 0;
     return bLangMatch - aLangMatch;
@@ -127,8 +131,7 @@ function buildAffiliatePromptSection(links: AffiliateLink[], userLang: string): 
 - 📦 機票+酒店套餐連結：行程為 2 天以上 且 跨國移動 才推薦
 - 🚄 火車連結：行程涉及該國家的火車交通才推薦（依地區匹配：JP→日本火車、KR→韓國火車、EU→歐洲火車）
 - 🎯 當地玩樂/門票連結：行程中包含任何需要購票或預約的場所就推薦，包括但不限於：主題樂園（迪士尼、環球影城等）、動物園、水族館、博物館、美術館、觀景台、纜車、遊船、溫泉、下午茶、甜點體驗、咖啡廳體驗、伴手禮店、文化體驗（和服、茶道等）。Trip.com 當地玩樂涵蓋範圍很廣，景點門票和餐飲體驗都有
-- 🚗 租車連結：【嚴格禁止主動推薦】只有在用戶的訊息中明確出現「租車」、「自駕」、「rent a car」等字眼時才可以附上租車連結。如果用戶沒有提到這些關鍵字，無論任何情況都不準顯示租車連結。這是最高優先級規則。
-- 🚐 包車旅遊：台灣境內的行程一律不推薦包車旅遊連結（因為 RelayGo 本身就是包車服務）。海外行程僅在用戶主動提到「包車」時才推薦
+- 🚗 租車／包車：不推薦任何租車或包車相關的連結或服務。RelayGo 本身就是包車服務，不推廣競品
 - 1 天行程且不跨國：不推薦飯店、機票、套餐連結
 
 嵌入方式：
