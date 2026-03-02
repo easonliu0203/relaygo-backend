@@ -11,6 +11,12 @@ const router = Router();
 router.use(requireAuth);
 
 // ============================================
+// 每位用戶 30 秒冷卻限制（防止濫用 Gemini API）
+// ============================================
+const COOLDOWN_MS = 30 * 1000;
+const lastChatTimestamp = new Map<string, number>();
+
+// ============================================
 // POST /api/ai-travel-planner/chat
 // 發送訊息給 AI，取得回應
 // ============================================
@@ -22,6 +28,22 @@ router.post('/chat', async (req: Request, res: Response) => {
     if (!message || typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ error: 'message is required' });
     }
+
+    // 冷卻檢查
+    const lastTime = lastChatTimestamp.get(userId);
+    if (lastTime) {
+      const elapsed = Date.now() - lastTime;
+      if (elapsed < COOLDOWN_MS) {
+        const waitSeconds = Math.ceil((COOLDOWN_MS - elapsed) / 1000);
+        console.log(`[AI Travel] ⏳ Rate limited user ${userId}, wait ${waitSeconds}s`);
+        return res.status(429).json({
+          error: 'too_many_requests',
+          waitSeconds,
+          message: `請等待 ${waitSeconds} 秒後再發送`,
+        });
+      }
+    }
+    lastChatTimestamp.set(userId, Date.now());
 
     const firestore = getFirestore();
     let currentSessionId = sessionId as string | undefined;
