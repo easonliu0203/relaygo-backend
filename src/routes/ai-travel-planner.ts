@@ -56,9 +56,10 @@ router.post('/chat', async (req: Request, res: Response) => {
       };
     });
 
-    // 3. 呼叫 Gemini
-    console.log(`[AI Travel] 💬 User (${userId}): ${message.substring(0, 80)}...`);
-    const reply = await chat(history, message.trim());
+    // 3. 呼叫 Gemini（帶入用戶語言以選擇對應聯盟連結）
+    const userLang = (language as string) || 'zh-TW';
+    console.log(`[AI Travel] 💬 User (${userId}) [${userLang}]: ${message.substring(0, 80)}...`);
+    const reply = await chat(history, message.trim(), userLang);
 
     // 4. 存入 user message + AI response
     const now = admin.firestore.Timestamp.now();

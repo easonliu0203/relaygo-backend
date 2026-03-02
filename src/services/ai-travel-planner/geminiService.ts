@@ -5,6 +5,7 @@ import {
   Tool,
   Part,
 } from '@google/generative-ai';
+import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { executeTool } from './toolHandlers';
 
@@ -12,7 +13,126 @@ dotenv.config();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
-function buildSystemInstruction(): string {
+// Supabase client for loading affiliate links
+const supabase = createClient(
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+);
+
+// ============================================
+// Affiliate Links 快取機制（5 分鐘 TTL）
+// ============================================
+interface AffiliateLink {
+  id: string;
+  provider: string;
+  provider_name: string;
+  category: string;
+  name: string;
+  name_i18n: Record<string, string>;
+  url_template: string;
+  site_language: string;
+  description: string | null;
+  regions: string[];
+  priority: number;
+}
+
+let affiliateLinksCache: AffiliateLink[] = [];
+let affiliateLinksCacheTime = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 分鐘
+
+async function loadAffiliateLinks(): Promise<AffiliateLink[]> {
+  const now = Date.now();
+  if (affiliateLinksCache.length > 0 && now - affiliateLinksCacheTime < CACHE_TTL_MS) {
+    return affiliateLinksCache;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('affiliate_links')
+      .select('*')
+      .eq('is_active', true)
+      .order('category')
+      .order('priority', { ascending: false });
+
+    if (error) {
+      console.error('[AffiliateLinks] ❌ Load error:', error.message);
+      return affiliateLinksCache; // 回傳舊快取
+    }
+
+    affiliateLinksCache = data || [];
+    affiliateLinksCacheTime = now;
+    console.log(`[AffiliateLinks] ✅ Loaded ${affiliateLinksCache.length} active links`);
+    return affiliateLinksCache;
+  } catch (e) {
+    console.error('[AffiliateLinks] ❌ Exception:', e);
+    return affiliateLinksCache;
+  }
+}
+
+/**
+ * 根據用戶語言選擇最佳的聯盟連結顯示名稱
+ */
+function getLocalizedName(link: AffiliateLink, lang: string): string {
+  if (link.name_i18n && typeof link.name_i18n === 'object') {
+    // 完全匹配 → 基礎語言 → zh-TW → en → 預設名稱
+    const baseLang = lang.split('-')[0];
+    return link.name_i18n[lang] || link.name_i18n[baseLang] || link.name_i18n['zh-TW'] || link.name_i18n['en'] || link.name;
+  }
+  return link.name;
+}
+
+/**
+ * 建構聯盟連結的 System Prompt 區段
+ */
+function buildAffiliatePromptSection(links: AffiliateLink[], userLang: string): string {
+  if (links.length === 0) return '';
+
+  // 按用戶語言優先排序連結（相同語言的排前面）
+  const baseLang = userLang.split('-')[0];
+  const sorted = [...links].sort((a, b) => {
+    const aLangMatch = a.site_language === userLang || a.site_language.split('-')[0] === baseLang ? 1 : 0;
+    const bLangMatch = b.site_language === userLang || b.site_language.split('-')[0] === baseLang ? 1 : 0;
+    return bLangMatch - aLangMatch;
+  });
+
+  // 按類別分組
+  const grouped: Record<string, string[]> = {};
+  for (const link of sorted) {
+    const cat = link.category;
+    if (!grouped[cat]) grouped[cat] = [];
+    const name = getLocalizedName(link, userLang);
+    const langTag = link.site_language !== userLang ? ` [${link.site_language}]` : '';
+    grouped[cat].push(`  - ${name}${langTag}: ${link.url_template}${link.description ? ` — ${link.description}` : ''}`);
+  }
+
+  const categoryLabels: Record<string, string> = {
+    flight: '✈️ 機票', hotel: '🏨 飯店', ticket: '🎫 門票/票券',
+    activity: '🎯 活動體驗', car_rental: '🚗 租車', train: '🚄 火車',
+    bus: '🚌 巴士', insurance: '🛡️ 旅遊保險', other: '📎 其他',
+  };
+
+  let section = `\n\n聯盟推廣連結（Affiliate Links）：
+當你的行程包含以下類別的服務時，請在行程中自然地推薦相關連結。
+
+可用連結：\n`;
+
+  for (const [cat, items] of Object.entries(grouped)) {
+    section += `${categoryLabels[cat] || cat}：\n${items.join('\n')}\n`;
+  }
+
+  section += `
+嵌入規則：
+- 只在行程明確涉及該類別時推薦（例如提到住宿才推飯店連結，提到景點門票才推門票連結）
+- 自然融入行程建議中，例如：「住宿推薦可以參考 [Trip.com 飯店搜尋](連結)」
+- 每次回覆最多推薦 2-3 個相關連結，不要過度推銷
+- 使用 Markdown 超連結格式：[顯示名稱](URL)
+- 連結放在行程的相關段落中，不要集中堆疊在最後
+- 如果行程不涉及機票/飯店/門票等，則不需要附上任何連結`;
+
+  return section;
+}
+
+function buildSystemInstruction(affiliateSection: string = ''): string {
   const now = new Date();
   const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
   const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日（星期${weekdays[now.getDay()]}）`;
@@ -38,7 +158,7 @@ function buildSystemInstruction(): string {
 
 注意事項：
 - 你是旅遊規劃師，不處理非旅遊相關的請求
-- 如果用戶的請求不清楚，主動詢問：目的地、旅遊天數、偏好（美食/文化/自然/購物等）、預算範圍、同行人數`;
+- 如果用戶的請求不清楚，主動詢問：目的地、旅遊天數、偏好（美食/文化/自然/購物等）、預算範圍、同行人數${affiliateSection}`;
 }
 
 // Function Calling 工具定義
@@ -226,20 +346,26 @@ const tools: Tool[] = [
  *
  * @param history 歷史訊息（Gemini Content 格式）
  * @param userMessage 使用者最新訊息
+ * @param language 使用者語言（如 zh-TW、en、ja、ko）
  * @returns AI 回應文字
  */
 export async function chat(
   history: Content[],
-  userMessage: string
+  userMessage: string,
+  language: string = 'zh-TW'
 ): Promise<string> {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY not configured');
   }
 
+  // 載入聯盟連結並建構 prompt 區段
+  const affiliateLinks = await loadAffiliateLinks();
+  const affiliateSection = buildAffiliatePromptSection(affiliateLinks, language);
+
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({
     model: 'gemini-3-flash-preview',
-    systemInstruction: buildSystemInstruction(),
+    systemInstruction: buildSystemInstruction(affiliateSection),
     tools,
   });
 
