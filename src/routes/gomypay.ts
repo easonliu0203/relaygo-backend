@@ -899,10 +899,13 @@ async function handlePaymentSuccess(params: {
   // 1. 更新或創建支付記錄
   if (existingPayment) {
     // 更新現有支付記錄
+    // transaction_id 同步為 GoMyPay 的 OrderID（原本 UPDATE 路徑漏掉了這一步，
+    // 導致 transaction_id 停留在初始佔位值，而非真正的 GoMyPay 交易編號）
     const { error: updateError } = await supabase
       .from('payments')
       .update({
         status: 'completed',
+        transaction_id: transactionId,
         external_transaction_id: authCode,
         confirmed_at: payTime || now,
         processed_at: now,
