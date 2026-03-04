@@ -407,7 +407,7 @@ export async function chat(
     const functionResponses: Part[] = [];
     for (const fc of functionCalls) {
       const call = (fc as any).functionCall;
-      const toolResult = await executeTool(call.name, call.args || {});
+      const toolResult = await executeTool(call.name, call.args || {}, language);
       // Gemini API 要求 response 必須是 object，不能是 array
       const wrappedResult = Array.isArray(toolResult)
         ? { results: toolResult }

@@ -11,7 +11,7 @@ const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || process.env.GOOGLE_PLACES_A
 
 async function handleSearchPlaces(args: Record<string, unknown>): Promise<unknown> {
   const input = args.query as string;
-  const languageCode = (args.languageCode as string) || 'zh-TW';
+  const languageCode = args.languageCode as string;
   const regionCode = (args.regionCode as string) || 'TW';
   const includedPrimaryTypes = args.includedPrimaryTypes as string[] | undefined;
 
@@ -38,7 +38,7 @@ async function handleSearchPlaces(args: Record<string, unknown>): Promise<unknow
 
 async function handleGetPlaceDetails(args: Record<string, unknown>): Promise<unknown> {
   const placeId = args.placeId as string;
-  const languageCode = (args.languageCode as string) || 'zh-TW';
+  const languageCode = args.languageCode as string;
 
   console.log(`[ToolHandler] 📍 getPlaceDetails: ${placeId}`);
 
@@ -62,7 +62,7 @@ async function handleGetRouteDirections(args: Record<string, unknown>): Promise<
   const origin = args.origin as string;
   const destination = args.destination as string;
   const travelMode = (args.travelMode as string) || 'DRIVE';
-  const languageCode = (args.languageCode as string) || 'zh-TW';
+  const languageCode = args.languageCode as string;
 
   console.log(`[ToolHandler] 🚗 getRouteDirections: ${origin} → ${destination}`);
 
@@ -164,8 +164,13 @@ async function handleSearchHotels(args: Record<string, unknown>): Promise<unknow
 
 export async function executeTool(
   functionName: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  userLanguage: string = 'zh-TW'
 ): Promise<unknown> {
+  // 用用戶語言作為 languageCode 的 fallback（Gemini 主動帶的優先）
+  if (!args.languageCode) {
+    args.languageCode = userLanguage;
+  }
   console.log(`[ToolHandler] 🔧 Executing: ${functionName}`);
 
   switch (functionName) {
