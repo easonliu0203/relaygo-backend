@@ -121,17 +121,23 @@ function getTranslation(
     return fallback;
   }
 
-  // 1. 嘗試使用請求的語言
+  // 1. 嘗試使用請求的語言（完整代碼，如 ja-JP）
   if (i18nData[lang]) {
     return i18nData[lang];
   }
 
-  // 2. 後備到繁體中文（預設語言）
+  // 2. 嘗試 base language（如 ja-JP → ja）
+  const baseLang = lang.split('-')[0];
+  if (baseLang !== lang && i18nData[baseLang]) {
+    return i18nData[baseLang];
+  }
+
+  // 3. 後備到繁體中文（預設語言）
   if (i18nData['zh-TW']) {
     return i18nData['zh-TW'];
   }
 
-  // 3. 返回原始後備文字
+  // 4. 返回原始後備文字
   return fallback;
 }
 
