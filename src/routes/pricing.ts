@@ -132,12 +132,17 @@ function getTranslation(
     return i18nData[baseLang];
   }
 
-  // 3. 後備到繁體中文（預設語言）
+  // 3. 後備到英文（國際通用）
+  if (i18nData['en']) {
+    return i18nData['en'];
+  }
+
+  // 4. 後備到繁體中文
   if (i18nData['zh-TW']) {
     return i18nData['zh-TW'];
   }
 
-  // 4. 返回原始後備文字
+  // 5. 返回原始後備文字
   return fallback;
 }
 
