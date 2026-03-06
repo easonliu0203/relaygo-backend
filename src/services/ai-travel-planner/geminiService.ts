@@ -382,7 +382,13 @@ export async function chat(
     tools,
   });
 
-  const chatSession = model.startChat({ history });
+  // 限制對話歷史：只保留最近 5 輪（10 條訊息），節省 Gemini token 用量
+  const MAX_HISTORY_ITEMS = 10;
+  const trimmedHistory = history.length > MAX_HISTORY_ITEMS
+    ? history.slice(history.length - MAX_HISTORY_ITEMS)
+    : history;
+
+  const chatSession = model.startChat({ history: trimmedHistory });
 
   // 發送使用者訊息
   let result = await chatSession.sendMessage(userMessage);

@@ -6,6 +6,26 @@ dotenv.config();
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || process.env.GOOGLE_PLACES_API_KEY || '';
 
 // ============================================
+// Google Places API 快取（12 小時 TTL）
+// ============================================
+const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 小時
+const placesCache = new Map<string, { data: unknown; timestamp: number }>();
+
+function getCached(key: string): unknown | null {
+  const entry = placesCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    placesCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCache(key: string, data: unknown): void {
+  placesCache.set(key, { data, timestamp: Date.now() });
+}
+
+// ============================================
 // Google Maps API 內部呼叫（複用現有路由邏輯）
 // ============================================
 
@@ -14,6 +34,14 @@ async function handleSearchPlaces(args: Record<string, unknown>): Promise<unknow
   const languageCode = args.languageCode as string;
   const regionCode = (args.regionCode as string) || 'TW';
   const includedPrimaryTypes = args.includedPrimaryTypes as string[] | undefined;
+
+  // 快取 key：query + 語言 + 地區
+  const cacheKey = `search:${input}:${languageCode}:${regionCode}`;
+  const cached = getCached(cacheKey);
+  if (cached) {
+    console.log(`[ToolHandler] 🔍 searchPlaces (cached): "${input}"`);
+    return cached;
+  }
 
   console.log(`[ToolHandler] 🔍 searchPlaces: "${input}"`);
 
@@ -33,12 +61,22 @@ async function handleSearchPlaces(args: Record<string, unknown>): Promise<unknow
   if (!response.ok) {
     return { error: `Places API error: ${response.status}` };
   }
-  return response.json();
+  const data = await response.json();
+  setCache(cacheKey, data);
+  return data;
 }
 
 async function handleGetPlaceDetails(args: Record<string, unknown>): Promise<unknown> {
   const placeId = args.placeId as string;
   const languageCode = args.languageCode as string;
+
+  // 快取 key：placeId + 語言
+  const cacheKey = `detail:${placeId}:${languageCode}`;
+  const cached = getCached(cacheKey);
+  if (cached) {
+    console.log(`[ToolHandler] 📍 getPlaceDetails (cached): ${placeId}`);
+    return cached;
+  }
 
   console.log(`[ToolHandler] 📍 getPlaceDetails: ${placeId}`);
 
@@ -55,7 +93,9 @@ async function handleGetPlaceDetails(args: Record<string, unknown>): Promise<unk
   if (!response.ok) {
     return { error: `Places API error: ${response.status}` };
   }
-  return response.json();
+  const data = await response.json();
+  setCache(cacheKey, data);
+  return data;
 }
 
 async function handleGetRouteDirections(args: Record<string, unknown>): Promise<unknown> {
