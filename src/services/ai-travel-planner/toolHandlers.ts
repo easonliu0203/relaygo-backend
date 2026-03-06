@@ -6,15 +6,16 @@ dotenv.config();
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || process.env.GOOGLE_PLACES_API_KEY || '';
 
 // ============================================
-// Google Places API 快取（12 小時 TTL）
+// API 快取（in-memory，零成本）
 // ============================================
-const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 小時
+const PLACES_CACHE_TTL_MS = 48 * 60 * 60 * 1000; // 48 小時 — 景點資料少變動
+const TIMEZONE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 天 — 時區永遠不變
 const placesCache = new Map<string, { data: unknown; timestamp: number }>();
 
-function getCached(key: string): unknown | null {
+function getCached(key: string, ttl: number): unknown | null {
   const entry = placesCache.get(key);
   if (!entry) return null;
-  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+  if (Date.now() - entry.timestamp > ttl) {
     placesCache.delete(key);
     return null;
   }
@@ -37,7 +38,7 @@ async function handleSearchPlaces(args: Record<string, unknown>): Promise<unknow
 
   // 快取 key：query + 語言 + 地區
   const cacheKey = `search:${input}:${languageCode}:${regionCode}`;
-  const cached = getCached(cacheKey);
+  const cached = getCached(cacheKey, PLACES_CACHE_TTL_MS);
   if (cached) {
     console.log(`[ToolHandler] 🔍 searchPlaces (cached): "${input}"`);
     return cached;
@@ -72,7 +73,7 @@ async function handleGetPlaceDetails(args: Record<string, unknown>): Promise<unk
 
   // 快取 key：placeId + 語言
   const cacheKey = `detail:${placeId}:${languageCode}`;
-  const cached = getCached(cacheKey);
+  const cached = getCached(cacheKey, PLACES_CACHE_TTL_MS);
   if (cached) {
     console.log(`[ToolHandler] 📍 getPlaceDetails (cached): ${placeId}`);
     return cached;
@@ -164,17 +165,27 @@ async function handleGetDistanceMatrix(args: Record<string, unknown>): Promise<u
 async function handleGetTimeZone(args: Record<string, unknown>): Promise<unknown> {
   const latitude = args.latitude as number;
   const longitude = args.longitude as number;
-  const timestamp = Math.floor(Date.now() / 1000);
+
+  // 快取 key：四捨五入到小數 2 位（同城市範圍）
+  const cacheKey = `tz:${latitude.toFixed(2)}:${longitude.toFixed(2)}`;
+  const cached = getCached(cacheKey, TIMEZONE_CACHE_TTL_MS);
+  if (cached) {
+    console.log(`[ToolHandler] 🕐 getTimeZone (cached): ${latitude}, ${longitude}`);
+    return cached;
+  }
 
   console.log(`[ToolHandler] 🕐 getTimeZone: ${latitude}, ${longitude}`);
 
+  const timestamp = Math.floor(Date.now() / 1000);
   const url = `https://maps.googleapis.com/maps/api/timezone/json?location=${latitude},${longitude}&timestamp=${timestamp}&key=${GOOGLE_API_KEY}`;
   const response = await fetch(url);
 
   if (!response.ok) {
     return { error: `TimeZone API error: ${response.status}` };
   }
-  return response.json();
+  const data = await response.json();
+  setCache(cacheKey, data);
+  return data;
 }
 
 async function handleSearchFlights(args: Record<string, unknown>): Promise<unknown> {
