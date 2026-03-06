@@ -8,7 +8,7 @@ const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || process.env.GOOGLE_PLACES_A
 // ============================================
 // API 快取（in-memory，零成本）
 // ============================================
-const PLACES_CACHE_TTL_MS = 48 * 60 * 60 * 1000; // 48 小時 — 景點資料少變動
+const PLACES_CACHE_TTL_MS = 72 * 60 * 60 * 1000; // 72 小時 — 景點資料少變動
 const TIMEZONE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 天 — 時區永遠不變
 const placesCache = new Map<string, { data: unknown; timestamp: number }>();
 
