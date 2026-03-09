@@ -41,6 +41,14 @@ export const TW_CITY_CENTERS: Record<string, CityCenter> = {
   '台東': { lat: 22.7583, lng: 121.1444, region: 'east' },
 };
 
+/** 台灣機場座標與所屬城市 */
+export const TW_AIRPORTS: Record<string, { lat: number; lng: number; city: string }> = {
+  'TSA': { lat: 25.0697, lng: 121.5524, city: '台北' }, // 台北松山機場
+  'TPE': { lat: 25.0777, lng: 121.2325, city: '桃園' }, // 桃園國際機場
+  'RMQ': { lat: 24.2647, lng: 120.6211, city: '台中' }, // 台中清泉崗機場
+  'KHH': { lat: 22.5771, lng: 120.3499, city: '高雄' }, // 高雄小港機場
+};
+
 /** 城市所屬地區對應（依縣市名稱） */
 export const CITY_TO_REGION: Record<string, string> = Object.fromEntries(
   Object.entries(TW_CITY_CENTERS).map(([city, info]) => [city, info.region])

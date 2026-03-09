@@ -8,6 +8,7 @@ import {
 } from '../constants/region_settings';
 import {
   TW_CITY_CENTERS,
+  TW_AIRPORTS,
   CITY_TO_REGION,
   haversineKm,
 } from '../constants/city_centers';
@@ -364,24 +365,46 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
       pickup_lng,
       dropoff_lat,
       dropoff_lng,
+      pickup_airport_code,   // 可選：機場代碼（優先於 lat/lng）
+      dropoff_airport_code,  // 可選：機場代碼（優先於 lat/lng）
       vehicle_type,
       country = 'TW',
     } = req.query;
 
-    if (!tour_package_id || !pickup_lat || !pickup_lng || !dropoff_lat || !dropoff_lng || !vehicle_type) {
+    if (!tour_package_id || !vehicle_type) {
       return res.status(400).json({
         success: false,
         error: '缺少必填參數',
-        message: '請提供 tour_package_id, pickup_lat/lng, dropoff_lat/lng, vehicle_type',
+        message: '請提供 tour_package_id, vehicle_type, 以及 lat/lng 或 airport_code',
       });
     }
 
-    const pLat  = parseFloat(pickup_lat  as string);
-    const pLng  = parseFloat(pickup_lng  as string);
-    const dLat  = parseFloat(dropoff_lat as string);
-    const dLng  = parseFloat(dropoff_lng as string);
     const vtype = (vehicle_type as string).toUpperCase();
     const ctry  = country as string;
+
+    // 解析上車座標（機場代碼優先；lat/lng 為 (0,0) 視為未設定）
+    let pLat = parseFloat((pickup_lat as string) || '0');
+    let pLng = parseFloat((pickup_lng as string) || '0');
+    if (pickup_airport_code) {
+      const apt = TW_AIRPORTS[(pickup_airport_code as string).toUpperCase()];
+      if (apt) { pLat = apt.lat; pLng = apt.lng; }
+    }
+
+    // 解析下車座標
+    let dLat = parseFloat((dropoff_lat as string) || '0');
+    let dLng = parseFloat((dropoff_lng as string) || '0');
+    if (dropoff_airport_code) {
+      const apt = TW_AIRPORTS[(dropoff_airport_code as string).toUpperCase()];
+      if (apt) { dLat = apt.lat; dLng = apt.lng; }
+    }
+
+    // 座標仍為 (0,0) → 無法計算，免收
+    if ((pLat === 0 && pLng === 0) || (dLat === 0 && dLng === 0)) {
+      return res.json({
+        success: true,
+        data: { surcharge: 0, reason: '上下車座標未提供，免收跨區費' },
+      });
+    }
 
     // 1. 取得旅遊方案的目的城市
     const { data: pkg, error: pkgErr } = await supabase
