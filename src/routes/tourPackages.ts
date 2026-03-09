@@ -169,10 +169,10 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const {
       name, description, name_i18n, description_i18n, is_active, display_order,
-      country, region, country_i18n, region_i18n
+      country, region, city, country_i18n, region_i18n
     } = req.body;
 
-    console.log('[Tour Packages API] 新增旅遊方案:', { name, country, region, name_i18n, description_i18n });
+    console.log('[Tour Packages API] 新增旅遊方案:', { name, country, region, city, name_i18n, description_i18n });
 
     // 驗證必填欄位
     if (!name) {
@@ -193,6 +193,7 @@ router.post('/', async (req: Request, res: Response) => {
         display_order: display_order || 0,
         country: country || 'TW',
         region: region || 'taipei',
+        city: city || null,
         country_i18n: country_i18n || {},
         region_i18n: region_i18n || {}
       }])
@@ -235,10 +236,10 @@ router.put('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const {
       name, description, name_i18n, description_i18n, is_active, display_order,
-      country, region, country_i18n, region_i18n
+      country, region, city, country_i18n, region_i18n
     } = req.body;
 
-    console.log(`[Tour Packages API] 更新旅遊方案: ${id}`, { name, country, region, name_i18n, description_i18n });
+    console.log(`[Tour Packages API] 更新旅遊方案: ${id}`, { name, country, region, city, name_i18n, description_i18n });
 
     // 驗證必填欄位
     if (!name) {
@@ -269,6 +270,10 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     if (region !== undefined) {
       updateData.region = region;
+    }
+    // city 允許設為 null（清除）；只要前端有傳就更新
+    if ('city' in req.body) {
+      updateData.city = city || null;
     }
     if (country_i18n !== undefined) {
       updateData.country_i18n = country_i18n;
