@@ -389,7 +389,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       basePrice = 0;
       console.log('[API] 機場接送獨立服務：basePrice 歸零，改用後端驗價結果 pickup=%d dropoff=%d', verifiedPickupPrice, verifiedDropoffPrice);
     }
-    let totalAmount = basePrice + foreignLanguageSurcharge + overtimeFee + tipAmount + verifiedPickupPrice + verifiedDropoffPrice;
+    const charterSurchargeAmount = Number(charterSurcharge) || 0;
+    let totalAmount = basePrice + foreignLanguageSurcharge + overtimeFee + tipAmount + verifiedPickupPrice + verifiedDropoffPrice + charterSurchargeAmount;
     let actualOriginalPrice = totalAmount; // 原始價格（未折扣前）
     let actualDiscountAmount = 0; // 折扣金額
     let actualFinalPrice = totalAmount; // 折扣後最終價格
