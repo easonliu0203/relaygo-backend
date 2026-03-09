@@ -177,6 +177,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       dropoffTransferPrice,
       dropoffTransferRegion,
       dropoffTransferVehicleType,
+      // ✅ 新增：跨區接送費快照
+      charterSurcharge,
     } = req.body;
 
     console.log('[API] 創建訂單:', {
@@ -612,6 +614,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         dropoff_transfer_price: verifiedDropoffPrice || null,
         dropoff_transfer_region: verifiedDropoffRegion || dropoffTransferRegion || null,
         dropoff_transfer_vehicle_type: dropoffTransferVehicleType || null,
+        // ✅ 跨區接送費快照：鎖定建單時的費率，不受後台調整影響
+        charter_surcharge: charterSurcharge || 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })

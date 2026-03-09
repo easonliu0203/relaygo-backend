@@ -6,6 +6,11 @@ import {
   calculateSurcharges,
   determineRegionFromCoords,
 } from '../constants/region_settings';
+import {
+  TW_CITY_CENTERS,
+  CITY_TO_REGION,
+  haversineKm,
+} from '../constants/city_centers';
 
 const router = Router();
 
@@ -179,9 +184,55 @@ interface VehiclePackage {
 }
 
 /**
+ * 從 tour_packages 取得 city 並推導 vehicle_pricing region
+ */
+async function getRegionFromTourPackage(tourPackageId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('tour_packages')
+    .select('city')
+    .eq('id', tourPackageId)
+    .single();
+
+  if (error || !data?.city) return null;
+  return CITY_TO_REGION[data.city] || null;
+}
+
+/**
+ * 查詢 vehicle_pricing，先找指定 region，無結果退到 'default'
+ */
+async function fetchPricingWithFallback(country: string, region: string) {
+  const { data, error } = await supabase
+    .from('vehicle_pricing')
+    .select('*')
+    .eq('is_active', true)
+    .eq('country', country)
+    .eq('region', region)
+    .order('display_order', { ascending: true });
+
+  if (error) throw error;
+
+  if (data && data.length > 0) return { data, usedRegion: region };
+
+  // fallback to 'default'
+  const { data: defaultData, error: defaultError } = await supabase
+    .from('vehicle_pricing')
+    .select('*')
+    .eq('is_active', true)
+    .eq('country', country)
+    .eq('region', 'default')
+    .order('display_order', { ascending: true });
+
+  if (defaultError) throw defaultError;
+  return { data: defaultData || [], usedRegion: 'default' };
+}
+
+/**
  * @route GET /api/pricing/packages
  * @desc 獲取所有可用的車型套餐（客戶端使用，支援多語言）
- * @query lang - 語言代碼（zh-TW, en, ja, ko, vi, th, ms, id）
+ * @query lang            - 語言代碼（zh-TW, en, ja, ko, vi, th, ms, id）
+ * @query country         - 國家代碼（預設 'TW'）
+ * @query region          - 定價地區（north/central/south/east/default），可省略
+ * @query tour_package_id - 旅遊方案 ID，系統自動由 city 推導 region
  * @access Public
  */
 router.get('/packages', async (req: Request, res: Response) => {
@@ -190,22 +241,29 @@ router.get('/packages', async (req: Request, res: Response) => {
     const lang = (req.query.lang as string) ||
                  req.headers['accept-language']?.split(',')[0]?.split('-')[0] ||
                  'zh-TW';
+    const country = (req.query.country as string) || 'TW';
+    const tourPackageId = req.query.tour_package_id as string | undefined;
 
-    console.log(`[Pricing API] 獲取車型方案列表 (語言: ${lang})`);
+    // 推導 region：tour_package_id → city → region，否則用 query param 或 'default'
+    let region = (req.query.region as string) || 'default';
+    if (tourPackageId) {
+      const derivedRegion = await getRegionFromTourPackage(tourPackageId);
+      if (derivedRegion) region = derivedRegion;
+    }
 
-    // 獲取所有啟用的價格配置
-    const { data: pricingData, error } = await supabase
-      .from('vehicle_pricing')
-      .select('*')
-      .eq('is_active', true)
-      .order('display_order', { ascending: true });
+    console.log(`[Pricing API] 獲取車型方案列表 (國家: ${country}, 地區: ${region}, 語言: ${lang})`);
 
-    if (error) {
-      console.error('[Pricing API] 查詢錯誤:', error);
+    // 查詢價格，region 不命中時自動 fallback 到 'default'
+    let pricingData: VehiclePricing[];
+    let usedRegion: string;
+    try {
+      ({ data: pricingData, usedRegion } = await fetchPricingWithFallback(country, region));
+    } catch (err: any) {
+      console.error('[Pricing API] 查詢錯誤:', err);
       return res.status(500).json({
         success: false,
         error: '獲取價格配置失敗',
-        message: error.message
+        message: err.message
       });
     }
 
@@ -214,7 +272,9 @@ router.get('/packages', async (req: Request, res: Response) => {
         success: true,
         data: [],
         message: '目前沒有可用的車型方案',
-        lang: lang,
+        lang,
+        country,
+        region: usedRegion,
       });
     }
 
@@ -260,12 +320,14 @@ router.get('/packages', async (req: Request, res: Response) => {
       };
     });
 
-    console.log(`[Pricing API] ✅ 成功返回 ${packages.length} 個價格方案 (語言: ${lang})`);
+    console.log(`[Pricing API] ✅ 成功返回 ${packages.length} 個價格方案 (國家: ${country}, 地區: ${usedRegion}, 語言: ${lang})`);
 
     return res.json({
       success: true,
       data: packages,
-      lang: lang, // 返回使用的語言
+      lang,
+      country,
+      region: usedRegion,
     });
 
   } catch (error: any) {
@@ -278,27 +340,213 @@ router.get('/packages', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================
+// 包車旅遊跨區費 API
+// ============================================
+
+/**
+ * @route GET /api/pricing/charter-surcharge
+ * @desc 計算包車旅遊跨區接送費
+ * @query tour_package_id - 旅遊方案 ID（必填，取得目的城市）
+ * @query pickup_lat      - 上車緯度（必填）
+ * @query pickup_lng      - 上車經度（必填）
+ * @query dropoff_lat     - 下車緯度（必填）
+ * @query dropoff_lng     - 下車經度（必填）
+ * @query vehicle_type    - 車型代碼 S/M/L/XL（必填）
+ * @query country         - 國家代碼（預設 'TW'）
+ * @access Public
+ */
+router.get('/charter-surcharge', async (req: Request, res: Response) => {
+  try {
+    const {
+      tour_package_id,
+      pickup_lat,
+      pickup_lng,
+      dropoff_lat,
+      dropoff_lng,
+      vehicle_type,
+      country = 'TW',
+    } = req.query;
+
+    if (!tour_package_id || !pickup_lat || !pickup_lng || !dropoff_lat || !dropoff_lng || !vehicle_type) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少必填參數',
+        message: '請提供 tour_package_id, pickup_lat/lng, dropoff_lat/lng, vehicle_type',
+      });
+    }
+
+    const pLat  = parseFloat(pickup_lat  as string);
+    const pLng  = parseFloat(pickup_lng  as string);
+    const dLat  = parseFloat(dropoff_lat as string);
+    const dLng  = parseFloat(dropoff_lng as string);
+    const vtype = (vehicle_type as string).toUpperCase();
+    const ctry  = country as string;
+
+    // 1. 取得旅遊方案的目的城市
+    const { data: pkg, error: pkgErr } = await supabase
+      .from('tour_packages')
+      .select('city, name')
+      .eq('id', tour_package_id as string)
+      .single();
+
+    if (pkgErr || !pkg) {
+      return res.status(404).json({
+        success: false,
+        error: '找不到旅遊方案',
+        message: `tour_package_id: ${tour_package_id}`,
+      });
+    }
+
+    // 2. 找城市中心座標（目前僅支援 TW）
+    const cityInfo = pkg.city ? TW_CITY_CENTERS[pkg.city] : null;
+    if (!pkg.city || !cityInfo) {
+      // 城市未設定或不在支援清單 → 不收跨區費
+      return res.json({
+        success: true,
+        data: {
+          surcharge: 0,
+          city: pkg.city || null,
+          reason: '目的城市未設定或不在計費清單，免收跨區費',
+        },
+      });
+    }
+
+    // 3. 取得跨區費率
+    const { data: rateRow, error: rateErr } = await supabase
+      .from('cross_region_km_rates')
+      .select('rate_per_km, free_km')
+      .eq('country', ctry)
+      .eq('vehicle_type', vtype)
+      .eq('is_active', true)
+      .single();
+
+    if (rateErr || !rateRow) {
+      return res.status(404).json({
+        success: false,
+        error: '找不到跨區費率',
+        message: `country=${ctry}, vehicle_type=${vtype}`,
+      });
+    }
+
+    // 4. 計算距離：上車地 → 城市中心 + 城市中心 → 下車地
+    const distToCity    = haversineKm(pLat, pLng, cityInfo.lat, cityInfo.lng);
+    const distFromCity  = haversineKm(cityInfo.lat, cityInfo.lng, dLat, dLng);
+    const totalDistKm   = distToCity + distFromCity;
+
+    const { rate_per_km, free_km } = rateRow;
+
+    // 5. 計算跨區加價（全程計費；低於 free_km 免收）
+    const surcharge = totalDistKm >= free_km
+      ? Math.round(totalDistKm * rate_per_km)
+      : 0;
+
+    console.log(`[Charter Surcharge] ${pkg.name} | 城市: ${pkg.city} | 距離: ${totalDistKm.toFixed(1)}km | 費率: ${rate_per_km}/km | 門檻: ${free_km}km | 加價: ${surcharge}`);
+
+    return res.json({
+      success: true,
+      data: {
+        surcharge,
+        city: pkg.city,
+        city_region: cityInfo.region,
+        total_distance_km: Math.round(totalDistKm * 10) / 10,
+        pickup_to_city_km: Math.round(distToCity * 10) / 10,
+        city_to_dropoff_km: Math.round(distFromCity * 10) / 10,
+        rate_per_km,
+        free_km,
+        is_charged: totalDistKm >= free_km,
+      },
+    });
+
+  } catch (error: any) {
+    console.error('[Charter Surcharge] 計算失敗:', error);
+    return res.status(500).json({
+      success: false,
+      error: '計算跨區費失敗',
+      message: error.message,
+    });
+  }
+});
+
+// ============================================
+// Admin: 跨區費率設定 API
+// ============================================
+
+/**
+ * @route GET /api/pricing/admin/cross-region-rates
+ * @desc 獲取所有跨區費率 - Admin 專用
+ * @access Admin
+ */
+router.get('/admin/cross-region-rates', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('cross_region_km_rates')
+      .select('*')
+      .order('country')
+      .order('vehicle_type');
+
+    if (error) throw error;
+
+    return res.json({ success: true, data: data || [] });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * @route PUT /api/pricing/admin/cross-region-rates/:id
+ * @desc 更新跨區費率 - Admin 專用
+ * @access Admin
+ */
+router.put('/admin/cross-region-rates/:id', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { rate_per_km, free_km, is_active } = req.body;
+
+    const updateData: any = { updated_at: new Date().toISOString() };
+    if (rate_per_km !== undefined) updateData.rate_per_km = rate_per_km;
+    if (free_km     !== undefined) updateData.free_km     = free_km;
+    if (is_active   !== undefined) updateData.is_active   = is_active;
+
+    const { data, error } = await supabase
+      .from('cross_region_km_rates')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: '找不到費率記錄' });
+
+    return res.json({ success: true, data, message: '更新成功' });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 /**
  * Middleware: 驗證 Admin 權限
  */
-function requireAdmin(req: Request, res: Response, next: any) {
+function requireAdmin(req: Request, res: Response, next: any): void {
   const user = (req as any).user;
 
   if (!user) {
-    return res.status(401).json({
+    res.status(401).json({
       success: false,
       error: '未授權',
       message: '請先登入'
     });
+    return;
   }
 
   // 檢查用戶是否有 admin 角色
   if (!user.roles || !user.roles.includes('admin')) {
-    return res.status(403).json({
+    res.status(403).json({
       success: false,
       error: '權限不足',
       message: '需要管理員權限'
     });
+    return;
   }
 
   next();
