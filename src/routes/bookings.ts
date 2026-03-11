@@ -43,23 +43,35 @@ function getClientIp(req: Request): string {
 
 // ✅ 機場接送後端驗價：從地址/座標判定地區
 // 地區定義快取（從 region_definitions 表載入）
-let _regionDefsCache: { regionKey: string; minLat: number; maxLat: number; minLng: number; maxLng: number; priority: number }[] | null = null;
+interface RegionDef {
+  regionKey: string;
+  parentRegionKey: string | null;
+  includedDistricts: string[];
+  minLat: number;
+  maxLat: number;
+  minLng: number;
+  maxLng: number;
+  priority: number;
+}
+let _regionDefsCache: RegionDef[] | null = null;
 let _regionDefsLoading = false;
 
-async function loadRegionDefinitions(): Promise<typeof _regionDefsCache> {
+async function loadRegionDefinitions(): Promise<RegionDef[] | null> {
   if (_regionDefsCache) return _regionDefsCache;
   if (_regionDefsLoading) return null;
   _regionDefsLoading = true;
   try {
     const { data, error } = await supabase
       .from('region_definitions')
-      .select('region_key, min_lat, max_lat, min_lng, max_lng, priority')
+      .select('region_key, parent_region_key, included_districts, min_lat, max_lat, min_lng, max_lng, priority')
       .eq('country', 'TW')
       .eq('is_active', true)
       .order('priority', { ascending: false });
     if (error) throw error;
     _regionDefsCache = (data || []).map((row: any) => ({
-      regionKey: row.region_key,
+      regionKey: row.region_key as string,
+      parentRegionKey: (row.parent_region_key as string) || null,
+      includedDistricts: Array.isArray(row.included_districts) ? row.included_districts.map(String) : [],
       minLat: Number(row.min_lat),
       maxLat: Number(row.max_lat),
       minLng: Number(row.min_lng),
@@ -76,37 +88,119 @@ async function loadRegionDefinitions(): Promise<typeof _regionDefsCache> {
   }
 }
 
-async function detectRegion(address: string, lat?: number | null, lng?: number | null): Promise<string | null> {
-  // 1. 座標判定（bounding box，priority 高者優先）
-  if (lat != null && lng != null && lat !== 0 && lng !== 0) {
-    const defs = await loadRegionDefinitions();
-    if (defs) {
-      for (const def of defs) {
-        if (lat >= def.minLat && lat <= def.maxLat && lng >= def.minLng && lng <= def.maxLng) {
-          console.log(`[detectRegion] 座標判定: (${lat}, ${lng}) → ${def.regionKey}`);
-          return def.regionKey;
-        }
-      }
-      console.log(`[detectRegion] 座標 (${lat}, ${lng}) 無匹配，fallback 文字比對`);
+// 中英文城市名 mapping
+const cityMapping: [string, string][] = [
+  ['墾丁', '墾丁'],
+  ['新北', '新北'], ['台北', '台北'], ['臺北', '台北'],
+  ['桃園', '桃園'], ['新竹', '新竹'], ['苗栗', '苗栗'],
+  ['台中', '台中'], ['臺中', '台中'],
+  ['彰化', '彰化'], ['南投', '南投'], ['雲林', '雲林'],
+  ['嘉義', '嘉義'], ['台南', '台南'], ['臺南', '台南'],
+  ['高雄', '高雄'], ['屏東', '屏東'], ['基隆', '基隆'],
+  ['宜蘭', '宜蘭'], ['花蓮', '花蓮'],
+  ['台東', '台東'], ['臺東', '台東'],
+  // 英文（Google Maps 可能回傳）
+  ['Kenting', '墾丁'],
+  ['New Taipei', '新北'], ['Taipei', '台北'],
+  ['Taoyuan', '桃園'], ['Hsinchu', '新竹'], ['Miaoli', '苗栗'],
+  ['Taichung', '台中'], ['Changhua', '彰化'], ['Nantou', '南投'],
+  ['Yunlin', '雲林'], ['Chiayi', '嘉義'], ['Tainan', '台南'],
+  ['Kaohsiung', '高雄'], ['Pingtung', '屏東'], ['Keelung', '基隆'],
+  ['Yilan', '宜蘭'], ['Hualien', '花蓮'], ['Taitung', '台東'],
+];
+
+// 從地址文字判定縣市
+function detectCityFromText(address: string): string | null {
+  if (!address) return null;
+  const addrLower = address.toLowerCase();
+  for (const [key, value] of cityMapping) {
+    if (addrLower.includes(key.toLowerCase())) return value;
+  }
+  return null;
+}
+
+// 從地址文字擷取行政區並比對子區
+function detectZoneByDistrict(address: string, cityKey: string, defs: RegionDef[]): string | null {
+  const match = address.match(/(?:市|縣)([\u4e00-\u9fff]{1,3})(?:區|鄉|鎮|市)/);
+  if (!match) return null;
+  const district = match[1];
+  for (const def of defs) {
+    if (def.parentRegionKey !== cityKey) continue;
+    if (def.includedDistricts.includes(district)) {
+      console.log(`[detectRegion] 行政區判定: ${district} → ${def.regionKey}`);
+      return def.regionKey;
     }
   }
+  return null;
+}
 
-  // 2. Fallback：中文文字比對
-  if (!address) return null;
-  const mapping: [string, string][] = [
-    ['墾丁', '墾丁'],
-    ['新北', '新北'], ['台北', '台北'], ['臺北', '台北'],
-    ['桃園', '桃園'], ['新竹', '新竹'], ['苗栗', '苗栗'],
-    ['台中', '台中'], ['臺中', '台中'],
-    ['彰化', '彰化'], ['南投', '南投'], ['雲林', '雲林'],
-    ['嘉義', '嘉義'], ['台南', '台南'], ['臺南', '台南'],
-    ['高雄', '高雄'], ['屏東', '屏東'], ['基隆', '基隆'],
-    ['宜蘭', '宜蘭'], ['花蓮', '花蓮'],
-    ['台東', '台東'], ['臺東', '台東'],
-  ];
-  for (const [key, value] of mapping) {
-    if (address.includes(key)) return value;
+// 座標判定子區（在指定縣市的子區中找 bounding box 匹配）
+function detectZoneByCoordinates(lat: number, lng: number, cityKey: string, defs: RegionDef[]): string | null {
+  for (const def of defs) {
+    if (def.parentRegionKey !== cityKey) continue;
+    if (lat >= def.minLat && lat <= def.maxLat && lng >= def.minLng && lng <= def.maxLng) {
+      console.log(`[detectRegion] 座標判定子區: (${lat}, ${lng}) → ${def.regionKey}`);
+      return def.regionKey;
+    }
   }
+  return null;
+}
+
+// 取得縣市的第一個子區（priority 最高者，作為最後 fallback）
+function firstSubZone(cityKey: string, defs: RegionDef[]): string | null {
+  for (const def of defs) {
+    if (def.parentRegionKey === cityKey) return def.regionKey;
+  }
+  return null;
+}
+
+async function detectRegion(address: string, lat?: number | null, lng?: number | null): Promise<string | null> {
+  const defs = await loadRegionDefinitions();
+  const hasCoords = lat != null && lng != null && lat !== 0 && lng !== 0;
+
+  // 1. 文字判定縣市（避免鄰近縣市 bounding box 重疊誤判）
+  const cityFromText = detectCityFromText(address);
+  if (cityFromText) {
+    // 嘗試行政區文字比對子區
+    if (defs) {
+      const zone = detectZoneByDistrict(address, cityFromText, defs);
+      if (zone) return zone;
+      // 文字失敗 → 座標比對子區
+      if (hasCoords) {
+        const zoneByCoord = detectZoneByCoordinates(lat!, lng!, cityFromText, defs);
+        if (zoneByCoord) return zoneByCoord;
+      }
+      // 最後 fallback：回傳第一個子區（避免誤報無服務）
+      const fallback = firstSubZone(cityFromText, defs);
+      if (fallback) {
+        console.log(`[detectRegion] ${cityFromText} 子區 fallback → ${fallback}`);
+        return fallback;
+      }
+    }
+    return cityFromText;
+  }
+
+  // 2. Fallback：座標 bounding box（地址無城市名時）
+  if (hasCoords && defs) {
+    // 先匹配縣市層
+    for (const def of defs) {
+      if (def.parentRegionKey != null) continue;
+      if (lat! >= def.minLat && lat! <= def.maxLat && lng! >= def.minLng && lng! <= def.maxLng) {
+        console.log(`[detectRegion] 座標判定縣市: (${lat}, ${lng}) → ${def.regionKey}`);
+        const city = def.regionKey;
+        // 嘗試子區判定
+        const zone = detectZoneByDistrict(address, city, defs);
+        if (zone) return zone;
+        const zoneByCoord = detectZoneByCoordinates(lat!, lng!, city, defs);
+        if (zoneByCoord) return zoneByCoord;
+        const fallback = firstSubZone(city, defs);
+        if (fallback) return fallback;
+        return city;
+      }
+    }
+    console.log(`[detectRegion] 座標 (${lat}, ${lng}) 無匹配`);
+  }
+
   return null;
 }
 
