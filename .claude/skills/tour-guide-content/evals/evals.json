@@ -1,0 +1,45 @@
+[
+  {
+    "id": "new-guide-sun-moon-lake",
+    "prompt": "用 tour-guide-content skill 幫日月潭一日遊加上每個景點的照片，像九份十分那樣每個景點都有 Unsplash 照片和攝影者標註",
+    "expected_output": "A Node.js update script with: (1) PHOTOS object containing verified Unsplash URLs for each attraction, (2) zh-TW/en/ja content with photoMd() calls in each h3 section, (3) photographer credit in correct Unsplash attribution format",
+    "assertions": [
+      "Content has no NT$ prices or admission fees",
+      "Every h3 section has a ![](unsplash-url) image",
+      "Every image has *📷 Photo by* credit line with UTM params",
+      "All Unsplash image URLs return HTTP 200",
+      "Photo locations match the attraction (not a different city)",
+      "zh-TW content uses colloquial Taiwanese expressions",
+      "ja content is shorter than zh-TW",
+      "Itinerary has realistic drive times",
+      "Food recommendations name specific shops"
+    ]
+  },
+  {
+    "id": "update-existing-guide",
+    "prompt": "太魯閣攻略的內容太空洞了，幫我用 tour-guide-content skill 重寫，要有砂卡礑步道、燕子口、長春祠等景點的實景照片",
+    "expected_output": "Updated content for taroko-gorge with per-attraction photos for Shakadang Trail, Swallow Grotto, Changchun Shrine, etc. Each section vivid and detailed with food, photo tips, and practical advice.",
+    "assertions": [
+      "Mentions specific attractions: 砂卡礑, 燕子口, 長春祠",
+      "Each attraction has a verified Unsplash photo",
+      "Content describes what you actually see at each spot",
+      "Includes hiking difficulty/shoe recommendations",
+      "No prices or admission fees",
+      "Three languages with consistent structure"
+    ]
+  },
+  {
+    "id": "create-brand-new-guide",
+    "prompt": "幫 RelayGo 新增一條「台南古蹟美食一日遊」攻略，包含赤崁樓、安平古堡、神農街、花園夜市，要有照片",
+    "expected_output": "Complete new guide with: insert script for tour_guides table, per-attraction Unsplash photos, full zh-TW/en/ja content, appropriate slug/tags/city/vehicle_type",
+    "assertions": [
+      "Creates a new record (INSERT or UPSERT, not just PATCH)",
+      "slug follows kebab-case convention",
+      "city is '台南'",
+      "Each of the 4 attractions has its own photo section",
+      "Food recommendations are Tainan-specific (牛肉湯, 棺材板, etc.)",
+      "No prices",
+      "Includes practical tip about Tainan heat/sun"
+    ]
+  }
+]
