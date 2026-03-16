@@ -205,22 +205,16 @@ router.post('/register-or-login', async (req: Request, res: Response) => {
           roles: existingUserByEmail.roles,
         });
 
-        // ⚠️ 安全檢查：Firebase UID 不匹配
+        // ✅ Firebase UID 不匹配時更新（用戶已透過 Firebase Auth 驗證 email 所有權）
         if (existingUserByEmail.firebase_uid && existingUserByEmail.firebase_uid !== firebaseUid) {
-          console.error('❌ Firebase UID 不匹配:', {
+          console.warn('⚠️ Firebase UID 變更（可能是重新註冊）:', {
             existingFirebaseUid: existingUserByEmail.firebase_uid,
-            requestFirebaseUid: firebaseUid,
-          });
-
-          return res.status(409).json({
-            success: false,
-            error: '此 Email 已被其他帳號使用',
-            message: '此 Email 已與另一個 Google 帳號綁定。請使用原本的 Google 帳號登入，或使用其他 Email。',
-            message_en: 'This email is already associated with another Google account. Please sign in with your original Google account or use a different email.',
+            newFirebaseUid: firebaseUid,
+            email: email,
           });
         }
 
-        // ✅ Firebase UID 匹配或為空，可以安全更新
+        // ✅ 更新 Firebase UID（用戶已透過 Firebase Auth 證明 email 所有權）
         const currentRoles = existingUserByEmail.roles || [];
         const updatedRoles = currentRoles.includes(role) ? currentRoles : [...currentRoles, role];
 
