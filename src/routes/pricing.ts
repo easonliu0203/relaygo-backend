@@ -361,6 +361,7 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
   try {
     const {
       tour_package_id,
+      city: cityParam,        // 可選：直接傳城市名稱（網頁端用）
       pickup_lat,
       pickup_lng,
       dropoff_lat,
@@ -371,11 +372,11 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
       country = 'TW',
     } = req.query;
 
-    if (!tour_package_id || !vehicle_type) {
+    if ((!tour_package_id && !cityParam) || !vehicle_type) {
       return res.status(400).json({
         success: false,
         error: '缺少必填參數',
-        message: '請提供 tour_package_id, vehicle_type, 以及 lat/lng 或 airport_code',
+        message: '請提供 tour_package_id 或 city, vehicle_type, 以及 lat/lng 或 airport_code',
       });
     }
 
@@ -406,30 +407,35 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
       });
     }
 
-    // 1. 取得旅遊方案的目的城市
-    const { data: pkg, error: pkgErr } = await supabase
-      .from('tour_packages')
-      .select('city, name')
-      .eq('id', tour_package_id as string)
-      .single();
+    // 1. 取得目的城市（優先用 city 參數，否則從 tour_package_id 查）
+    let destCity: string | null = (cityParam as string) || null;
 
-    if (pkgErr || !pkg) {
-      return res.status(404).json({
-        success: false,
-        error: '找不到旅遊方案',
-        message: `tour_package_id: ${tour_package_id}`,
-      });
+    if (!destCity && tour_package_id) {
+      const { data: pkg, error: pkgErr } = await supabase
+        .from('tour_packages')
+        .select('city, name')
+        .eq('id', tour_package_id as string)
+        .single();
+
+      if (pkgErr || !pkg) {
+        return res.status(404).json({
+          success: false,
+          error: '找不到旅遊方案',
+          message: `tour_package_id: ${tour_package_id}`,
+        });
+      }
+      destCity = pkg.city || null;
     }
 
     // 2. 找城市中心座標（目前僅支援 TW）
-    const cityInfo = pkg.city ? TW_CITY_CENTERS[pkg.city] : null;
-    if (!pkg.city || !cityInfo) {
+    const cityInfo = destCity ? TW_CITY_CENTERS[destCity] : null;
+    if (!destCity || !cityInfo) {
       // 城市未設定或不在支援清單 → 不收跨區費
       return res.json({
         success: true,
         data: {
           surcharge: 0,
-          city: pkg.city || null,
+          city: destCity || null,
           reason: '目的城市未設定或不在計費清單，免收跨區費',
         },
       });
@@ -464,13 +470,13 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
       ? Math.round(totalDistKm * rate_per_km)
       : 0;
 
-    console.log(`[Charter Surcharge] ${pkg.name} | 城市: ${pkg.city} | 距離: ${totalDistKm.toFixed(1)}km | 費率: ${rate_per_km}/km | 門檻: ${free_km}km | 加價: ${surcharge}`);
+    console.log(`[Charter Surcharge] 城市: ${destCity} | 距離: ${totalDistKm.toFixed(1)}km | 費率: ${rate_per_km}/km | 門檻: ${free_km}km | 加價: ${surcharge}`);
 
     return res.json({
       success: true,
       data: {
         surcharge,
-        city: pkg.city,
+        city: destCity,
         city_region: cityInfo.region,
         total_distance_km: Math.round(totalDistKm * 10) / 10,
         pickup_to_city_km: Math.round(distToCity * 10) / 10,
