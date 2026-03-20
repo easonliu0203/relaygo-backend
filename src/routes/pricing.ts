@@ -501,6 +501,105 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
 });
 
 // ============================================
+// 機場接送費查詢（網頁端用）
+// GET /api/pricing/airport-transfer-price?airport_code=TPE&vehicle_type=M&city=花蓮
+// ============================================
+router.get('/airport-transfer-price', async (req: Request, res: Response) => {
+  try {
+    const { airport_code, vehicle_type, city, lat, lng } = req.query;
+
+    if (!airport_code || !vehicle_type) {
+      return res.status(400).json({ success: false, error: '缺少 airport_code 或 vehicle_type' });
+    }
+
+    const airCode = (airport_code as string).toUpperCase();
+    const vtype = (vehicle_type as string).toUpperCase();
+
+    // Determine price column based on airport code
+    const priceColumnMap: Record<string, string> = {
+      TPE: 'tpe_price',
+      TSA: 'tsa_price',
+      RMQ: 'rmq_price',
+      KHH: 'khh_price',
+    };
+    const priceCol = priceColumnMap[airCode];
+    if (!priceCol) {
+      return res.json({ success: true, data: { price: null, reason: '不支援的機場代碼' } });
+    }
+
+    // Determine region: use lat/lng bounding box first, fallback to city-based lookup
+    let region: string | null = null;
+
+    if (lat && lng) {
+      const latNum = parseFloat(lat as string);
+      const lngNum = parseFloat(lng as string);
+      if (latNum !== 0 && lngNum !== 0) {
+        const { data: regions } = await supabase
+          .from('region_definitions')
+          .select('region')
+          .lte('min_lat', latNum).gte('max_lat', latNum)
+          .lte('min_lng', lngNum).gte('max_lng', lngNum)
+          .limit(1);
+        if (regions && regions.length > 0) region = regions[0].region;
+      }
+    }
+
+    // Fallback: use city name to find any region
+    if (!region && city) {
+      const { data: regions } = await supabase
+        .from('region_definitions')
+        .select('region')
+        .ilike('region', `%${city}%`)
+        .limit(1);
+      if (regions && regions.length > 0) region = regions[0].region;
+
+      // Try broader match: city is part of county
+      if (!region) {
+        const { data: regions2 } = await supabase
+          .from('region_definitions')
+          .select('region, county')
+          .ilike('county', `%${city}%`)
+          .limit(1);
+        if (regions2 && regions2.length > 0) region = regions2[0].region;
+      }
+    }
+
+    if (!region) {
+      return res.json({ success: true, data: { price: null, reason: '無法確定地區' } });
+    }
+
+    // Query airport_transfer_pricing
+    const { data: pricing, error } = await supabase
+      .from('airport_transfer_pricing')
+      .select('*')
+      .eq('region', region)
+      .eq('vehicle_type', vtype)
+      .eq('is_active', true)
+      .limit(1)
+      .single();
+
+    if (error || !pricing) {
+      return res.json({ success: true, data: { price: null, region, reason: '該地區無報價' } });
+    }
+
+    const priceValue = (pricing as Record<string, unknown>)[priceCol] as number | null;
+
+    return res.json({
+      success: true,
+      data: {
+        price: priceValue,
+        region,
+        vehicle_type: vtype,
+        airport_code: airCode,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Airport Transfer Price] Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
 // Admin: 跨區費率設定 API
 // ============================================
 
