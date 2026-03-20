@@ -273,6 +273,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       dropoffTransferVehicleType,
       // ✅ 新增：跨區接送費快照
       charterSurcharge,
+      // ✅ 急單：預定時間距下訂時間不足2小時，需支付全額
+      urgentFullPayment,
     } = req.body;
 
     console.log('[API] 創建訂單:', {
@@ -410,6 +412,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     // 使用配置的訂金比例
     if (pricingConfig && pricingConfig.depositRate) {
       depositRate = pricingConfig.depositRate;
+    }
+
+    // ✅ 急單：預定時間不足2小時，強制全額支付（訂金比例設為100%）
+    if (urgentFullPayment === true) {
+      depositRate = 1.0;
+      console.log('[API] 急單模式：訂金比例設為 100%（全額支付）');
     }
 
     const foreignLanguageSurcharge = 0; // 外語加價
@@ -881,9 +889,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Promise<void> => {
   try {
     const { bookingId } = req.params;
-    const { paymentMethod, customerUid } = req.body;
+    const { paymentMethod, customerUid, webReturnUrl } = req.body;
 
-    console.log('[API] 支付訂金:', { bookingId, paymentMethod, customerUid });
+    console.log('[API] 支付訂金:', { bookingId, paymentMethod, customerUid, webReturnUrl });
 
     // 1. 查詢訂單
     const { data: booking, error: bookingError } = await supabase
@@ -981,7 +989,8 @@ router.post('/:bookingId/pay-deposit', async (req: Request, res: Response): Prom
       },
       metadata: {
         bookingId: booking.id,
-        paymentType: 'deposit'
+        paymentType: 'deposit',
+        webReturnUrl: webReturnUrl || undefined,
       }
     };
 

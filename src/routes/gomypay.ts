@@ -171,7 +171,8 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
     AvCode,
     str_check,
     Send_Type,
-    booking_order_no  // ✅ 2026-02-03: 從 URL 參數獲取訂單編號（支付失敗時 GOMYPAY 不返回訂單編號）
+    booking_order_no,  // ✅ 2026-02-03: 從 URL 參數獲取訂單編號（支付失敗時 GOMYPAY 不返回訂單編號）
+    web_return,        // ✅ 2026-03-20: 網頁端回調 URL（如有則導向網頁而非 APP deep link）
   } = req.query;
 
   // ✅ 2026-02-03: 修復支付失敗時無法識別訂單的問題
@@ -355,6 +356,32 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
         console.log('[Return Page] 支付結果:', paymentResult);
         console.log('[Return Page] 訂單編號:', orderNo);
         console.log('[Return Page] 支付訊息:', paymentMessage);
+
+        // 網頁端回調：直接跳轉到網頁結果頁
+        const webReturnUrl = '${(web_return as string) || ''}';
+
+        if (webReturnUrl) {
+          // Web booking: redirect to web result page
+          function redirectWeb(status) {
+            const separator = webReturnUrl.includes('?') ? '&' : '?';
+            window.location.href = webReturnUrl + separator + 'status=' + status + '&orderNo=' + orderNo;
+          }
+
+          if (paymentResult === '1') {
+            document.getElementById('title').textContent = '支付成功';
+            document.getElementById('title').className = 'success';
+            document.getElementById('message').textContent = '正在跳轉...';
+            document.getElementById('spinner').style.display = 'none';
+            setTimeout(() => redirectWeb('success'), 1000);
+          } else {
+            document.getElementById('title').textContent = '支付失敗';
+            document.getElementById('title').className = 'error';
+            document.getElementById('message').textContent = paymentMessage || '支付失敗，正在跳轉...';
+            document.getElementById('spinner').style.display = 'none';
+            setTimeout(() => redirectWeb('failed'), 1500);
+          }
+          return; // Skip Flutter deep link below
+        }
 
         // 立即通知 Flutter WebView（不等待回調）
         function notifyFlutter(status) {

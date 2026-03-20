@@ -63,7 +63,8 @@ export class GomypayProvider implements PaymentProvider {
         buyerTelm: request.customerInfo?.phone || '',
         buyerMail: request.customerInfo?.email || '',
         buyerMemo: request.description || '包車服務訂金',
-        chkValue
+        chkValue,
+        webReturnUrl: (request.metadata?.webReturnUrl as string) || undefined,
       });
 
       console.log(`[GoMyPay] 支付 URL 生成成功`);
@@ -259,13 +260,18 @@ export class GomypayProvider implements PaymentProvider {
     buyerMail: string;
     buyerMemo: string;
     chkValue: string;
+    webReturnUrl?: string;
   }): string {
     // ✅ 2026-02-03: 修復支付失敗時無法識別訂單的問題
     // 在 Return_url 中加入訂單編號參數，確保即使 GOMYPAY 不返回訂單編號，
     // 後端也能從 URL 參數中獲取
-    const returnUrlWithOrderNo = this.config.returnUrl
+    // Build Return_url with booking_order_no + optional web_return
+    let returnUrlWithOrderNo = this.config.returnUrl
       ? `${this.config.returnUrl}?booking_order_no=${encodeURIComponent(params.orderNo)}`
       : '';
+    if (returnUrlWithOrderNo && params.webReturnUrl) {
+      returnUrlWithOrderNo += `&web_return=${encodeURIComponent(params.webReturnUrl)}`;
+    }
 
     console.log(`[GoMyPay] Return URL (含訂單編號): ${returnUrlWithOrderNo}`);
 
