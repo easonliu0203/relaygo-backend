@@ -399,14 +399,6 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
       if (apt) { dLat = apt.lat; dLng = apt.lng; }
     }
 
-    // 座標仍為 (0,0) → 無法計算，免收
-    if ((pLat === 0 && pLng === 0) || (dLat === 0 && dLng === 0)) {
-      return res.json({
-        success: true,
-        data: { surcharge: 0, reason: '上下車座標未提供，免收跨區費' },
-      });
-    }
-
     // 1. 取得目的城市（優先用 city 參數，否則從 tour_package_id 查）
     let destCity: string | null = (cityParam as string) || null;
 
@@ -439,6 +431,17 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
           reason: '目的城市未設定或不在計費清單，免收跨區費',
         },
       });
+    }
+
+    // 2.5 座標 fallback：缺 pickup 座標用台北市中心，缺 dropoff 座標用目的城市中心
+    const taipeiCenter = TW_CITY_CENTERS['台北'];
+    if (pLat === 0 && pLng === 0) {
+      // 預設 pickup 為台北（最常見的出發地）
+      if (taipeiCenter) { pLat = taipeiCenter.lat; pLng = taipeiCenter.lng; }
+    }
+    if (dLat === 0 && dLng === 0) {
+      // 預設 dropoff 為目的城市中心（回程通常回到目的地）
+      dLat = cityInfo.lat; dLng = cityInfo.lng;
     }
 
     // 3. 取得跨區費率
