@@ -528,6 +528,8 @@ router.get('/airport-transfer-price', async (req: Request, res: Response) => {
     }
 
     // Determine region: use lat/lng bounding box first, fallback to city-based lookup
+    // region_definitions 欄位: region_key, parent_region_key, min_lat/max_lat/min_lng/max_lng
+    // airport_transfer_pricing 欄位: region (matches region_key)
     let region: string | null = null;
 
     if (lat && lng) {
@@ -536,31 +538,36 @@ router.get('/airport-transfer-price', async (req: Request, res: Response) => {
       if (latNum !== 0 && lngNum !== 0) {
         const { data: regions } = await supabase
           .from('region_definitions')
-          .select('region')
+          .select('region_key')
           .lte('min_lat', latNum).gte('max_lat', latNum)
           .lte('min_lng', lngNum).gte('max_lng', lngNum)
+          .eq('is_active', true)
           .limit(1);
-        if (regions && regions.length > 0) region = regions[0].region;
+        if (regions && regions.length > 0) region = regions[0].region_key;
       }
     }
 
-    // Fallback: use city name to find any region
+    // Fallback: use city name to find region (match region_key or parent_region_key)
     if (!region && city) {
+      // 直接用城市名找 parent_region_key（如 "花蓮" → 花蓮A）
       const { data: regions } = await supabase
         .from('region_definitions')
-        .select('region')
-        .ilike('region', `%${city}%`)
+        .select('region_key')
+        .eq('parent_region_key', city as string)
+        .eq('is_active', true)
+        .order('priority', { ascending: true })
         .limit(1);
-      if (regions && regions.length > 0) region = regions[0].region;
+      if (regions && regions.length > 0) region = regions[0].region_key;
 
-      // Try broader match: city is part of county
+      // 也試 region_key 本身
       if (!region) {
         const { data: regions2 } = await supabase
           .from('region_definitions')
-          .select('region, county')
-          .ilike('county', `%${city}%`)
+          .select('region_key')
+          .ilike('region_key', `${city}%`)
+          .eq('is_active', true)
           .limit(1);
-        if (regions2 && regions2.length > 0) region = regions2[0].region;
+        if (regions2 && regions2.length > 0) region = regions2[0].region_key;
       }
     }
 
