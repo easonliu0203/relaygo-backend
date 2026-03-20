@@ -365,134 +365,96 @@ async function handleGomypayReturn(req: Request, res: Response): Promise<void> {
         <div id="fallback"></div>
       </div>
       <script>
-      try {
-        // 支付結果
-        const paymentResult = '${result || ''}';
-        const paymentMessage = decodeURIComponent('${encodeURIComponent((ret_msg as string) || '')}');
-        // ✅ 修復：使用解析後的 orderNo 變數，確保不為空
-        const orderNo = '${orderNo}';
+      // ✅ 2026-03-21: 用 IIFE 包裝，避免頂層 return 造成 SyntaxError
+      // （頂層 return 在 <script> 中無效，會導致整段 JS 不執行）
+      (function() {
+        try {
+          var paymentResult = '${result || ''}';
+          var paymentMessage = decodeURIComponent('${encodeURIComponent((ret_msg as string) || '')}');
+          var orderNo = '${orderNo}';
 
-        console.log('[Return Page] 支付結果:', paymentResult);
-        console.log('[Return Page] 訂單編號:', orderNo);
-        console.log('[Return Page] 支付訊息:', paymentMessage);
+          console.log('[Return Page] 支付結果:', paymentResult);
+          console.log('[Return Page] 訂單編號:', orderNo);
+          console.log('[Return Page] 支付訊息:', paymentMessage);
 
-        // 檢測是否為網頁端（非 APP WebView）
-        const webReturnUrl = '${webReturnUrl || ''}';
-        const isWebView = (navigator.userAgent.includes('wv') || navigator.userAgent.includes('WebView') || typeof window.flutter_inappwebview !== 'undefined');
-        const isWebBrowser = !isWebView;
+          // 提取 booking_number（去掉 D/B + 4位後綴）
+          var bookingNumber = orderNo;
+          var m = orderNo.match(/^(BK\\d+)[DB][A-Z0-9]{4}$/i);
+          if (m) bookingNumber = m[1];
+          var m2 = orderNo.match(/^(BK\\d+)-(DEPOSIT|BALANCE)(-[A-Z0-9]+)?$/i);
+          if (m2) bookingNumber = m2[1];
 
-        if (webReturnUrl || isWebBrowser) {
-          // Web: redirect to web result page
-          const webUrl = webReturnUrl || 'https://relaygo.pro/booking/charter/result';
+          // 檢測是否為網頁端（非 APP WebView）
+          var webReturnUrl = '${webReturnUrl || ''}';
+          var isWebView = (navigator.userAgent.indexOf('wv') > -1 || navigator.userAgent.indexOf('WebView') > -1 || typeof window.flutter_inappwebview !== 'undefined');
+
           function redirectWeb(status) {
-            const separator = webUrl.includes('?') ? '&' : '?';
-            window.location.href = webUrl + separator + 'status=' + status + '&orderNo=' + orderNo;
+            var webUrl = webReturnUrl || 'https://relaygo.pro/booking/charter/result';
+            var sep = webUrl.indexOf('?') > -1 ? '&' : '?';
+            window.location.href = webUrl + sep + 'status=' + status + '&orderNo=' + bookingNumber;
           }
 
-          if (paymentResult === '1') {
-            document.getElementById('title').textContent = '支付成功';
-            document.getElementById('title').className = 'success';
-            document.getElementById('message').textContent = '正在跳轉...';
-            document.getElementById('spinner').style.display = 'none';
-            setTimeout(() => redirectWeb('success'), 1000);
-          } else if (paymentResult === '0') {
-            document.getElementById('title').textContent = '支付失敗';
-            document.getElementById('title').className = 'error';
-            document.getElementById('message').textContent = paymentMessage || '支付失敗';
-            document.getElementById('spinner').style.display = 'none';
-            setTimeout(() => redirectWeb('failed'), 1500);
-          } else {
-            // 等待結果，3秒後強制跳轉
-            setTimeout(() => redirectWeb('pending'), 3000);
-          }
-          return;
-        }
-
-        // 立即通知 Flutter WebView（不等待回調）
-        function notifyFlutter(status) {
-          try {
-            // ✅ 2026-02-04: 支持多種格式
-            // 最新格式（25字符限制）: BK1763186275643D7L7Y → BK1763186275643
-            // 舊格式：BK1763186275643-DEPOSIT-A3B9F2 → BK1763186275643
-            // 更舊格式：BK1763186275643-DEPOSIT → BK1763186275643
-            let bookingNumber = orderNo;
-
-            // 使用正則表達式匹配並提取 booking_number
-            const newDepositMatch = orderNo.match(/^(BK\\d+)D([A-Z0-9]{4})$/i);
-            const newBalanceMatch = orderNo.match(/^(BK\\d+)B([A-Z0-9]{4})$/i);
-            const oldDepositMatch = orderNo.match(/^(BK\\d+)-DEPOSIT(-[A-Z0-9]+)?$/i);
-            const oldBalanceMatch = orderNo.match(/^(BK\\d+)-BALANCE(-[A-Z0-9]+)?$/i);
-
-            if (newDepositMatch) {
-              bookingNumber = newDepositMatch[1];
-            } else if (newBalanceMatch) {
-              bookingNumber = newBalanceMatch[1];
-            } else if (oldDepositMatch) {
-              bookingNumber = oldDepositMatch[1];
-            } else if (oldBalanceMatch) {
-              bookingNumber = oldBalanceMatch[1];
-            }
-
-            // 方法 1: 使用 Deep Link
-            const deepLink = 'ridebooking://payment-result?status=' + status + '&orderNo=' + bookingNumber;
-            console.log('[Return Page] 觸發 Deep Link:', deepLink);
-            console.log('[Return Page] 原始訂單號:', orderNo);
-            console.log('[Return Page] 訂單編號:', bookingNumber);
-            window.location.href = deepLink;
-          } catch (e) {
-            console.error('[Return Page] Deep Link 失敗:', e);
-          }
-
-          // 方法 2: 嘗試關閉窗口
-          setTimeout(() => {
+          function notifyFlutter(status) {
             try {
-              window.close();
+              var deepLink = 'ridebooking://payment-result?status=' + status + '&orderNo=' + bookingNumber;
+              console.log('[Return Page] Deep Link:', deepLink);
+              window.location.href = deepLink;
             } catch (e) {
-              console.log('[Return Page] 無法關閉窗口');
+              console.error('[Return Page] Deep Link 失敗:', e);
             }
-          }, 1000);
-        }
+            setTimeout(function() { try { window.close(); } catch(e) {} }, 1000);
+          }
 
-        // 根據支付結果立即通知
-        if (paymentResult === '1') {
-          // 支付成功
-          document.getElementById('title').textContent = '支付成功';
-          document.getElementById('title').className = 'success';
-          document.getElementById('message').textContent = '您的支付已提交，正在處理中...';
+          if (webReturnUrl || !isWebView) {
+            // ═══ 網頁瀏覽器路徑 ═══
+            document.getElementById('spinner').style.display = 'none';
+            if (paymentResult === '1') {
+              document.getElementById('title').textContent = '支付成功';
+              document.getElementById('title').className = 'success';
+              document.getElementById('message').textContent = '正在跳轉...';
+              setTimeout(function() { redirectWeb('success'); }, 1000);
+            } else if (paymentResult === '0') {
+              document.getElementById('title').textContent = '支付失敗';
+              document.getElementById('title').className = 'error';
+              document.getElementById('message').textContent = paymentMessage || '支付失敗';
+              setTimeout(function() { redirectWeb('failed'); }, 1500);
+            } else {
+              setTimeout(function() { redirectWeb('pending'); }, 3000);
+            }
+          } else {
+            // ═══ Flutter WebView 路徑 ═══
+            if (paymentResult === '1') {
+              document.getElementById('title').textContent = '支付成功';
+              document.getElementById('title').className = 'success';
+              document.getElementById('message').textContent = '正在處理中...';
+              document.getElementById('spinner').style.display = 'none';
+              setTimeout(function() { notifyFlutter('success'); }, 500);
+            } else if (paymentResult === '0') {
+              document.getElementById('title').textContent = '支付失敗';
+              document.getElementById('title').className = 'error';
+              document.getElementById('message').textContent = paymentMessage || '支付處理失敗，請重試';
+              document.getElementById('spinner').style.display = 'none';
+              setTimeout(function() { notifyFlutter('failed'); }, 500);
+            } else {
+              setTimeout(function() {
+                document.getElementById('title').textContent = '支付已提交';
+                document.getElementById('message').textContent = '正在確認支付結果...';
+                notifyFlutter('pending');
+              }, 3000);
+            }
+          }
+        } catch (err) {
+          console.error('[Return Page] JS 錯誤:', err);
           document.getElementById('spinner').style.display = 'none';
-
-          // 立即通知 Flutter
-          setTimeout(() => notifyFlutter('success'), 500);
-        } else if (paymentResult === '0') {
-          // 支付失敗
-          document.getElementById('title').textContent = '支付失敗';
-          document.getElementById('title').className = 'error';
-          document.getElementById('message').textContent = paymentMessage || '支付處理失敗，請重試';
-          document.getElementById('spinner').style.display = 'none';
-
-          // 立即通知 Flutter
-          setTimeout(() => notifyFlutter('failed'), 500);
-        } else {
-          // 未知狀態，等待回調
-          // 3秒後自動通知（假設支付成功）
-          setTimeout(() => {
-            document.getElementById('title').textContent = '支付已提交';
-            document.getElementById('message').textContent = '正在確認支付結果...';
-            notifyFlutter('pending');
-          }, 3000);
+          document.getElementById('title').textContent = '支付已完成';
+          document.getElementById('message').textContent = '請點擊下方按鈕繼續';
+          var fb = document.getElementById('fallback');
+          fb.innerHTML = '<a class="btn" href="https://relaygo.pro/booking/charter/result?status=success&orderNo=${orderNo}">查看預約結果</a>';
+          fb.style.display = 'block';
         }
+      })();
 
-      } catch (err) {
-        // ✅ 2026-03-21: JavaScript 錯誤時顯示 fallback 按鈕
-        console.error('[Return Page] JavaScript 錯誤:', err);
-        document.getElementById('spinner').style.display = 'none';
-        document.getElementById('title').textContent = '支付已完成';
-        document.getElementById('message').textContent = '請點擊下方按鈕繼續';
-        document.getElementById('fallback').innerHTML = '<a class="btn" href="https://relaygo.pro/booking/charter/result?status=success&orderNo=${orderNo}">查看預約結果</a>';
-        document.getElementById('fallback').style.display = 'block';
-      }
-
-      // ✅ 2026-03-21: 8 秒保險機制 — 若頁面仍未跳轉，顯示手動按鈕
+      // 8 秒保險：若頁面仍未跳轉，顯示手動按鈕
       setTimeout(function() {
         var fb = document.getElementById('fallback');
         if (fb && fb.style.display !== 'block') {
