@@ -71,8 +71,8 @@ async function fetchTSA(direction: 'arrival' | 'departure'): Promise<FlightResul
   const flights: FlightResult[] = [];
   for (const key of keys) {
     try {
-      const r = await fetch(TSA_URLS[key], { signal: AbortSignal.timeout(10000) });
-      if (!r.ok) continue;
+      const r = await fetch(TSA_URLS[key], { signal: AbortSignal.timeout(15000) });
+      if (!r.ok) { console.log(`[Flights] TSA ${key}: HTTP ${r.status}`); continue; }
       const data = await r.json() as Record<string, unknown>[];
       for (const item of data) {
         const icao = str(item.AirLineCode);
@@ -94,7 +94,7 @@ async function fetchTSA(direction: 'arrival' | 'departure'): Promise<FlightResul
           route: str(item.UpAirportName || item.GoalAirportName) || null,
         });
       }
-    } catch { /* skip */ }
+    } catch (e) { console.log(`[Flights] TSA ${key} error:`, e); }
   }
   return flights;
 }
@@ -120,9 +120,11 @@ function findCol(headers: string[], names: string[]): number {
 
 async function fetchTPE(direction: 'arrival' | 'departure'): Promise<FlightResult[]> {
   try {
-    const r = await fetch(TPE_URL, { signal: AbortSignal.timeout(10000) });
-    if (!r.ok) return [];
+    console.log('[Flights] TPE: fetching CSV...');
+    const r = await fetch(TPE_URL, { signal: AbortSignal.timeout(15000) });
+    if (!r.ok) { console.log(`[Flights] TPE: HTTP ${r.status}`); return []; }
     const body = await r.text();
+    console.log(`[Flights] TPE: got ${body.length} bytes, ${body.split('\\n').length} lines`);
     const lines = body.split('\n');
     if (lines.length < 2) return [];
 
@@ -161,7 +163,7 @@ async function fetchTPE(direction: 'arrival' | 'departure'): Promise<FlightResul
       });
     }
     return flights;
-  } catch { return []; }
+  } catch (e) { console.error('[Flights] TPE fetch error:', e); return []; }
 }
 
 // ─── KHH parser ─────────────────────────────────────────
@@ -174,19 +176,27 @@ async function fetchKHH(direction: 'arrival' | 'departure'): Promise<FlightResul
   for (const key of keys) {
     try {
       const r = await fetch(KHH_URLS[key], { signal: AbortSignal.timeout(10000) });
-      if (!r.ok) continue;
+      if (!r.ok) { console.log(`[Flights] KHH ${key}: HTTP ${r.status}`); continue; }
       const data = await r.json() as Record<string, unknown>[];
       for (const item of data) {
-        const icao = str(item.airLineCode || item.AirLineCode);
         const iata = str(item.airLineIATA || item.AirLineIATA);
         const num = str(item.airLineNum || item.AirLineNum);
         if (!num) continue;
-        const code = iata || icao;
-        if (!code) continue;
+        // ✅ 2026-03-21: KHH API 的 airLineNum 可能已含 IATA 代碼（如 "CI582"）
+        // 如果 num 以字母開頭，直接用 num 作為航班號，避免重複加前綴（CALCI582）
+        const numStartsWithAlpha = /^[A-Z]{2,3}\d/.test(num);
+        let flightNo: string;
+        if (numStartsWithAlpha) {
+          flightNo = num; // num 已含航空公司代碼
+        } else {
+          const code = iata || str(item.airLineCode || item.AirLineCode);
+          if (!code) continue;
+          flightNo = `${code}${num}`;
+        }
         const scheduled = formatHHMM(str(item.expectTime || item.ExpectTime));
         flights.push({
           airportCode: 'KHH', airportName: '高雄',
-          flightNo: `${code}${num}`,
+          flightNo,
           scheduledTime: scheduled || null,
           estimatedTime: null,
           terminal: null,
@@ -194,7 +204,7 @@ async function fetchKHH(direction: 'arrival' | 'departure'): Promise<FlightResul
           route: str(item.airRouteNameCht || item.goalAirport) || null,
         });
       }
-    } catch { /* skip */ }
+    } catch (e) { console.log(`[Flights] KHH ${key} error:`, e); }
   }
   return flights;
 }
@@ -208,26 +218,44 @@ async function fetchRMQ(direction: 'arrival' | 'departure'): Promise<FlightResul
   const flights: FlightResult[] = [];
   for (const key of keys) {
     try {
-      const r = await fetch(RMQ_URLS[key], { signal: AbortSignal.timeout(10000) });
-      if (!r.ok) continue;
-      const decoded = await r.json();
+      console.log(`[Flights] RMQ ${key}: fetching...`);
+      const r = await fetch(RMQ_URLS[key], {
+        signal: AbortSignal.timeout(15000),
+        headers: { 'Accept': 'application/json, text/html' },
+      });
+      if (!r.ok) { console.log(`[Flights] RMQ ${key}: HTTP ${r.status}`); continue; }
+      const text = await r.text();
+      // RMQ API 可能回傳 HTML（從海外訪問被擋）而非 JSON
+      if (text.trim().startsWith('<')) {
+        console.log(`[Flights] RMQ ${key}: got HTML response (possible geo-restriction), skipping`);
+        continue;
+      }
+      const decoded = JSON.parse(text);
       const data: Record<string, unknown>[] = Array.isArray(decoded)
         ? decoded
         : (decoded as Record<string, unknown>).InstantSchedule as Record<string, unknown>[] || [];
+      console.log(`[Flights] RMQ ${key}: got ${data.length} flights`);
       for (const item of data) {
-        const icao = str(item.airLineCode || item.AirLineCode);
         const iata = str(item.airLineIATA || item.AirLineIATA);
         const num = str(item.airLineNum || item.AirLineNum);
         if (!num) continue;
-        const code = iata || icao;
-        if (!code) continue;
+        // 同 KHH 修正：num 可能已含航空公司代碼
+        const numStartsWithAlpha = /^[A-Z]{2,3}\d/.test(num);
+        let flightNo: string;
+        if (numStartsWithAlpha) {
+          flightNo = num;
+        } else {
+          const code = iata || str(item.airLineCode || item.AirLineCode);
+          if (!code) continue;
+          flightNo = `${code}${num}`;
+        }
         const timeField = direction === 'arrival'
           ? str(item.expectArrivalTime || item.ExpectArrivalTime)
           : str(item.expectDepartureTime || item.ExpectDepartureTime);
         const scheduled = formatHHMM(timeField);
         flights.push({
           airportCode: 'RMQ', airportName: '台中',
-          flightNo: `${code}${num}`,
+          flightNo,
           scheduledTime: scheduled || null,
           estimatedTime: null,
           terminal: null,
@@ -235,7 +263,7 @@ async function fetchRMQ(direction: 'arrival' | 'departure'): Promise<FlightResul
           route: str(item.goalAirport || item.GoalAirport) || null,
         });
       }
-    } catch { /* skip */ }
+    } catch (e) { console.log(`[Flights] RMQ ${key} error:`, e); }
   }
   return flights;
 }
@@ -265,7 +293,11 @@ router.get('/search', async (req: Request, res: Response) => {
       if (!airportFilter || airportFilter === 'KHH') fetchers.push(fetchKHH(direction).catch(() => []));
 
       const results = await Promise.all(fetchers);
+      // Log per-airport counts for debugging
+      const airportNames = ['TSA', 'TPE', 'RMQ', 'KHH'].filter(a => !airportFilter || a === airportFilter);
+      results.forEach((r, i) => console.log(`[Flights] ${airportNames[i] || i}: ${r.length} flights`));
       allFlights = results.flat().sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
+      console.log(`[Flights] Total: ${allFlights.length} flights (cache key: ${cacheKey})`);
       cache.set(cacheKey, { data: allFlights, ts: Date.now() });
     }
 

@@ -262,15 +262,17 @@ export class GomypayProvider implements PaymentProvider {
     chkValue: string;
     webReturnUrl?: string;
   }): string {
-    // ✅ 2026-02-03: 修復支付失敗時無法識別訂單的問題
-    // 在 Return_url 中加入訂單編號參數，確保即使 GOMYPAY 不返回訂單編號，
-    // 後端也能從 URL 參數中獲取
-    // Build Return_url with booking_order_no + optional web_return
+    // ✅ 2026-03-21: 修復 GomyPay 雙 ? 問題
+    // GomyPay 回傳時會在 Return_url 後面用 ? 拼接自己的參數
+    // 如果 Return_url 已有 ?query，就會出現雙 ?，導致參數解析錯誤
+    // 解法：把 booking_order_no 放在 URL path 中，不用 query string
     let returnUrlWithOrderNo = this.config.returnUrl
-      ? `${this.config.returnUrl}?booking_order_no=${encodeURIComponent(params.orderNo)}`
+      ? `${this.config.returnUrl}/${encodeURIComponent(params.orderNo)}`
       : '';
+    // web_return 也編碼進 path（base64），避免被 GomyPay 的 ? 破壞
     if (returnUrlWithOrderNo && params.webReturnUrl) {
-      returnUrlWithOrderNo += `&web_return=${encodeURIComponent(params.webReturnUrl)}`;
+      const webReturnB64 = Buffer.from(params.webReturnUrl).toString('base64url');
+      returnUrlWithOrderNo += `/${webReturnB64}`;
     }
 
     console.log(`[GoMyPay] Return URL (含訂單編號): ${returnUrlWithOrderNo}`);

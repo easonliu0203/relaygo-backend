@@ -155,13 +155,17 @@ router.get('/gomypay-callback', async (_req: Request, res: Response): Promise<vo
  * @route POST /api/payment/gomypay/return
  * @access Public
  */
-router.get('/gomypay/return', async (req: Request, res: Response): Promise<void> => {
+// ✅ 2026-03-21: 共用 return handler，支援新舊兩種 URL 格式
+// 新格式（修復雙 ? 問題）: /gomypay/return/:pathOrderNo[/:webReturnB64]?Send_Type=0&result=1&...
+// 舊格式（向後兼容）:       /gomypay/return?booking_order_no=BK...&web_return=...&result=1&...
+async function handleGomypayReturn(req: Request, res: Response): Promise<void> {
   console.log('[GoMyPay Return] ========================================');
   console.log('[GoMyPay Return] ✅ 收到 GOMYPAY 即時回調（Return_url）');
   console.log('[GoMyPay Return] ========================================');
-  console.log('[GoMyPay Return] 完整參數:', req.query);
+  console.log('[GoMyPay Return] Path params:', req.params);
+  console.log('[GoMyPay Return] Query params:', req.query);
 
-  // 解析所有參數
+  // 解析所有參數（GomyPay 回傳的 query params）
   const {
     e_orderno,
     result,
@@ -171,14 +175,24 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
     AvCode,
     str_check,
     Send_Type,
-    booking_order_no,  // ✅ 2026-02-03: 從 URL 參數獲取訂單編號（支付失敗時 GOMYPAY 不返回訂單編號）
-    web_return,        // ✅ 2026-03-20: 網頁端回調 URL（如有則導向網頁而非 APP deep link）
+    booking_order_no,  // 舊格式：從 query 獲取
+    web_return,        // 舊格式：從 query 獲取
   } = req.query;
 
-  // ✅ 2026-02-03: 修復支付失敗時無法識別訂單的問題
-  // 優先使用 GOMYPAY 返回的訂單編號，如果沒有則使用 URL 參數中的 booking_order_no
-  // 這樣即使 GOMYPAY 支付失敗不返回訂單編號，我們也能從 URL 參數中獲取
-  const orderNo = (e_orderno || Order_No || booking_order_no || '') as string;
+  // ✅ 2026-03-21: 從 path param 獲取訂單編號（新格式，避免 GomyPay 雙 ? 問題）
+  const pathOrderNo = req.params.pathOrderNo || '';
+  const pathWebReturnB64 = req.params.webReturnB64 || '';
+
+  // 解碼 web_return（新格式用 base64url 編碼在 path 中）
+  let webReturnUrl = (web_return as string) || '';
+  if (!webReturnUrl && pathWebReturnB64) {
+    try {
+      webReturnUrl = Buffer.from(pathWebReturnB64, 'base64url').toString('utf-8');
+    } catch { /* ignore decode error */ }
+  }
+
+  // 優先使用 GOMYPAY 返回的訂單編號 > path param > query param
+  const orderNo = (e_orderno || Order_No || pathOrderNo || booking_order_no || '') as string;
 
   console.log('[GoMyPay Return] 訂單編號:', orderNo);
   console.log('[GoMyPay Return] 訂單編號來源:', e_orderno ? 'e_orderno' : Order_No ? 'Order_No' : booking_order_no ? 'booking_order_no (URL參數)' : '無');
@@ -335,6 +349,9 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
         }
         .success { color: #4CAF50; }
         .error { color: #f44336; }
+        .btn { display: inline-block; margin-top: 20px; padding: 12px 24px; background: #667eea; color: white; border-radius: 8px; text-decoration: none; font-size: 16px; }
+        .btn:hover { opacity: 0.9; }
+        #fallback { display: none; margin-top: 20px; }
       </style>
     </head>
     <body>
@@ -345,11 +362,13 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
         <p style="font-size: 14px; color: #999; margin-top: 20px;" id="countdown">
           此頁面將自動關閉
         </p>
+        <div id="fallback"></div>
       </div>
       <script>
+      try {
         // 支付結果
         const paymentResult = '${result || ''}';
-        const paymentMessage = '${ret_msg || ''}';
+        const paymentMessage = decodeURIComponent('${encodeURIComponent((ret_msg as string) || '')}');
         // ✅ 修復：使用解析後的 orderNo 變數，確保不為空
         const orderNo = '${orderNo}';
 
@@ -358,8 +377,9 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
         console.log('[Return Page] 支付訊息:', paymentMessage);
 
         // 檢測是否為網頁端（非 APP WebView）
-        const webReturnUrl = '${(web_return as string) || ''}';
-        const isWebBrowser = !navigator.userAgent.includes('wv') && !navigator.userAgent.includes('WebView') && !window.flutter_inappwebview;
+        const webReturnUrl = '${webReturnUrl || ''}';
+        const isWebView = (navigator.userAgent.includes('wv') || navigator.userAgent.includes('WebView') || typeof window.flutter_inappwebview !== 'undefined');
+        const isWebBrowser = !isWebView;
 
         if (webReturnUrl || isWebBrowser) {
           // Web: redirect to web result page
@@ -461,11 +481,37 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
             notifyFlutter('pending');
           }, 3000);
         }
+
+      } catch (err) {
+        // ✅ 2026-03-21: JavaScript 錯誤時顯示 fallback 按鈕
+        console.error('[Return Page] JavaScript 錯誤:', err);
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('title').textContent = '支付已完成';
+        document.getElementById('message').textContent = '請點擊下方按鈕繼續';
+        document.getElementById('fallback').innerHTML = '<a class="btn" href="https://relaygo.pro/booking/charter/result?status=success&orderNo=${orderNo}">查看預約結果</a>';
+        document.getElementById('fallback').style.display = 'block';
+      }
+
+      // ✅ 2026-03-21: 8 秒保險機制 — 若頁面仍未跳轉，顯示手動按鈕
+      setTimeout(function() {
+        var fb = document.getElementById('fallback');
+        if (fb && fb.style.display !== 'block') {
+          fb.innerHTML = '<a class="btn" href="https://relaygo.pro/booking/charter/result?status=success&orderNo=${orderNo}">查看預約結果</a>';
+          fb.style.display = 'block';
+        }
+      }, 8000);
       </script>
     </body>
     </html>
   `);
-});
+}
+
+// ✅ 2026-03-21: 掛載 return handler 到新舊兩種路由
+// 新格式（修復雙 ? 問題）: /gomypay/return/:pathOrderNo 或 /gomypay/return/:pathOrderNo/:webReturnB64
+router.get('/gomypay/return/:pathOrderNo/:webReturnB64', handleGomypayReturn);
+router.get('/gomypay/return/:pathOrderNo', handleGomypayReturn);
+// 舊格式（向後兼容）: /gomypay/return?booking_order_no=BK...
+router.get('/gomypay/return', handleGomypayReturn);
 
 router.post('/gomypay/return', async (req: Request, res: Response): Promise<void> => {
   console.log('[GoMyPay Return POST] 用戶返回:', req.body);
