@@ -357,14 +357,16 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
         console.log('[Return Page] 訂單編號:', orderNo);
         console.log('[Return Page] 支付訊息:', paymentMessage);
 
-        // 網頁端回調：直接跳轉到網頁結果頁
+        // 檢測是否為網頁端（非 APP WebView）
         const webReturnUrl = '${(web_return as string) || ''}';
+        const isWebBrowser = !navigator.userAgent.includes('wv') && !navigator.userAgent.includes('WebView') && !window.flutter_inappwebview;
 
-        if (webReturnUrl) {
-          // Web booking: redirect to web result page
+        if (webReturnUrl || isWebBrowser) {
+          // Web: redirect to web result page
+          const webUrl = webReturnUrl || 'https://relaygo.pro/booking/charter/result';
           function redirectWeb(status) {
-            const separator = webReturnUrl.includes('?') ? '&' : '?';
-            window.location.href = webReturnUrl + separator + 'status=' + status + '&orderNo=' + orderNo;
+            const separator = webUrl.includes('?') ? '&' : '?';
+            window.location.href = webUrl + separator + 'status=' + status + '&orderNo=' + orderNo;
           }
 
           if (paymentResult === '1') {
@@ -373,14 +375,17 @@ router.get('/gomypay/return', async (req: Request, res: Response): Promise<void>
             document.getElementById('message').textContent = '正在跳轉...';
             document.getElementById('spinner').style.display = 'none';
             setTimeout(() => redirectWeb('success'), 1000);
-          } else {
+          } else if (paymentResult === '0') {
             document.getElementById('title').textContent = '支付失敗';
             document.getElementById('title').className = 'error';
-            document.getElementById('message').textContent = paymentMessage || '支付失敗，正在跳轉...';
+            document.getElementById('message').textContent = paymentMessage || '支付失敗';
             document.getElementById('spinner').style.display = 'none';
             setTimeout(() => redirectWeb('failed'), 1500);
+          } else {
+            // 等待結果，3秒後強制跳轉
+            setTimeout(() => redirectWeb('pending'), 3000);
           }
-          return; // Skip Flutter deep link below
+          return;
         }
 
         // 立即通知 Flutter WebView（不等待回調）
