@@ -382,8 +382,9 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
     } = req.query;
 
     // ✅ 2026-03-21: 加購接送機 → 免收跨區費（接送機價格表已含區域費用）
-    const airportPickup  = has_airport_pickup  === '1' || has_airport_pickup  === 'true';
-    const airportDropoff = has_airport_dropoff === '1' || has_airport_dropoff === 'true';
+    // 判斷方式：has_airport_pickup/dropoff flag（新版）或 pickup/dropoff_airport_code（舊版 APP 也會傳）
+    const airportPickup  = has_airport_pickup  === '1' || has_airport_pickup  === 'true' || !!pickup_airport_code;
+    const airportDropoff = has_airport_dropoff === '1' || has_airport_dropoff === 'true' || !!dropoff_airport_code;
     if (airportPickup || airportDropoff) {
       console.log(`[Charter Surcharge] 加購接送機，免收跨區費 (pickup=${airportPickup}, dropoff=${airportDropoff})`);
       return res.json({
