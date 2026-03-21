@@ -580,52 +580,90 @@ router.get('/airport-transfer-price', async (req: Request, res: Response) => {
       return res.json({ success: true, data: { price: null, reason: '不支援的機場代碼' } });
     }
 
-    // Determine region: use lat/lng bounding box first, fallback to city-based lookup
+    // 地區判定邏輯（與 bookings.ts detectRegion 對齊）
+    // 策略：city 文字優先 → 座標在該 city 子區中匹配 → 第一個子區 fallback
     // region_definitions 欄位: region_key, parent_region_key, min_lat/max_lat/min_lng/max_lng
-    // airport_transfer_pricing 欄位: region (matches region_key)
+    // airport_transfer_pricing 欄位: region (matches region_key，只有子區如 台北A/新北B)
     let region: string | null = null;
+    const cityStr = city ? (city as string) : '';
+    const hasCoords = lat && lng && parseFloat(lat as string) !== 0 && parseFloat(lng as string) !== 0;
+    const latNum = hasCoords ? parseFloat(lat as string) : 0;
+    const lngNum = hasCoords ? parseFloat(lng as string) : 0;
 
-    if (lat && lng) {
-      const latNum = parseFloat(lat as string);
-      const lngNum = parseFloat(lng as string);
-      if (latNum !== 0 && lngNum !== 0) {
-        const { data: regions } = await supabase
+    // Step 1: 若有 city 參數，找該 city 的子區（airport_transfer_pricing 只存子區）
+    if (cityStr) {
+      // 先找所有子區
+      const { data: subRegions } = await supabase
+        .from('region_definitions')
+        .select('region_key, min_lat, max_lat, min_lng, max_lng')
+        .eq('parent_region_key', cityStr)
+        .eq('is_active', true)
+        .order('priority', { ascending: true });
+
+      if (subRegions && subRegions.length > 0) {
+        // 有座標 → 嘗試精確匹配子區 bounding box
+        if (hasCoords) {
+          const match = subRegions.find(r =>
+            latNum >= r.min_lat && latNum <= r.max_lat &&
+            lngNum >= r.min_lng && lngNum <= r.max_lng
+          );
+          if (match) region = match.region_key;
+        }
+        // 座標未命中或無座標 → 取第一個子區
+        if (!region) region = subRegions[0].region_key;
+      }
+
+      // 也試 region_key 本身（如 "台東"、"嘉義" 沒有子區）
+      if (!region) {
+        const { data: directMatch } = await supabase
           .from('region_definitions')
           .select('region_key')
-          .lte('min_lat', latNum).gte('max_lat', latNum)
-          .lte('min_lng', lngNum).gte('max_lng', lngNum)
+          .ilike('region_key', `${cityStr}%`)
           .eq('is_active', true)
           .limit(1);
-        if (regions && regions.length > 0) region = regions[0].region_key;
+        if (directMatch && directMatch.length > 0) region = directMatch[0].region_key;
       }
     }
 
-    // Fallback: use city name to find region (match region_key or parent_region_key)
-    if (!region && city) {
-      // 直接用城市名找 parent_region_key（如 "花蓮" → 花蓮A）
+    // Step 2: 無 city 但有座標 → 全域 bounding box 查詢（優先子區）
+    if (!region && hasCoords) {
       const { data: regions } = await supabase
         .from('region_definitions')
-        .select('region_key')
-        .eq('parent_region_key', city as string)
+        .select('region_key, parent_region_key')
+        .lte('min_lat', latNum).gte('max_lat', latNum)
+        .lte('min_lng', lngNum).gte('max_lng', lngNum)
         .eq('is_active', true)
-        .order('priority', { ascending: true })
-        .limit(1);
-      if (regions && regions.length > 0) region = regions[0].region_key;
-
-      // 也試 region_key 本身
-      if (!region) {
-        const { data: regions2 } = await supabase
-          .from('region_definitions')
-          .select('region_key')
-          .ilike('region_key', `${city}%`)
-          .eq('is_active', true)
-          .limit(1);
-        if (regions2 && regions2.length > 0) region = regions2[0].region_key;
+        .order('priority', { ascending: true });
+      if (regions && regions.length > 0) {
+        // 優先選子區（有 parent_region_key 的），因為 pricing 表只存子區
+        const sub = regions.find(r => r.parent_region_key != null);
+        region = sub ? sub.region_key : regions[0].region_key;
       }
     }
 
     if (!region) {
       return res.json({ success: true, data: { price: null, reason: '無法確定地區' } });
+    }
+
+    // Step 3: 若 region 是父區（pricing 表可能無此 region），找第一個子區
+    // 這處理 Step 2 中只匹配到父區的情況
+    const { data: pricingCheck } = await supabase
+      .from('airport_transfer_pricing')
+      .select('id')
+      .eq('region', region)
+      .eq('vehicle_type', vtype)
+      .eq('is_active', true)
+      .limit(1);
+    if (!pricingCheck || pricingCheck.length === 0) {
+      const { data: fallbackSub } = await supabase
+        .from('region_definitions')
+        .select('region_key')
+        .eq('parent_region_key', region)
+        .eq('is_active', true)
+        .limit(1);
+      if (fallbackSub && fallbackSub.length > 0) {
+        region = fallbackSub[0].region_key;
+      }
     }
 
     // Query airport_transfer_pricing
