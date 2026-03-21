@@ -343,18 +343,25 @@ router.get('/packages', async (req: Request, res: Response) => {
 
 // ============================================
 // 包車旅遊跨區費 API
+//
+// 【公式】max(上車地→城市中心, 下車地→城市中心) × 1.3 路程係數
+//        跨區費 = (估計路程 - free_km) × rate_per_km （只收超出部分）
+// 【費率表】cross_region_km_rates（S=2, M=4, L=6, XL=8 元/km，free_km=50）
+// 【手機端 + 網頁端】都呼叫此 API
+// 【加購接送機】傳 has_airport_pickup/dropoff=1 → 直接回 surcharge=0
 // ============================================
 
 /**
  * @route GET /api/pricing/charter-surcharge
  * @desc 計算包車旅遊跨區接送費
- * @query tour_package_id - 旅遊方案 ID（必填，取得目的城市）
- * @query pickup_lat      - 上車緯度（必填）
- * @query pickup_lng      - 上車經度（必填）
- * @query dropoff_lat     - 下車緯度（必填）
- * @query dropoff_lng     - 下車經度（必填）
- * @query vehicle_type    - 車型代碼 S/M/L/XL（必填）
- * @query country         - 國家代碼（預設 'TW'）
+ * @query tour_package_id      - 旅遊方案 ID（或 city）
+ * @query city                 - 目的城市（或 tour_package_id）
+ * @query pickup_lat/lng       - 上車座標
+ * @query dropoff_lat/lng      - 下車座標
+ * @query vehicle_type         - 車型代碼 S/M/L/XL（必填）
+ * @query has_airport_pickup   - 加購接機 → 免收跨區費
+ * @query has_airport_dropoff  - 加購送機 → 免收跨區費
+ * @query country              - 國家代碼（預設 'TW'）
  * @access Public
  */
 router.get('/charter-surcharge', async (req: Request, res: Response) => {
@@ -541,8 +548,13 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
 });
 
 // ============================================
-// 機場接送費查詢（網頁端用）
+// 機場接送費查詢
 // GET /api/pricing/airport-transfer-price?airport_code=TPE&vehicle_type=M&city=花蓮
+//
+// 【架構備註】查表制，查 airport_transfer_pricing 表（region × vehicle_type × airport → 固定價格）。
+// 網頁端（relaygo-site ConfirmContent.tsx）呼叫此 API。
+// 手機端直接查 Supabase（airport_transfer_pricing_service.dart），不經此 API。
+// 兩條路查同一張表，建立訂單時後端都會重新驗價（bookings.ts）。
 // ============================================
 router.get('/airport-transfer-price', async (req: Request, res: Response) => {
   try {
