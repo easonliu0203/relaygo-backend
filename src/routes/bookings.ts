@@ -491,7 +491,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       basePrice = 0;
       console.log('[API] 機場接送獨立服務：basePrice 歸零，改用後端驗價結果 pickup=%d dropoff=%d', verifiedPickupPrice, verifiedDropoffPrice);
     }
-    const charterSurchargeAmount = Number(charterSurcharge) || 0;
+    // ✅ 2026-03-21: 加購接送機 → 強制跨區費=0（接送機價格表已含區域費用）
+    const charterSurchargeAmount = (addAirportPickup || addAirportDropoff)
+      ? 0
+      : (Number(charterSurcharge) || 0);
+    if ((addAirportPickup || addAirportDropoff) && charterSurcharge) {
+      console.log(`[API] ⚠️ 加購接送機但前端傳了 charterSurcharge=${charterSurcharge}，後端強制歸零`);
+    }
     let totalAmount = basePrice + foreignLanguageSurcharge + overtimeFee + tipAmount + verifiedPickupPrice + verifiedDropoffPrice + charterSurchargeAmount;
     let actualOriginalPrice = totalAmount; // 原始價格（未折扣前）
     let actualDiscountAmount = 0; // 折扣金額

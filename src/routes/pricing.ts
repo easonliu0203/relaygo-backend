@@ -370,7 +370,24 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
       dropoff_airport_code,  // 可選：機場代碼（優先於 lat/lng）
       vehicle_type,
       country = 'TW',
+      has_airport_pickup,    // ✅ 2026-03-21: 加購接送機 flag
+      has_airport_dropoff,
     } = req.query;
+
+    // ✅ 2026-03-21: 加購接送機 → 免收跨區費（接送機價格表已含區域費用）
+    const airportPickup  = has_airport_pickup  === '1' || has_airport_pickup  === 'true';
+    const airportDropoff = has_airport_dropoff === '1' || has_airport_dropoff === 'true';
+    if (airportPickup || airportDropoff) {
+      console.log(`[Charter Surcharge] 加購接送機，免收跨區費 (pickup=${airportPickup}, dropoff=${airportDropoff})`);
+      return res.json({
+        success: true,
+        data: {
+          surcharge: 0,
+          reason: '加購接送機，免收跨區費（接送機價格已含區域費用）',
+          is_charged: false,
+        },
+      });
+    }
 
     if ((!tour_package_id && !cityParam) || !vehicle_type) {
       return res.status(400).json({
