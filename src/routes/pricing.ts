@@ -477,30 +477,15 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
 
     console.log(`[Charter Surcharge] 輸入座標: pickup=(${pLat}, ${pLng}) dropoff=(${dLat}, ${dLng}) city=${destCity} center=(${cityInfo.lat}, ${cityInfo.lng})`);
 
-    // ✅ 2026-03-21: 同城免收跨區費
-    // 如果上車地和下車地都在目的城市中心 30km 以內，視為同城旅遊，免收跨區費
-    const SAME_CITY_RADIUS_KM = 30;
+    // ✅ 2026-03-21: 新跨區費公式
+    // 距離 = max(上車地→城市中心, 下車地→城市中心) × 1.3 路程係數
+    // 跨區費 = (距離 - free_km) × 費率    ← 只收超出部分
+    const ROAD_FACTOR = 1.3; // 直線距離 → 公路距離粗估係數
+
     const pickupToCenter  = haversineKm(pLat, pLng, cityInfo.lat, cityInfo.lng);
     const dropoffToCenter = haversineKm(dLat, dLng, cityInfo.lat, cityInfo.lng);
-
-    if (pickupToCenter <= SAME_CITY_RADIUS_KM && dropoffToCenter <= SAME_CITY_RADIUS_KM) {
-      console.log(`[Charter Surcharge] ✅ 同城免收: pickup距中心=${pickupToCenter.toFixed(1)}km, dropoff距中心=${dropoffToCenter.toFixed(1)}km (門檻=${SAME_CITY_RADIUS_KM}km)`);
-      return res.json({
-        success: true,
-        data: {
-          surcharge: 0,
-          city: destCity,
-          city_region: cityInfo.region,
-          total_distance_km: Math.round((pickupToCenter + dropoffToCenter) * 10) / 10,
-          pickup_to_city_km: Math.round(pickupToCenter * 10) / 10,
-          city_to_dropoff_km: Math.round(dropoffToCenter * 10) / 10,
-          rate_per_km: 0,
-          free_km: SAME_CITY_RADIUS_KM,
-          is_charged: false,
-          reason: `上車地與下車地均在${destCity}${SAME_CITY_RADIUS_KM}公里內，免收跨區費`,
-        },
-      });
-    }
+    const maxStraightDist = Math.max(pickupToCenter, dropoffToCenter);
+    const estimatedRoadKm = maxStraightDist * ROAD_FACTOR;
 
     // 3. 取得跨區費率
     const { data: rateRow, error: rateErr } = await supabase
@@ -519,19 +504,13 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
       });
     }
 
-    // 4. 計算距離：上車地 → 城市中心 + 城市中心 → 下車地
-    const distToCity    = pickupToCenter;
-    const distFromCity  = dropoffToCenter;
-    const totalDistKm   = distToCity + distFromCity;
-
     const { rate_per_km, free_km } = rateRow;
 
-    // 5. 計算跨區加價（全程計費；低於 free_km 免收）
-    const surcharge = totalDistKm >= free_km
-      ? Math.round(totalDistKm * rate_per_km)
-      : 0;
+    // 4. 只收超出 free_km 的部分
+    const excessKm  = Math.max(0, estimatedRoadKm - free_km);
+    const surcharge = excessKm > 0 ? Math.round(excessKm * rate_per_km) : 0;
 
-    console.log(`[Charter Surcharge] 城市: ${destCity} | 距離: ${totalDistKm.toFixed(1)}km | 費率: ${rate_per_km}/km | 門檻: ${free_km}km | 加價: ${surcharge}`);
+    console.log(`[Charter Surcharge] 城市: ${destCity} | pickup→中心: ${pickupToCenter.toFixed(1)}km | dropoff→中心: ${dropoffToCenter.toFixed(1)}km | max: ${maxStraightDist.toFixed(1)}km | ×${ROAD_FACTOR}=${estimatedRoadKm.toFixed(1)}km | 超出${free_km}km: ${excessKm.toFixed(1)}km | 費率: ${rate_per_km}/km | 跨區費: ${surcharge}`);
 
     return res.json({
       success: true,
@@ -539,12 +518,15 @@ router.get('/charter-surcharge', async (req: Request, res: Response) => {
         surcharge,
         city: destCity,
         city_region: cityInfo.region,
-        total_distance_km: Math.round(totalDistKm * 10) / 10,
-        pickup_to_city_km: Math.round(distToCity * 10) / 10,
-        city_to_dropoff_km: Math.round(distFromCity * 10) / 10,
+        straight_distance_km: Math.round(maxStraightDist * 10) / 10,
+        estimated_road_km: Math.round(estimatedRoadKm * 10) / 10,
+        excess_km: Math.round(excessKm * 10) / 10,
+        pickup_to_city_km: Math.round(pickupToCenter * 10) / 10,
+        dropoff_to_city_km: Math.round(dropoffToCenter * 10) / 10,
+        road_factor: ROAD_FACTOR,
         rate_per_km,
         free_km,
-        is_charged: totalDistKm >= free_km,
+        is_charged: surcharge > 0,
       },
     });
 
