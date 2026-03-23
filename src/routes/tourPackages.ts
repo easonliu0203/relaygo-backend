@@ -227,6 +227,61 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 /**
+ * @route PUT /api/tour-packages/reorder
+ * @desc 批量更新旅遊方案排序
+ * @body { orders: [{ id: string, display_order: number }] }
+ * @access Admin
+ */
+router.put('/reorder', async (req: Request, res: Response) => {
+  try {
+    const { orders } = req.body;
+
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: '請提供排序資料'
+      });
+    }
+
+    console.log(`[Tour Packages API] 批量更新排序: ${orders.length} 筆`);
+
+    // 逐筆更新 display_order
+    const updates = orders.map(({ id, display_order }: { id: string; display_order: number }) =>
+      supabase
+        .from('tour_packages')
+        .update({ display_order })
+        .eq('id', id)
+    );
+
+    const results = await Promise.all(updates);
+    const failed = results.filter(r => r.error);
+
+    if (failed.length > 0) {
+      console.error('[Tour Packages API] 部分排序更新失敗:', failed.map(r => r.error));
+      return res.status(500).json({
+        success: false,
+        error: `${failed.length} 筆排序更新失敗`
+      });
+    }
+
+    console.log(`[Tour Packages API] ✅ 成功更新 ${orders.length} 筆排序`);
+
+    return res.json({
+      success: true,
+      message: `已更新 ${orders.length} 筆排序`
+    });
+
+  } catch (error) {
+    console.error('[Tour Packages API] 錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
+
+/**
  * @route PUT /api/tour-packages/:id
  * @desc 更新旅遊方案
  * @access Admin
