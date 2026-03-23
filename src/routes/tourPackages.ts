@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
+import { CITY_TO_REGION } from '../constants/city_centers';
 
 const router = Router();
 
@@ -192,7 +193,7 @@ router.post('/', async (req: Request, res: Response) => {
         is_active: is_active !== undefined ? is_active : true,
         display_order: display_order || 0,
         country: country || 'TW',
-        region: region || 'taipei',
+        region: city ? (CITY_TO_REGION[city] || 'default') : 'default',
         city: city || null,
         country_i18n: country_i18n || {},
         region_i18n: region_i18n || {}
@@ -323,12 +324,11 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (country !== undefined) {
       updateData.country = country;
     }
-    if (region !== undefined) {
-      updateData.region = region;
-    }
     // city 允許設為 null（清除）；只要前端有傳就更新
+    // region 自動從 city 推導，不接受手動傳入
     if ('city' in req.body) {
       updateData.city = city || null;
+      updateData.region = city ? (CITY_TO_REGION[city] || 'default') : 'default';
     }
     if (country_i18n !== undefined) {
       updateData.country_i18n = country_i18n;
