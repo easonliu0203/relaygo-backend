@@ -33,11 +33,18 @@ router.post('/extract-address', async (req: Request, res: Response) => {
 4. 最低：只有城市或區域名（如「東京」「曼谷」）
 5. 如果完全無法判斷地點，全部回 null
 
+多地點規則（重要）：
+- 如果貼文介紹了 2 個以上的地點（例如「東京三間必吃拉麵」介紹了涉谷、新宿、赤坂各一間）
+- address 設為 null（因為無法代表所有地點）
+- country 和 city 填共同的（如都在日本東京 → country=日本, city=東京）
+- district 設為 null（因為分布在不同區）
+- 如果多個地點在不同城市（如東京+大阪），city 也設為 null，只填 country
+
 address 欄位請盡可能給出最完整、可用於 Google Maps 搜尋的地址。
 country 請用中文國家名（台灣、日本、韓國、泰國等）。
 
 回傳嚴格 JSON，不要 markdown 包裹：
-{"address":"最完整的地址","country":"國家","city":"城市","district":"區域"}
+{"address":"最完整的地址或null","country":"國家","city":"城市或null","district":"區域或null"}
 
 貼文內容：
 ${text.slice(0, 2000)}`;
