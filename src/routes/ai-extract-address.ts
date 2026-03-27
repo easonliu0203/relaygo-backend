@@ -63,18 +63,25 @@ ${text.slice(0, 2000)}`;
     }
 
     const data = await apiRes.json() as Record<string, any>;
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-    // 從回傳中提取 JSON
+    // Gemini 2.5 thinking model 可能有 thoughtsText，實際回答在 text
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    let raw = '';
+    for (const part of parts) {
+      if (part.text) raw += part.text;
+    }
+    console.log('[AI Extract] Raw response:', raw.slice(0, 300));
+
+    // 從回傳中提取 JSON（可能被 markdown ```json ``` 包裹）
     const jsonMatch = raw.match(/\{[\s\S]*?\}/);
     if (!jsonMatch) {
-      console.log('[AI Extract] No JSON in response:', raw.slice(0, 200));
+      console.log('[AI Extract] No JSON found in:', raw.slice(0, 200));
       res.json({ address: null, country: null, city: null, district: null });
       return;
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    console.log('[AI Extract] Result:', JSON.stringify(parsed));
+    console.log('[AI Extract] Parsed:', JSON.stringify(parsed));
     res.json({
       address: parsed.address || null,
       country: parsed.country || null,
