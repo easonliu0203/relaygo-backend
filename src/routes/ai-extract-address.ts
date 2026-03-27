@@ -24,29 +24,33 @@ router.post('/extract-address', async (req: Request, res: Response) => {
   }
 
   try {
-    const prompt = `你是地址擷取助手。從以下社群媒體貼文中提取地點資訊。
+    // 地址擷取 prompt：從社群貼文提取地點，回傳 JSON（address/country/city/district）
+    // country 用中文國家名（台灣、日本、韓國…），address 盡量完整可 Google Maps 搜尋
+    const prompt = `You are an address extraction assistant. Extract location info from the following social media post.
 
-規則（按優先順序，越前面越好）：
-1. 最優先：完整街道地址（含門牌號碼、路名、區域，如「東京都中央区銀座7丁目6-4」「台北市中山區民生東路一段41號」）
-2. 次優先：郵遞區號 + 地址（如「〒104-0061 東京都中央区銀座7丁目」）
-3. 再次：地標名稱 + 所在區域（如「Siam Paragon 4樓」「강남역 근처 역삼동」）
-4. 最低：只有城市或區域名（如「東京」「曼谷」）
-5. 如果完全無法判斷地點，全部回 null
+Rules (by priority, higher = better):
+1. Best: Full street address with house number, road, district (e.g. "東京都中央区銀座7丁目6-4", "台北市中山區民生東路一段41號")
+2. Good: Postal code + address (e.g. "〒104-0061 東京都中央区銀座7丁目")
+3. OK: Landmark + area (e.g. "Siam Paragon 4F", "강남역 근처 역삼동")
+4. Minimal: City or district only (e.g. "東京", "Bangkok")
+5. If no location can be determined, return all fields as null
 
-多地點規則（重要）：
-- 如果貼文介紹了 2 個以上的地點（例如「東京三間必吃拉麵」介紹了涉谷、新宿、赤坂各一間）
-- address 設為 null（因為無法代表所有地點）
-- country 和 city 填共同的（如都在日本東京 → country=日本, city=東京）
-- district 設為 null（因為分布在不同區）
-- 如果多個地點在不同城市（如東京+大阪），city 也設為 null，只填 country
+Multi-location rules (important):
+- If the post covers 2+ locations (e.g. "3 must-eat ramen in Tokyo" featuring Shibuya, Shinjuku, Akasaka):
+  - address = null (cannot represent all locations)
+  - country and city = the common one (e.g. all in Tokyo, Japan → country=日本, city=東京)
+  - district = null (spread across different districts)
+- If locations span different cities (e.g. Tokyo + Osaka), city = null, only fill country
 
-address 欄位請盡可能給出最完整、可用於 Google Maps 搜尋的地址。
-country 請用中文國家名（台灣、日本、韓國、泰國等）。
+Output requirements:
+- address: the most complete, Google Maps searchable address, or null
+- country: Chinese country name (台灣, 日本, 韓國, 泰國, 越南, 馬來西亞, etc.)
+- city/district: keep in the original language of the address
 
-回傳嚴格 JSON，不要 markdown 包裹：
-{"address":"最完整的地址或null","country":"國家","city":"城市或null","district":"區域或null"}
+Return strict JSON only, no markdown wrapping:
+{"address":"full address or null","country":"country in Chinese","city":"city or null","district":"district or null"}
 
-貼文內容：
+Post content:
 ${text.slice(0, 2000)}`;
 
     const apiRes = await fetch(
