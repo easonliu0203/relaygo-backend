@@ -43,7 +43,7 @@ country 請用中文國家名（台灣、日本、韓國、泰國等）。
 ${text.slice(0, 2000)}`;
 
     const apiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -56,8 +56,9 @@ ${text.slice(0, 2000)}`;
     );
 
     if (!apiRes.ok) {
-      console.error('[AI Extract] Gemini HTTP error:', apiRes.status);
-      res.status(502).json({ error: 'Gemini API error' });
+      const errBody = await apiRes.text();
+      console.error('[AI Extract] Gemini HTTP error:', apiRes.status, errBody);
+      res.status(502).json({ error: 'Gemini API error', status: apiRes.status, detail: errBody.slice(0, 200) });
       return;
     }
 
