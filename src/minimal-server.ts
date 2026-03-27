@@ -21,6 +21,7 @@ import driverAffiliatesRoutes from './routes/driver-affiliates'; // ✅ 新增�
 import placesRoutes from './routes/places'; // ✅ 新增：添加 Places API 代理路由（2026-01-31）
 import googleRoutesRoutes from './routes/google-routes'; // ✅ 新增：添加 Routes API 代理路由（2026-01-31）
 import googleGeocodingRoutes from './routes/google-geocoding'; // ✅ 新增：添加 Geocoding API 代理路由（2026-01-31）
+import googleDistanceMatrixRoutes from './routes/google-distance-matrix';
 import aiTravelPlannerRoutes from './routes/ai-travel-planner'; // ✅ 新增：AI 旅遊行程規劃師（2026-02-28）
 import legalRoutes from './routes/legal'; // ✅ 新增：法律文件 API（2026-03-01）
 import flightsRoutes from './routes/flights'; // ✅ 新增：航班搜尋代理（2026-03-19）
@@ -126,6 +127,7 @@ app.use('/api/driver-affiliates', driverAffiliatesRoutes); // ✅ 新增：註�
 app.use('/api/places', placesRoutes); // ✅ 新增：註冊 Places API 代理路由（2026-01-31）
 app.use('/api/routes', googleRoutesRoutes); // ✅ 新增：註冊 Routes API 代理路由（2026-01-31）
 app.use('/api/geocoding', googleGeocodingRoutes); // ✅ 新增：註冊 Geocoding API 代理路由（2026-01-31）
+app.use('/api/distance-matrix', googleDistanceMatrixRoutes);
 app.use('/api/ai-travel-planner', aiTravelPlannerRoutes); // ✅ 新增：AI 旅遊行程規劃師（2026-02-28）
 app.use('/api/legal', legalRoutes); // ✅ 新增：法律文件 API（2026-03-01）
 app.use('/api/flights', flightsRoutes); // ✅ 新增：航班搜尋代理（2026-03-19）
