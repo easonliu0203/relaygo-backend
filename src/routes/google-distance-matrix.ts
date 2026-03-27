@@ -36,7 +36,7 @@ router.get('/', async (req: Request, res: Response) => {
       + `&key=${GOOGLE_API_KEY}`;
 
     const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    const data = await response.json();
+    const data = await response.json() as Record<string, any>;
 
     res.json(data);
   } catch (e) {
@@ -77,15 +77,15 @@ router.get('/directions', async (req: Request, res: Response) => {
       + `&key=${GOOGLE_API_KEY}`;
 
     const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    const data = await response.json();
+    const data = await response.json() as Record<string, any>;
 
     // 簡化回傳：只回傳 duration + distance
     if (data.status === 'OK' && data.routes?.[0]?.legs?.[0]) {
       const leg = data.routes[0].legs[0];
       res.json({
         status: 'OK',
-        duration: leg.duration,   // { text: "2 小時 48 分", value: 10080 }
-        distance: leg.distance,   // { text: "95.2 公里", value: 95200 }
+        duration: leg.duration,
+        distance: leg.distance,
       });
     } else {
       res.json({ status: data.status || 'UNKNOWN', error_message: data.error_message });
