@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { createChatRoomInFirestore, chatRoomExists, sendSystemMessage, saveDriverLocationHistory } from '../config/firebase';
+import { notifyBookingEvent } from '../services/notification/BookingNotifier';
 
 dotenv.config();
 
@@ -12,6 +13,18 @@ const supabase = createClient(
   process.env.SUPABASE_URL || '',
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
+
+/** 從 user_profiles 解析司機顯示姓名（zh-TW 慣例：姓 + 名）；缺資料時 fallback 「司機」 */
+async function resolveDriverName(driverUserId: string): Promise<string> {
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('first_name, last_name')
+    .eq('user_id', driverUserId)
+    .single();
+  const last = profile?.last_name?.trim() || '';
+  const first = profile?.first_name?.trim() || '';
+  return (last + first).trim() || '司機';
+}
 
 /**
  * @route POST /api/booking-flow/bookings/:bookingId/accept
@@ -241,6 +254,14 @@ router.post('/bookings/:bookingId/accept', async (req: Request, res: Response): 
       console.error('[API] ⚠️  創建聊天室失敗（不影響接單）:', firebaseError);
     }
 
+    // 9. 推播通知客戶「司機已接單」
+    notifyBookingEvent({
+      bookingId,
+      recipientUserId: booking.customer_id,
+      eventType: 'driver_confirmed',
+      vars: { driverName, shortId: booking.booking_number || bookingId.slice(0, 8) },
+    });
+
     // 8. 返回成功響應（包含聊天室資訊）
     res.json({
       success: true,
@@ -375,6 +396,17 @@ router.post('/bookings/:bookingId/depart', async (req: Request, res: Response): 
       console.log('[API] ✅ 系統訊息已發送（含位置資訊）');
     } catch (messageError) {
       console.error('[API] ⚠️  發送系統訊息失敗（不影響主流程）:', messageError);
+    }
+
+    // 7.5. 推播通知客戶「司機已出發」
+    {
+      const driverName = await resolveDriverName(driver.id);
+      notifyBookingEvent({
+        bookingId,
+        recipientUserId: booking.customer_id,
+        eventType: 'driver_departed',
+        vars: { driverName, shortId: booking.booking_number || bookingId.slice(0, 8) },
+      });
     }
 
     // 7. 返回成功響應
@@ -512,6 +544,17 @@ router.post('/bookings/:bookingId/arrive', async (req: Request, res: Response): 
       console.log('[API] ✅ 系統訊息已發送（含位置資訊）');
     } catch (messageError) {
       console.error('[API] ⚠️  發送系統訊息失敗（不影響主流程）:', messageError);
+    }
+
+    // 7.5. 推播通知客戶「司機已到達」
+    {
+      const driverName = await resolveDriverName(driver.id);
+      notifyBookingEvent({
+        bookingId,
+        recipientUserId: booking.customer_id,
+        eventType: 'driver_arrived',
+        vars: { driverName, shortId: booking.booking_number || bookingId.slice(0, 8) },
+      });
     }
 
     // 7. 返回成功響應
