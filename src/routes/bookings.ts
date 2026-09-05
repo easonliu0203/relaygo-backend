@@ -1,4 +1,12 @@
 import { Router, Request, Response } from 'express';
+import {
+  PROMO_SELECT_FIELDS,
+  PromoRecord,
+  checkPromoConstraints,
+  checkPerUserLimit,
+  computeDiscount,
+  resolveDriverPayout,
+} from '../services/promo/promoRules';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
@@ -504,19 +512,90 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let actualFinalPrice = totalAmount; // 折扣後最終價格
     let snapshotDiscountPercentage = 0; // ✅ 快照：實際套用的折扣百分比
 
-    if (finalPrice && finalPrice > 0) {
-      // 客戶使用了優惠碼
-      actualOriginalPrice = originalPrice || totalAmount;
-      actualFinalPrice = finalPrice;
-      // ✅ 自動計算折扣金額（支援固定金額和百分比折扣）
-      actualDiscountAmount = actualOriginalPrice - actualFinalPrice;
-      totalAmount = finalPrice; // ✅ 使用折扣後的價格作為訂單總金額
-      console.log('[API] ✅ 使用優惠碼折扣後價格:', {
-        originalPrice: actualOriginalPrice,
-        discountAmount: actualDiscountAmount,
-        finalPrice: actualFinalPrice,
-        discountPercentage: ((actualDiscountAmount / actualOriginalPrice) * 100).toFixed(2) + '%'
-      });
+    // ✅ 建單時實際使用的車型（與下方 insert 的 vehicle_type 保持一致）
+    const effectiveVehicleType = vehicleType
+      || (isAirportTransfer ? (pickupTransferVehicleType || dropoffTransferVehicleType) : null)
+      || vehicleCategory;
+
+    // ✅ 優惠碼／活動碼：一律由後端重新驗證與計算，不信任前端傳來的 finalPrice。
+    //    前端只負責顯示，實際成交金額以此處為準。
+    let promoRecord: PromoRecord | null = null;
+    let driverPayoutMode: 'percent' | 'fixed' = 'percent';
+    let driverFixedAmount = 0;
+
+    if (promoCode && influencerId) {
+      const { data: promoData } = await supabase
+        .from('influencers')
+        .select(PROMO_SELECT_FIELDS)
+        .eq('id', influencerId)
+        .single<PromoRecord>();
+
+      if (!promoData) {
+        console.warn('[API] ⚠️ 找不到優惠碼設定，訂單不套用折扣:', promoCode);
+      } else {
+        promoRecord = promoData;
+
+        // 適用限制：啟用狀態、活動期間、服務類型、車型
+        const constraint = checkPromoConstraints(promoRecord, {
+          serviceType: effectiveServiceType,
+          vehicleType: effectiveVehicleType,
+        });
+        if (!constraint.valid) {
+          console.warn(`[API] ❌ 優惠碼不符使用條件 (${constraint.reason}):`, promoCode);
+          res.status(400).json({
+            success: false,
+            error: constraint.error,
+          });
+          return;
+        }
+
+        // 每個帳號使用次數上限
+        const perUser = await checkPerUserLimit(supabase, promoRecord, customer.id);
+        if (!perUser.valid) {
+          console.warn(`[API] ❌ 優惠碼超過使用次數 (${perUser.reason}):`, promoCode);
+          res.status(400).json({
+            success: false,
+            error: perUser.error,
+          });
+          return;
+        }
+
+        // 後端重算折扣（活動碼可設定只折基本車資，跨區費／接送機等附加費照原價）
+        const discount = computeDiscount(promoRecord, {
+          originalTotal: totalAmount,
+          basePrice,
+          serviceType: effectiveServiceType,
+        });
+
+        actualOriginalPrice = totalAmount;
+        actualFinalPrice = discount.finalPrice;
+        actualDiscountAmount = discount.discountAmount;
+        snapshotDiscountPercentage = discount.discountPercentage;
+        totalAmount = discount.finalPrice;
+
+        const payout = resolveDriverPayout(promoRecord);
+        driverPayoutMode = payout.driver_payout_mode;
+        driverFixedAmount = payout.driver_fixed_amount;
+
+        if (finalPrice && Math.abs(Number(finalPrice) - actualFinalPrice) > 1) {
+          console.warn('[API] ⚠️ 前端金額與後端驗算不符，以後端為準:', {
+            前端: Number(finalPrice),
+            後端: actualFinalPrice,
+            折扣基準: discount.discountBase,
+          });
+        }
+
+        console.log('[API] ✅ 優惠碼折扣（後端驗算）:', {
+          promoCode,
+          折扣基準: discount.discountBase,
+          原價: actualOriginalPrice,
+          折扣: actualDiscountAmount,
+          折後: actualFinalPrice,
+          司機給付模式: driverPayoutMode,
+          司機固定額: driverFixedAmount,
+          計算步驟: discount.calculationSteps,
+        });
+      }
     }
 
     if (verifiedPickupPrice > 0 || verifiedDropoffPrice > 0) {
@@ -543,31 +622,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let percentAmount = 0;
 
     if (promoCode && influencerId) {
-      // 查詢推廣者的佣金與折扣設定（含服務類型維度欄位）
-      const { data: influencerData } = await supabase
-        .from('influencers')
-        .select('commission_fixed, commission_percent, is_commission_fixed_active, is_commission_percent_active, commission_type, commission_percent_charter, commission_percent_instant_ride, commission_percent_airport_transfer, discount_type, discount_percentage, discount_percent_charter, discount_percent_instant_ride, discount_percent_airport_transfer, discount_percentage_enabled')
-        .eq('id', influencerId)
-        .single();
+      // ✅ 沿用上方折扣計算時已查到的設定，避免重複查詢造成兩處資料不一致
+      const influencerData: any = promoRecord;
 
       if (influencerData) {
         const isFixedActive = influencerData.is_commission_fixed_active === true;
         const isPercentActive = influencerData.is_commission_percent_active === true;
-
-        // ✅ 快照：查詢實際套用的折扣百分比（用於 bookings 和 promo_code_usage 快照）
-        if (influencerData.discount_percentage_enabled) {
-          if (influencerData.discount_type === 'by_service_type' && effectiveServiceType) {
-            if (effectiveServiceType === 'charter') {
-              snapshotDiscountPercentage = influencerData.discount_percent_charter || 0;
-            } else if (effectiveServiceType === 'instant_ride') {
-              snapshotDiscountPercentage = influencerData.discount_percent_instant_ride || 0;
-            } else if (effectiveServiceType === 'airport_transfer') {
-              snapshotDiscountPercentage = influencerData.discount_percent_airport_transfer || 0;
-            }
-          } else {
-            snapshotDiscountPercentage = influencerData.discount_percentage || 0;
-          }
-        }
 
         // 計算固定金額佣金（如果啟用）
         if (isFixedActive) {
@@ -658,9 +718,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         start_date: startDate,
         start_time: startTime,
         duration_hours: 8, // 預設 8 小時，可以從套餐資訊中獲取
-        vehicle_type: vehicleType  // Mobile 傳入的標準車型代碼 (XS/S/M/L/XL)
-          || (isAirportTransfer ? (pickupTransferVehicleType || dropoffTransferVehicleType) : null)  // 機場接送 fallback
-          || vehicleCategory,  // 舊版 Mobile 相容 fallback
+        vehicle_type: effectiveVehicleType,  // 與優惠碼車型驗證使用同一個判斷結果
         // ✅ 修正：機場模式下使用航班資訊作為地點描述
         pickup_location: addAirportPickup
           ? `機場接機 ${pickupAirportCode || ''}${pickupTerminal ? ' ' + pickupTerminal : ''} ${pickupFlightNumber || ''}`
@@ -691,6 +749,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         influencer_commission_rate: commissionRate,
         influencer_commission_fixed: commissionFixed,
         // ✅ 推廣折扣快照欄位
+        // ✅ 司機給付模式快照（活動單為固定給付，之後改活動設定不影響本單）
+        driver_payout_mode: driverPayoutMode,
+        driver_fixed_amount: driverFixedAmount,
         promo_discount_percentage: snapshotDiscountPercentage,
         promo_discount_amount: actualDiscountAmount,
         original_price: actualOriginalPrice,

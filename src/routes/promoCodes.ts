@@ -1,5 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
+import {
+  PROMO_SELECT_FIELDS,
+  PromoRecord,
+  checkPromoConstraints,
+  checkPerUserLimit,
+  computeDiscount,
+  resolveDriverPayout,
+} from '../services/promo/promoRules';
 
 const router = Router();
 
@@ -13,14 +21,31 @@ const supabase = createClient(
  * @route POST /api/promo-codes/validate
  * @desc 驗證優惠碼並計算折扣
  * @access Public
+ *
+ * 支援兩種碼（皆存於 influencers 表，以 affiliate_type 區隔）：
+ *   - 推廣人碼：有佣金，折扣套在總額
+ *   - 活動碼(campaign)：無佣金，可限車型／服務類型／期間／每人次數，
+ *                       折扣可只套在基本車資，司機可改為固定給付
+ *
+ * 有適用限制的碼需要呼叫端提供 service_type / vehicle_type，
+ * 否則無法判斷是否適用，會直接回報無效而不是給出可能錯誤的金額。
  */
 router.post('/validate', async (req: Request, res: Response) => {
   try {
-    const { promo_code, original_price, user_id, service_type } = req.body;
+    const {
+      promo_code,
+      original_price,
+      user_id,
+      service_type,
+      vehicle_type,
+      base_price,
+    } = req.body;
 
-    console.log(`[Promo Code API] 驗證優惠碼: ${promo_code}, 原價: ${original_price}, 用戶: ${user_id || '未提供'}, 服務類型: ${service_type || '未提供'}`);
+    console.log(
+      `[Promo Code API] 驗證優惠碼: ${promo_code}, 原價: ${original_price}, 基本車資: ${base_price ?? '未提供'}, ` +
+      `用戶: ${user_id || '未提供'}, 服務類型: ${service_type || '未提供'}, 車型: ${vehicle_type || '未提供'}`
+    );
 
-    // 驗證必填欄位
     if (!promo_code || !original_price) {
       return res.status(400).json({
         success: false,
@@ -29,7 +54,6 @@ router.post('/validate', async (req: Request, res: Response) => {
       });
     }
 
-    // 驗證價格格式
     const price = parseFloat(original_price);
     if (isNaN(price) || price <= 0) {
       return res.status(400).json({
@@ -42,10 +66,10 @@ router.post('/validate', async (req: Request, res: Response) => {
     // 查詢優惠碼（不分大小寫）
     const { data: influencer, error } = await supabase
       .from('influencers')
-      .select('*')
-      .ilike('promo_code', promo_code) // ✅ 使用 ilike 進行不分大小寫比對
+      .select(PROMO_SELECT_FIELDS)
+      .ilike('promo_code', promo_code)
       .eq('is_active', true)
-      .single();
+      .single<PromoRecord>();
 
     if (error || !influencer) {
       console.log(`[Promo Code API] ❌ 優惠碼無效: ${promo_code}`);
@@ -57,67 +81,60 @@ router.post('/validate', async (req: Request, res: Response) => {
       });
     }
 
-    // 計算折扣
-    let currentPrice = price;
-    const calculationSteps: string[] = [];
-    let discountAmountApplied = 0;
-    let discountPercentageApplied = 0;
-
-    calculationSteps.push(`原價：NT$ ${price.toLocaleString()}`);
-
-    // 1. 先扣除固定金額折扣
-    if (influencer.discount_amount_enabled && influencer.discount_amount > 0) {
-      discountAmountApplied = influencer.discount_amount;
-      currentPrice -= discountAmountApplied;
-      calculationSteps.push(
-        `固定折扣：-NT$ ${discountAmountApplied.toLocaleString()} = NT$ ${currentPrice.toLocaleString()}`
-      );
+    // ✅ 適用限制：期間、服務類型、車型
+    const constraint = checkPromoConstraints(influencer, {
+      serviceType: service_type,
+      vehicleType: vehicle_type,
+    });
+    if (!constraint.valid) {
+      console.log(`[Promo Code API] ❌ 不符使用條件 (${constraint.reason}): ${promo_code}`);
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        error: constraint.error,
+      });
     }
 
-    // 2. 再計算百分比折扣
-    if (influencer.discount_percentage_enabled) {
-      // ✅ 根據 discount_type 和 service_type 決定使用哪個折扣百分比
-      if (influencer.discount_type === 'by_service_type' && service_type) {
-        // 依服務類型模式：根據 service_type 選擇對應的折扣百分比
-        if (service_type === 'charter' && influencer.discount_percent_charter > 0) {
-          discountPercentageApplied = influencer.discount_percent_charter;
-        } else if (service_type === 'instant_ride' && influencer.discount_percent_instant_ride > 0) {
-          discountPercentageApplied = influencer.discount_percent_instant_ride;
-        } else if (service_type === 'airport_transfer' && influencer.discount_percent_airport_transfer > 0) {
-          discountPercentageApplied = influencer.discount_percent_airport_transfer;
-        }
-      } else {
-        // 統一模式：使用 discount_percentage
-        discountPercentageApplied = influencer.discount_percentage || 0;
-      }
-
-      // 如果有折扣百分比，則計算折扣
-      if (discountPercentageApplied > 0) {
-        const discountMultiplier = 1 - (discountPercentageApplied / 100);
-        currentPrice = currentPrice * discountMultiplier;
-        const serviceTypeLabel = service_type === 'charter' ? '（包車旅遊）' :
-                                 service_type === 'instant_ride' ? '（即時派車）' :
-                                 service_type === 'airport_transfer' ? '（機場接送）' : '';
-        calculationSteps.push(
-          `百分比折扣${serviceTypeLabel}：${(100 - discountPercentageApplied).toFixed(0)} 折 = NT$ ${Math.round(currentPrice).toLocaleString()}`
-        );
-      }
+    // ✅ 每個帳號使用次數上限（user_id 可能是 firebase_uid，需轉成 users.id）
+    let internalUserId: string | null = null;
+    if (user_id) {
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('id')
+        .or(`id.eq.${user_id},firebase_uid.eq.${user_id}`)
+        .maybeSingle();
+      internalUserId = userRow?.id || null;
     }
 
-    // 四捨五入到整數
-    const finalPrice = Math.round(currentPrice);
+    const perUser = await checkPerUserLimit(supabase, influencer, internalUserId);
+    if (!perUser.valid) {
+      console.log(`[Promo Code API] ❌ 超過使用次數 (${perUser.reason}): ${promo_code}`);
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        error: perUser.error,
+      });
+    }
+
+    // ✅ 計算折扣（活動碼可設定只折基本車資，附加費照原價）
+    const discount = computeDiscount(influencer, {
+      originalTotal: price,
+      basePrice: base_price != null ? parseFloat(base_price) : price,
+      serviceType: service_type,
+    });
+    const payout = resolveDriverPayout(influencer);
 
     console.log(`[Promo Code API] ✅ 優惠碼有效: ${promo_code}`);
-    console.log(`[Promo Code API] 原價: ${price}, 最終價格: ${finalPrice}`);
+    console.log(`[Promo Code API] 原價: ${price}, 最終價格: ${discount.finalPrice}, 折扣基準: ${discount.discountBase}`);
 
-    // ✅ 新增：檢查推薦關係（如果提供了 user_id）
+    // 檢查推薦關係（如果提供了 user_id）
     let referral_info = null;
-    if (user_id) {
+    if (internalUserId) {
       const { data: existingReferral } = await supabase
         .from('referrals')
         .select('id, referrer_id, created_at')
-        .eq('referee_id', user_id)
-        .single();
+        .eq('referee_id', internalUserId)
+        .maybeSingle();
 
       if (existingReferral) {
         referral_info = {
@@ -141,15 +158,24 @@ router.post('/validate', async (req: Request, res: Response) => {
       influencer_name: influencer.name,
       promo_code: influencer.promo_code,
       discount_amount_enabled: influencer.discount_amount_enabled || false,
-      discount_amount: discountAmountApplied,
+      discount_amount: discount.fixedDiscountApplied,
       discount_percentage_enabled: influencer.discount_percentage_enabled || false,
-      discount_percentage: discountPercentageApplied,
+      discount_percentage: discount.discountPercentage,
       commission_amount: influencer.commission_per_order || 0,
       original_price: price,
-      final_price: finalPrice,
-      total_discount: price - finalPrice,
-      calculation_steps: calculationSteps,
-      referral_info: referral_info // ✅ 新增：推薦關係資訊
+      final_price: discount.finalPrice,
+      total_discount: discount.discountAmount,
+      calculation_steps: discount.calculationSteps,
+      referral_info,
+      // ✅ 活動碼相關資訊（供前端顯示，實際金額仍以建單時後端驗算為準）
+      is_campaign: influencer.affiliate_type === 'campaign',
+      discount_base: discount.discountBase,
+      limit_vehicle_types: influencer.limit_vehicle_types || null,
+      limit_service_types: influencer.limit_service_types || null,
+      driver_payout_mode: payout.driver_payout_mode,
+      driver_fixed_amount: payout.driver_fixed_amount,
+      valid_from: influencer.valid_from || null,
+      valid_until: influencer.valid_until || null,
     });
 
   } catch (error) {
