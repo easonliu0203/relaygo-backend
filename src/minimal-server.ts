@@ -14,6 +14,7 @@ import tourPackagesRoutes from './routes/tourPackages'; // ✅ 新增：添加 t
 import driversRoutes from './routes/drivers'; // ✅ 新增：添加 drivers 路由（2025-12-02）
 import influencersRoutes from './routes/influencers'; // ✅ 新增：添加 influencers 路由（2025-12-05）
 import promoCodesRoutes from './routes/promoCodes'; // ✅ 新增：添加 promo codes 路由（2025-12-05）
+import campaignsRoutes from './routes/campaigns'; // ✅ 新增：活動優惠碼路由（2026-09-05）
 import signaturesRoutes from './routes/signatures'; // ✅ 新增：添加 signatures 路由（2026-01-17）
 import affiliatesRoutes from './routes/affiliates'; // ✅ 新增：添加客戶推廣人路由（2026-01-18）
 import adminRoutes from './routes/admin'; // ✅ 新增：添加 admin 路由（2026-01-24）
@@ -120,6 +121,7 @@ app.use('/api/drivers', driversRoutes); // ✅ 新增：註冊 drivers 路由（
 app.use('/api/reviews', reviewRoutes); // ✅ 修復：註冊 reviews 路由（2025-11-30）
 app.use('/api/tour-packages', tourPackagesRoutes); // ✅ 新增：註冊 tour packages 路由（2025-11-30）
 app.use('/api/admin/influencers', influencersRoutes); // ✅ 新增：註冊 influencers 路由（2025-12-05）
+app.use('/api/admin/campaigns', campaignsRoutes); // ✅ 新增：註冊活動優惠碼路由（2026-09-05）
 app.use('/api/promo-codes', promoCodesRoutes); // ✅ 新增：註冊 promo codes 路由（2025-12-05）
 app.use('/api/signatures', signaturesRoutes); // ✅ 新增：註冊 signatures 路由（2026-01-17）
 app.use('/api/affiliates', affiliatesRoutes); // ✅ 新增：註冊客戶推廣人路由（2026-01-18）

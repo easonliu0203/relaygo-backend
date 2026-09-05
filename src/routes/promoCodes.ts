@@ -95,15 +95,20 @@ router.post('/validate', async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ 每個帳號使用次數上限（user_id 可能是 firebase_uid，需轉成 users.id）
+    // ✅ 每個帳號使用次數上限（App 傳的是 firebase_uid，需轉成 users.id）
+    //    非 UUID 的字串不能拿去比對 uuid 型別的 id 欄位，否則整個查詢會報型別錯誤
     let internalUserId: string | null = null;
     if (user_id) {
-      const { data: userRow } = await supabase
-        .from('users')
-        .select('id')
-        .or(`id.eq.${user_id},firebase_uid.eq.${user_id}`)
-        .maybeSingle();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(user_id));
+      const query = supabase.from('users').select('id');
+      const { data: userRow } = isUuid
+        ? await query.or(`id.eq.${user_id},firebase_uid.eq.${user_id}`).maybeSingle()
+        : await query.eq('firebase_uid', user_id).maybeSingle();
       internalUserId = userRow?.id || null;
+
+      if (!internalUserId) {
+        console.warn('[Promo Code API] ⚠️ 找不到對應的使用者:', user_id);
+      }
     }
 
     const perUser = await checkPerUserLimit(supabase, influencer, internalUserId);
