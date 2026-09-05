@@ -832,12 +832,22 @@ router.post('/bookings/:bookingId/end-trip', async (req: Request, res: Response)
       overtimeFee = 0;
     }
 
-    // 6. 計算更新後的尾款金額（包含超時費）
-    const originalBalance = booking.total_amount - booking.deposit_amount;
+    // 6. 計算更新後的總金額與尾款金額（包含超時費）
+    // ✅ 超時費必須併入 total_amount：分潤 trigger 以 total_amount 為基數計算
+    //    司機收入，過去只寫入 overtime_fee / balance_amount 而未動 total_amount，
+    //    導致客人付了超時費、司機卻一毛都拿不到，全數進平台。
+    //    併入後超時費會依訂單快照比例（一般單 25/75、推廣單 30/70）正常分潤。
+    //    重複呼叫風險：本端點開頭已擋 status !== 'trip_started'，更新後狀態即為
+    //    trip_ended，第二次呼叫會被擋下，不會重複累加。
+    const originalTotal = Number(booking.total_amount) || 0;
+    const originalBalance = originalTotal - (Number(booking.deposit_amount) || 0);
+    const newTotalAmount = originalTotal + overtimeFee;
     const newBalanceAmount = originalBalance + overtimeFee;
 
+    console.log('[API] 原始總金額:', originalTotal);
     console.log('[API] 原始尾款:', originalBalance);
     console.log('[API] 超時費用:', overtimeFee);
+    console.log('[API] 更新後的總金額:', newTotalAmount);
     console.log('[API] 更新後的尾款:', newBalanceAmount);
 
     // 7. 更新訂單狀態為 trip_ended，並儲存超時費用和更新尾款
@@ -848,6 +858,7 @@ router.post('/bookings/:bookingId/end-trip', async (req: Request, res: Response)
         status: 'trip_ended',
         actual_end_time: now,  // 記錄實際結束時間
         overtime_fee: overtimeFee,  // 儲存超時費用
+        total_amount: newTotalAmount,  // ✅ 併入超時費，使其進入司機分潤基數
         balance_amount: newBalanceAmount,  // 更新尾款金額（包含超時費）
         updated_at: now
       })
@@ -864,6 +875,7 @@ router.post('/bookings/:bookingId/end-trip', async (req: Request, res: Response)
 
     console.log('[API] ✅ 訂單狀態已更新為 trip_ended');
     console.log('[API] ✅ 超時費用已儲存:', overtimeFee);
+    console.log('[API] ✅ 總金額已更新（含超時費，供分潤計算）:', newTotalAmount);
     console.log('[API] ✅ 尾款金額已更新:', newBalanceAmount);
 
     // 8. 發送系統訊息到聊天室
