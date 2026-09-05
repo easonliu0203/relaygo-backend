@@ -176,6 +176,88 @@ router.put('/revenue-share-settings', async (req: Request, res: Response): Promi
 });
 
 /**
+ * @route GET /api/admin/tip-payment-fee
+ * @desc 取得小費金流手續費率
+ * @access Admin
+ *
+ * 平台不從小費抽成，此比例是金流商手續費，司機拿扣除後的淨額。
+ * 現金小費不經公司金流，建單流程會寫入費率 0，不受此設定影響。
+ */
+router.get('/tip-payment-fee', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('value, updated_at')
+      .eq('key', 'tip_payment_fee')
+      .maybeSingle();
+
+    if (error) {
+      console.error('[Admin API] 取得小費手續費率失敗:', error);
+      res.status(500).json({ success: false, error: '取得小費手續費率失敗', details: error.message });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        percent: Number(data?.value?.percent ?? 3),
+        description: data?.value?.description ?? null,
+        updated_at: data?.updated_at ?? null,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Admin API] 取得小費手續費率錯誤:', error);
+    res.status(500).json({ success: false, error: '取得小費手續費率失敗', details: error.message });
+  }
+});
+
+/**
+ * @route PUT /api/admin/tip-payment-fee
+ * @desc 更新小費金流手續費率
+ * @access Admin
+ *
+ * 只影響之後才記錄的小費：費率會在記錄小費當下鎖進訂單快照，
+ * 已成立的訂單維持原費率，不會被回頭改動。
+ */
+router.put('/tip-payment-fee', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const percent = Number(req.body?.percent);
+
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      res.status(400).json({ success: false, error: '手續費率必須在 0-100 之間' });
+      return;
+    }
+
+    const value = {
+      percent,
+      description: '小費金流手續費率％。平台不從小費抽成，此比例是金流商手續費。現金小費不經金流，費率為 0。',
+      updated_at: new Date().toISOString(),
+      updated_by: req.body?.user_id || 'admin',
+    };
+
+    const { error } = await supabase
+      .from('system_settings')
+      .upsert({ key: 'tip_payment_fee', value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+
+    if (error) {
+      console.error('[Admin API] 更新小費手續費率失敗:', error);
+      res.status(500).json({ success: false, error: '更新小費手續費率失敗', details: error.message });
+      return;
+    }
+
+    console.log('[Admin API] ✅ 小費手續費率已更新:', percent);
+    res.json({
+      success: true,
+      data: { percent },
+      message: '小費手續費率已更新，僅影響之後才記錄的小費，已成立的訂單維持原費率',
+    });
+  } catch (error: any) {
+    console.error('[Admin API] 更新小費手續費率錯誤:', error);
+    res.status(500).json({ success: false, error: '更新小費手續費率失敗', details: error.message });
+  }
+});
+
+/**
  * @route GET /api/admin/revenue-share-configs
  * @desc 獲取所有分潤配置 (支援篩選)
  * @access Admin

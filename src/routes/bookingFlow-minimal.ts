@@ -1187,6 +1187,9 @@ router.post('/bookings/:bookingId/pay-balance', async (req: Request, res: Respon
         .update({
           status: 'completed',
           tip_amount: Number(tipAmount),  // ✅ 確保轉換為數字
+          // ✅ 現金小費不經公司金流，沒有手續費可扣，費率寫 0。
+          //    刷卡路徑不指定，由 trigger 取 system_settings.tip_payment_fee 並鎖進快照。
+          ...(isCashPayment ? { tip_fee_percentage: 0 } : {}),
           completed_at: now,  // ✅ 添加完成時間
           updated_at: now
         })
