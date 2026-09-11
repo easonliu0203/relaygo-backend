@@ -871,6 +871,24 @@ router.get('/:id/commissions', async (req: Request, res: Response) => {
       });
     }
 
+    // ✅ 分潤原因（首單／一般）取自訂單本身：由資料庫在訂單完成時判定並鎖定。
+    //    使用紀錄表沒有這個欄位，所以用 booking_id 回查訂單。
+    const bookingIds = Array.from(new Set((data || []).map((r: any) => r.booking_id).filter(Boolean)));
+    const bookingInfo = new Map<string, { reason: string | null; status: string | null }>();
+    if (bookingIds.length > 0) {
+      const { data: bookingRows, error: bookingError } = await supabase
+        .from('bookings')
+        .select('id, status, influencer_commission_reason')
+        .in('id', bookingIds);
+
+      if (bookingError) {
+        console.warn('[Influencers API] 查詢分潤原因失敗（不影響分潤紀錄）:', bookingError.message);
+      }
+      (bookingRows || []).forEach((b: any) => {
+        bookingInfo.set(b.id, { reason: b.influencer_commission_reason || null, status: b.status || null });
+      });
+    }
+
     // 格式化資料
     const commissions = data?.map((record: any) => ({
       id: record.id,
@@ -880,6 +898,8 @@ router.get('/:id/commissions', async (req: Request, res: Response) => {
       commission_type: record.commission_type || 'fixed',
       commission_rate: record.commission_rate,
       commission_status: record.commission_status || 'pending',
+      commission_reason: bookingInfo.get(record.booking_id)?.reason ?? null,
+      booking_status: bookingInfo.get(record.booking_id)?.status ?? null,
       used_at: record.used_at
     })) || [];
 
