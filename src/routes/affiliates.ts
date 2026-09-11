@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { requireAuth } from '../middleware/auth';
 import { createClient } from '@supabase/supabase-js';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
@@ -31,9 +32,10 @@ const upload = multer({
  * @desc 客戶申請成為推廣人
  * @access Customer (需要認證)
  */
-router.post('/apply', async (req: Request, res: Response) => {
+router.post('/apply', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { user_id, promo_code } = req.body;
+    const { promo_code } = req.body;
+    const user_id = req.user!.uid;  // ✅ 身分一律取自已驗證的登入憑證（requireAuth），不相信請求裡帶的 ID
 
     console.log(`[Affiliates API] 客戶申請推廣人: user_id=${user_id}, promo_code=${promo_code}`);
 
@@ -343,9 +345,9 @@ router.get('/check-promo-code/:code', async (req: Request, res: Response) => {
  * @desc 獲取當前用戶的推廣人狀態
  * @access Customer (需要認證)
  */
-router.get('/my-status', async (req: Request, res: Response) => {
+router.get('/my-status', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { user_id } = req.query;
+    const user_id = req.user!.uid;  // ✅ 身分一律取自已驗證的登入憑證（requireAuth），不相信請求裡帶的 ID
 
     if (!user_id) {
       return res.status(400).json({
@@ -431,9 +433,9 @@ router.get('/my-status', async (req: Request, res: Response) => {
  * @desc 獲取收款帳戶資訊
  * @access Customer (需要認證)
  */
-router.get('/payment-account', async (req: Request, res: Response) => {
+router.get('/payment-account', requireAuth, async (req: Request, res: Response) => {
   try {
-    const userId = req.headers['user-id'] as string;
+    const userId = req.user!.uid;  // ✅ 身分一律取自已驗證的登入憑證（requireAuth），不相信請求裡帶的 ID
 
     if (!userId) {
       return res.status(401).json({
@@ -487,14 +489,14 @@ router.get('/payment-account', async (req: Request, res: Response) => {
  * @desc 創建或更新收款帳戶
  * @access Customer (需要認證)
  */
-router.post('/payment-account', upload.fields([
+router.post('/payment-account', requireAuth, upload.fields([
   { name: 'id_card_front', maxCount: 1 },
   { name: 'id_card_back', maxCount: 1 },
   { name: 'passport', maxCount: 1 },
   { name: 'bankbook', maxCount: 1 }
 ]), async (req: Request, res: Response) => {
   try {
-    const userId = req.headers['user-id'] as string;
+    const userId = req.user!.uid;  // ✅ 身分一律取自已驗證的登入憑證（requireAuth），不相信請求裡帶的 ID
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
     const { account_type, bank_name, branch_code, account_number, account_holder_name,
             bank_name_en, swift_code, account_holder_name_en, iban } = req.body;
@@ -639,9 +641,10 @@ router.post('/payment-account', upload.fields([
  * @query page - 頁碼（從 1 開始，默認 1）
  * @query limit - 每頁數量（默認 10，最大 50）
  */
-router.get('/my-referrals', async (req: Request, res: Response) => {
+router.get('/my-referrals', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { user_id, page = '1', limit = '10' } = req.query;
+    const { page = '1', limit = '10' } = req.query;
+    const user_id = req.user!.uid;  // ✅ 身分一律取自已驗證的登入憑證（requireAuth），不相信請求裡帶的 ID
 
     console.log(`[Affiliates API] 獲取下線列表: user_id=${user_id}, page=${page}, limit=${limit}`);
 
@@ -802,9 +805,10 @@ router.get('/my-referrals', async (req: Request, res: Response) => {
  * - 未完成：顯示「待確認」的預估值。首單以「訂單完成」為準，若該客人尚未有
  *   推薦關係，預估為首單％；兩張同時進行時可能最後只有一張算首單。
  */
-router.get('/my-commissions', async (req: Request, res: Response) => {
+router.get('/my-commissions', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { user_id, page = '1', limit = '20' } = req.query;
+    const { page = '1', limit = '20' } = req.query;
+    const user_id = req.user!.uid;  // ✅ 身分一律取自已驗證的登入憑證（requireAuth），不相信請求裡帶的 ID
 
     if (!user_id) {
       return res.status(400).json({ success: false, error: '缺少必填欄位', details: '用戶 ID 為必填' });
@@ -966,10 +970,11 @@ router.get('/my-commissions', async (req: Request, res: Response) => {
  * @query page - 頁碼（從 1 開始，默認 1）
  * @query limit - 每頁數量（默認 10，最大 50）
  */
-router.get('/referral-orders/:refereeId', async (req: Request, res: Response) => {
+router.get('/referral-orders/:refereeId', requireAuth, async (req: Request, res: Response) => {
   try {
     const { refereeId } = req.params;
-    const { user_id, page = '1', limit = '10' } = req.query;
+    const { page = '1', limit = '10' } = req.query;
+    const user_id = req.user!.uid;  // ✅ 身分一律取自已驗證的登入憑證（requireAuth），不相信請求裡帶的 ID
 
     console.log(`[Affiliates API] 查詢下線消費記錄: refereeId=${refereeId}, user_id=${user_id}`);
 
