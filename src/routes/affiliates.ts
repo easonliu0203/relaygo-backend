@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireAdmin } from '../middleware/auth';
 import { createClient } from '@supabase/supabase-js';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
@@ -179,7 +179,7 @@ router.post('/apply', requireAuth, async (req: Request, res: Response) => {
  * @desc 管理員審核推廣人申請
  * @access Admin
  */
-router.post('/:id/review', async (req: Request, res: Response) => {
+router.post('/:id/review', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { status, review_notes } = req.body;

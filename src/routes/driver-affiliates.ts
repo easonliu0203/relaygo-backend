@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { requireAuth, requireAdmin } from '../middleware/auth';
 import { createClient } from '@supabase/supabase-js';
 
 const router = Router();
@@ -14,9 +15,10 @@ const supabase = createClient(
  * @desc 司機申請成為推廣人
  * @access Driver (需要認證)
  */
-router.post('/apply', async (req: Request, res: Response) => {
+router.post('/apply', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { user_id, promo_code } = req.body;
+    const { promo_code } = req.body;
+    const user_id = req.user!.uid;  // ✅ 身分一律取自已驗證的登入憑證（requireAuth），不相信請求裡帶的 ID
 
     console.log(`[Driver Affiliates API] 司機申請推廣人: user_id=${user_id}, promo_code=${promo_code}`);
 
@@ -233,9 +235,9 @@ router.get('/check-promo-code/:code', async (req: Request, res: Response) => {
  * @desc 獲取當前司機的推廣人狀態
  * @access Driver (需要認證)
  */
-router.get('/my-status', async (req: Request, res: Response) => {
+router.get('/my-status', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { user_id } = req.query;
+    const user_id = req.user!.uid;  // ✅ 身分一律取自已驗證的登入憑證（requireAuth），不相信請求裡帶的 ID
 
     if (!user_id) {
       return res.status(400).json({
@@ -312,9 +314,10 @@ router.get('/my-status', async (req: Request, res: Response) => {
  * @desc 司機保存推薦碼（建立推薦關係，終身綁定）
  * @access Driver (需要認證)
  */
-router.post('/save-referral-code', async (req: Request, res: Response) => {
+router.post('/save-referral-code', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { user_id, promo_code } = req.body;
+    const { promo_code } = req.body;
+    const user_id = req.user!.uid;  // ✅ 身分一律取自已驗證的登入憑證（requireAuth），不相信請求裡帶的 ID
 
     console.log(`[Driver Affiliates API] 司機保存推薦碼: user_id=${user_id}, promo_code=${promo_code}`);
 
@@ -426,9 +429,9 @@ router.post('/save-referral-code', async (req: Request, res: Response) => {
  * @desc 獲取當前司機的推薦人資訊
  * @access Driver (需要認證)
  */
-router.get('/my-referrer', async (req: Request, res: Response) => {
+router.get('/my-referrer', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { user_id } = req.query;
+    const user_id = req.user!.uid;  // ✅ 身分一律取自已驗證的登入憑證（requireAuth），不相信請求裡帶的 ID
 
     if (!user_id) {
       return res.status(400).json({
@@ -506,7 +509,7 @@ router.get('/my-referrer', async (req: Request, res: Response) => {
  * @desc 管理員查詢所有司機推廣人
  * @access Admin
  */
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { status, search, page = 1, limit = 20 } = req.query;
 
@@ -563,7 +566,7 @@ router.get('/', async (req: Request, res: Response) => {
  * @desc 管理員查詢單個司機推廣人詳情
  * @access Admin
  */
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -617,7 +620,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  * @desc 管理員審核司機推廣人申請
  * @access Admin
  */
-router.post('/:id/review', async (req: Request, res: Response) => {
+router.post('/:id/review', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { status, review_notes } = req.body;
@@ -701,7 +704,7 @@ router.post('/:id/review', async (req: Request, res: Response) => {
  * @desc 管理員更新司機推廣人設定
  * @access Admin
  */
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const {

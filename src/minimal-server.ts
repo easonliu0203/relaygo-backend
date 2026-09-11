@@ -30,7 +30,7 @@ import flightsRoutes from './routes/flights'; // ✅ 新增：航班搜尋代理
 // import translationRoutes from './routes/translation'; // TODO: 翻譯路由檔案不存在，暫時註解
 import { initializeFirebase } from './config/firebase';
 import { initializePaymentProviders } from './services/payment';
-import { optionalAuth } from './middleware/auth';
+import { optionalAuth, requireAdmin } from './middleware/auth';
 
 // Load environment variables
 dotenv.config();
@@ -120,12 +120,12 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/drivers', driversRoutes); // ✅ 新增：註冊 drivers 路由（2025-12-02）
 app.use('/api/reviews', reviewRoutes); // ✅ 修復：註冊 reviews 路由（2025-11-30）
 app.use('/api/tour-packages', tourPackagesRoutes); // ✅ 新增：註冊 tour packages 路由（2025-11-30）
-app.use('/api/admin/influencers', influencersRoutes); // ✅ 新增：註冊 influencers 路由（2025-12-05）
-app.use('/api/admin/campaigns', campaignsRoutes); // ✅ 新增：註冊活動優惠碼路由（2026-09-05）
+app.use('/api/admin/influencers', requireAdmin, influencersRoutes); // ✅ 新增：註冊 influencers 路由（2025-12-05）
+app.use('/api/admin/campaigns', requireAdmin, campaignsRoutes); // ✅ 新增：註冊活動優惠碼路由（2026-09-05）
 app.use('/api/promo-codes', promoCodesRoutes); // ✅ 新增：註冊 promo codes 路由（2025-12-05）
 app.use('/api/signatures', signaturesRoutes); // ✅ 新增：註冊 signatures 路由（2026-01-17）
 app.use('/api/affiliates', affiliatesRoutes); // ✅ 新增：註冊客戶推廣人路由（2026-01-18）
-app.use('/api/admin', adminRoutes); // ✅ 新增：註冊 admin 路由（2026-01-24）
+app.use('/api/admin', requireAdmin, adminRoutes); // ✅ 後台 API 只接受管理員（2026-09-12） // ✅ 新增：註冊 admin 路由（2026-01-24）
 app.use('/api/driver-affiliates', driverAffiliatesRoutes); // ✅ 新增：註冊司機推廣人路由（2026-01-28）
 app.use('/api/places', placesRoutes); // ✅ 新增：註冊 Places API 代理路由（2026-01-31）
 app.use('/api/routes', googleRoutesRoutes); // ✅ 新增：註冊 Routes API 代理路由（2026-01-31）

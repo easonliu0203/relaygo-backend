@@ -94,3 +94,54 @@ export async function requireAuth(
     res.status(401).json({ error: '身份驗證失敗，請重新登入' });
   }
 }
+
+/**
+ * 管理員身份驗證 middleware
+ *
+ * - 驗證 Firebase ID Token，且帳號必須帶有 admin custom claim
+ *   （與 web-admin 登入 /api/auth/admin/google-login 的 verifyAdminToken 同一套規則）
+ * - 沒 token 或驗證失敗 → 401；已登入但不是管理員 → 403
+ * - CORS 預檢（OPTIONS）不帶憑證，直接放行交給 cors 處理，否則瀏覽器的後台請求會全部失敗
+ *
+ * 用於後台 API（/api/admin/*、推廣人審核、司機推廣人管理）
+ */
+export async function requireAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  if (req.method === 'OPTIONS') {
+    next();
+    return;
+  }
+
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!token) {
+    res.status(401).json({ success: false, error: '未提供管理員身份驗證 token' });
+    return;
+  }
+
+  try {
+    getFirebaseApp(); // 確保 Firebase 已初始化
+    const decoded = await admin.auth().verifyIdToken(token);
+
+    if (!decoded.admin) {
+      console.warn(`[Auth] 非管理員嘗試呼叫後台 API: ${decoded.email || decoded.uid} ${req.method} ${req.originalUrl}`);
+      res.status(403).json({ success: false, error: '此帳號沒有管理員權限' });
+      return;
+    }
+
+    req.user = {
+      uid: decoded.uid,
+      email: decoded.email,
+    };
+  } catch (error) {
+    console.warn('[Auth] 管理員 Token 驗證失敗（requireAdmin）:', (error as Error).message);
+    res.status(401).json({ success: false, error: '身份驗證失敗，請重新登入' });
+    return;
+  }
+
+  // 放在 try 外面：後續路由的錯誤不可被當成驗證失敗
+  next();
+}
