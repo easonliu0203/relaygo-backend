@@ -812,20 +812,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // 場景 3: 客戶使用推廣人 C 的優惠碼，但已有 A→B 推薦關係 → 分潤給 A（而非 C）
       console.log('[API] 檢查推薦關係:', { customerId: customer.id, influencerId, promoCode });
 
-      const { data: existingReferral } = await supabase
-        .from('referrals')
-        .select('influencer_id')
-        .eq('referee_id', customer.id)
-        .single();
-
-      // 使用推薦關係中的 influencer_id，如果沒有推薦關係則使用訂單的 influencer_id
-      const actualCommissionInfluencerId = existingReferral?.influencer_id || influencerId;
-
-      if (existingReferral) {
-        console.log('[API] 找到現有推薦關係，分潤對象:', actualCommissionInfluencerId);
-      } else {
-        console.log('[API] 無現有推薦關係，分潤對象為優惠碼提供者:', actualCommissionInfluencerId);
-      }
+      // ✅ 分潤對象一律是「這張單所使用優惠碼」的推廣人。
+      //    原本會改記給「客人當初第一次使用的推廣人」，但實際扣款（bookings.influencer_commission）
+      //    是給這張單的推廣人，兩邊對不起來，客人改用別人的碼時同一筆分潤會記給兩個人。
+      const actualCommissionInfluencerId = influencerId;
 
       const { error: usageError } = await supabase
         .from('promo_code_usage')
@@ -852,72 +842,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         console.log('[API] ✅ 優惠碼使用記錄成功');
       }
 
-      // ✅ 建立推薦關係（如果是首次使用推薦碼）
-      // 檢查用戶是否已有推薦人（使用 users.id，不是 firebase_uid）
-      // 注意：這裡重新查詢是為了獲取完整的推薦關係資訊（包括 id）
-      const { data: existingReferralFull } = await supabase
-        .from('referrals')
-        .select('id')
-        .eq('referee_id', customer.id)
-        .single();
-
-      if (!existingReferralFull) {
-        // 首次使用推薦碼，建立推薦關係
-        console.log('[API] 首次使用推薦碼，建立推薦關係');
-
-        // 獲取推廣人的 user_id 和佣金設定（如果是客戶推廣人）
-        const { data: influencerData } = await supabase
-          .from('influencers')
-          .select('user_id, affiliate_type, commission_fixed, commission_percent, is_commission_fixed_active, is_commission_percent_active')
-          .eq('id', influencerId)
-          .single();
-
-        if (influencerData && influencerData.user_id && influencerData.affiliate_type === 'customer_affiliate') {
-          // 客戶推廣人，建立推薦關係
-          const { error: referralError } = await supabase
-            .from('referrals')
-            .insert({
-              referrer_id: influencerData.user_id,
-              referee_id: customer.id, // ✅ 修復：使用 users.id，不是 firebase_uid
-              influencer_id: influencerId,
-              promo_code: promoCode,
-              first_booking_id: booking.id
-            });
-
-          if (referralError) {
-            console.error('[API] 建立推薦關係失敗:', referralError);
-          } else {
-            console.log('[API] ✅ 推薦關係建立成功');
-
-            // ✅ 新增：立即更新 promo_code_usage 記錄，填寫佣金相關欄位
-            const updateCommissionType = influencerData.is_commission_fixed_active ? 'fixed' :
-                                  influencerData.is_commission_percent_active ? 'percent' : null;
-            const updateCommissionRate = influencerData.is_commission_percent_active ? influencerData.commission_percent : 0;
-            const updateCommissionFixed = influencerData.is_commission_fixed_active ? influencerData.commission_fixed : 0;
-
-            const { error: updateError } = await supabase
-              .from('promo_code_usage')
-              .update({
-                referee_id: customer.id,
-                commission_type: updateCommissionType,
-                commission_rate: updateCommissionRate,
-                commission_fixed_amount: updateCommissionFixed,
-                order_amount: actualFinalPrice
-              })
-              .eq('booking_id', booking.id);
-
-            if (updateError) {
-              console.error('[API] 更新優惠碼使用記錄失敗:', updateError);
-            } else {
-              console.log('[API] ✅ 優惠碼使用記錄已更新佣金資訊');
-            }
-          }
-        } else {
-          console.log('[API] 網紅推廣碼或非客戶推廣人，不建立推薦關係');
-        }
-      } else {
-        console.log('[API] 用戶已有推薦人，不建立新的推薦關係');
-      }
+      // ✅ 推薦關係（客戶推廣人的首單資格）改由資料庫在「訂單完成」時建立
+      //    （calculate_booking_financials），建單時不再建立：
+      //    - 建單就綁定的話，客人下單後取消也會被佔掉首單資格
+      //    - 完成時以 referrals.referee_id 唯一約束原子判定，兩張同時完成也只有一張算首單
     }
 
     // 8. 返回訂單資訊

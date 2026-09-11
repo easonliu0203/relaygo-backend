@@ -790,6 +790,174 @@ router.get('/my-referrals', async (req: Request, res: Response) => {
 });
 
 /**
+ * @route GET /api/affiliates/my-commissions
+ * @desc 推廣人的每一筆分潤明細（含分潤原因）
+ * @query user_id - Firebase UID
+ * @query page, limit - 分頁
+ *
+ * 列出所有使用此推廣人優惠碼的訂單（已取消／已退款除外），不限下線：
+ * 客人第一次用 A 的碼、之後改用 B 的碼時，B 也要看得到自己那筆分潤。
+ *
+ * - 已完成：金額與原因（first_use／repeat）以資料庫判定結果為準
+ * - 未完成：顯示「待確認」的預估值。首單以「訂單完成」為準，若該客人尚未有
+ *   推薦關係，預估為首單％；兩張同時進行時可能最後只有一張算首單。
+ */
+router.get('/my-commissions', async (req: Request, res: Response) => {
+  try {
+    const { user_id, page = '1', limit = '20' } = req.query;
+
+    if (!user_id) {
+      return res.status(400).json({ success: false, error: '缺少必填欄位', details: '用戶 ID 為必填' });
+    }
+
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = Math.min(parseInt(limit as string, 10), 50);
+    if (isNaN(pageNum) || pageNum < 1 || isNaN(limitNum) || limitNum < 1) {
+      return res.status(400).json({ success: false, error: '無效的分頁參數' });
+    }
+
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('firebase_uid', user_id)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({ success: false, error: '用戶不存在' });
+    }
+
+    const { data: influencer, error: influencerError } = await supabase
+      .from('influencers')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (influencerError || !influencer) {
+      return res.status(404).json({ success: false, error: '您不是推廣人' });
+    }
+
+    const EXCLUDED_STATUSES = '(cancelled,refunded)';
+
+    // 所有有效訂單（輕量欄位），用來算總額與待確認預估
+    const { data: allOrders, error: allError } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        status,
+        created_at,
+        completed_at,
+        customer_id,
+        total_amount,
+        final_price,
+        influencer_commission,
+        influencer_commission_type,
+        influencer_commission_rate,
+        influencer_commission_fixed,
+        influencer_commission_reason,
+        first_use_promoter_percentage,
+        pickup_location,
+        destination
+      `)
+      .eq('influencer_id', influencer.id)
+      .not('status', 'in', EXCLUDED_STATUSES)
+      .order('created_at', { ascending: false });
+
+    if (allError) {
+      console.error('[Affiliates API] 查詢分潤明細失敗:', allError);
+      return res.status(500).json({ success: false, error: '查詢分潤明細失敗', details: allError.message });
+    }
+
+    const orders = allOrders || [];
+
+    // 待確認訂單的客人中，已有推薦關係（已用過首單）的名單
+    const pendingCustomerIds = Array.from(new Set(
+      orders.filter((o: any) => o.status !== 'completed').map((o: any) => o.customer_id).filter(Boolean)
+    ));
+    const referredSet = new Set<string>();
+    if (pendingCustomerIds.length > 0) {
+      const { data: refs } = await supabase
+        .from('referrals')
+        .select('referee_id')
+        .in('referee_id', pendingCustomerIds);
+      (refs || []).forEach((r: any) => referredSet.add(r.referee_id));
+    }
+
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    const items = orders.map((o: any) => {
+      const confirmed = o.status === 'completed';
+      const orderAmount = parseFloat(o.final_price || o.total_amount) || 0;
+      const firstUsePct = o.first_use_promoter_percentage != null ? parseFloat(o.first_use_promoter_percentage) : null;
+
+      let reason: string | null = o.influencer_commission_reason || null;
+      let amount = parseFloat(o.influencer_commission) || 0;
+      let type: string = o.influencer_commission_type || 'percent';
+      let rate = parseFloat(o.influencer_commission_rate) || 0;
+      let fixed = parseFloat(o.influencer_commission_fixed) || 0;
+
+      if (!confirmed) {
+        // 預估：尚無推薦關係的客人，這張單若先完成就會是首單
+        const likelyFirstUse = firstUsePct !== null && !referredSet.has(o.customer_id);
+        if (likelyFirstUse) {
+          reason = 'first_use';
+          type = 'percent';
+          rate = firstUsePct as number;
+          fixed = 0;
+          amount = round2((parseFloat(o.total_amount) || 0) * rate / 100);
+        } else {
+          reason = firstUsePct !== null ? 'repeat' : null;
+        }
+      }
+
+      return {
+        status: confirmed ? 'confirmed' : 'pending',
+        reason,
+        date: o.completed_at || o.created_at,
+        order_amount: orderAmount,
+        commission_amount: amount,
+        commission_type: type,
+        commission_rate: rate,
+        commission_fixed: fixed,
+        pickup_region: extractRegion(o.pickup_location),
+        destination_region: extractRegion(o.destination),
+      };
+    });
+
+    const confirmedTotal = round2(items.filter(i => i.status === 'confirmed').reduce((s, i) => s + i.commission_amount, 0));
+    const pendingTotal = round2(items.filter(i => i.status === 'pending').reduce((s, i) => s + i.commission_amount, 0));
+
+    const offset = (pageNum - 1) * limitNum;
+    const pageItems = items.slice(offset, offset + limitNum);
+
+    return res.json({
+      success: true,
+      data: {
+        commissions: pageItems,
+        summary: {
+          confirmed_total: confirmedTotal,
+          pending_total: pendingTotal,
+          confirmed_count: items.filter(i => i.status === 'confirmed').length,
+          pending_count: items.filter(i => i.status === 'pending').length,
+        },
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: items.length,
+          totalPages: Math.max(1, Math.ceil(items.length / limitNum)),
+        },
+      },
+    });
+  } catch (error) {
+    console.error('[Affiliates API] 分潤明細錯誤:', error);
+    return res.status(500).json({
+      success: false,
+      error: '內部伺服器錯誤',
+      details: error instanceof Error ? error.message : '未知錯誤'
+    });
+  }
+});
+
+/**
  * @route GET /api/affiliates/referral-orders/:refereeId
  * @desc 獲取下線的消費記錄（已完成訂單）
  * @access Customer (需要認證 - 僅限推廣人查看自己的下線)
@@ -923,6 +1091,7 @@ router.get('/referral-orders/:refereeId', async (req: Request, res: Response) =>
         influencer_commission_type,
         influencer_commission_rate,
         influencer_commission_fixed,
+        influencer_commission_reason,
         pickup_location,
         destination
       `)
@@ -972,6 +1141,7 @@ router.get('/referral-orders/:refereeId', async (req: Request, res: Response) =>
         commission_type: order.influencer_commission_type || 'percent',
         commission_rate: parseFloat(order.influencer_commission_rate) || 0,
         commission_fixed: parseFloat(order.influencer_commission_fixed) || 0,
+        commission_reason: order.influencer_commission_reason || null,
         pickup_region: pickupRegion,
         destination_region: destinationRegion
       };

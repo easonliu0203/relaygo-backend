@@ -366,6 +366,7 @@ router.post('/revenue-share-configs', async (req: Request, res: Response): Promi
       company_percentage,
       driver_percentage,
       company_base_percentage,
+      first_use_promoter_percentage,
       description,
       priority,
       created_by
@@ -408,6 +409,23 @@ router.post('/revenue-share-configs', async (req: Request, res: Response): Promi
       return;
     }
 
+    // ✅ 首單推廣人％：只用在「使用優惠碼」的配置，且不可超過公司抽成
+    //    （客人第一張完成的客戶推廣人訂單，推廣人改拿此比例）
+    let firstUsePct: number | null = null;
+    if (has_promo_code) {
+      const base = Number(company_base_percentage ?? company_percentage);
+      firstUsePct = first_use_promoter_percentage === undefined || first_use_promoter_percentage === null
+        ? Math.min(25, base)
+        : Number(first_use_promoter_percentage);
+      if (!Number.isFinite(firstUsePct) || firstUsePct < 0 || firstUsePct > base) {
+        res.status(400).json({
+          success: false,
+          error: `首單推廣人％必須在 0 到公司抽成 ${base}% 之間`
+        });
+        return;
+      }
+    }
+
     // 插入新配置
     const { data, error } = await supabase
       .from('revenue_share_configs')
@@ -419,6 +437,7 @@ router.post('/revenue-share-configs', async (req: Request, res: Response): Promi
         company_percentage,
         driver_percentage,
         company_base_percentage: has_promo_code ? (company_base_percentage || company_percentage) : null,
+        first_use_promoter_percentage: firstUsePct,
         description,
         priority: priority || 0,
         is_active: true,
@@ -469,6 +488,7 @@ router.put('/revenue-share-configs/:id', async (req: Request, res: Response): Pr
       company_percentage,
       driver_percentage,
       company_base_percentage,
+      first_use_promoter_percentage,
       description,
       priority,
       is_active,
@@ -497,6 +517,39 @@ router.put('/revenue-share-configs/:id', async (req: Request, res: Response): Pr
       }
     }
 
+    // ✅ 首單推廣人％：只適用於「使用優惠碼」的配置，且不可超過公司抽成
+    //    本次沒送公司抽成或優惠碼狀態時，讀現有設定來比對
+    if (first_use_promoter_percentage !== undefined && first_use_promoter_percentage !== null) {
+      let base = company_base_percentage ?? company_percentage;
+      let isPromo = has_promo_code;
+      if (base === undefined || base === null || isPromo === undefined) {
+        const { data: current } = await supabase
+          .from('revenue_share_configs')
+          .select('company_percentage, company_base_percentage, has_promo_code')
+          .eq('id', id)
+          .single();
+        base = base ?? current?.company_base_percentage ?? current?.company_percentage;
+        isPromo = isPromo ?? current?.has_promo_code;
+      }
+
+      if (!isPromo) {
+        res.status(400).json({
+          success: false,
+          error: '首單推廣人％只適用於「使用優惠碼」的配置'
+        });
+        return;
+      }
+
+      const v = Number(first_use_promoter_percentage);
+      if (!Number.isFinite(v) || v < 0 || v > Number(base)) {
+        res.status(400).json({
+          success: false,
+          error: `首單推廣人％必須在 0 到公司抽成 ${base}% 之間`
+        });
+        return;
+      }
+    }
+
     // 構建更新物件 (只更新提供的欄位)
     const updateData: any = {
       updated_at: new Date().toISOString(),
@@ -510,6 +563,9 @@ router.put('/revenue-share-configs/:id', async (req: Request, res: Response): Pr
     if (company_percentage !== undefined) updateData.company_percentage = company_percentage;
     if (driver_percentage !== undefined) updateData.driver_percentage = driver_percentage;
     if (company_base_percentage !== undefined) updateData.company_base_percentage = company_base_percentage;
+    if (first_use_promoter_percentage !== undefined) updateData.first_use_promoter_percentage = first_use_promoter_percentage;
+    // 改成「未使用優惠碼」時，首單％不再適用
+    if (has_promo_code === false) updateData.first_use_promoter_percentage = null;
     if (description !== undefined) updateData.description = description;
     if (priority !== undefined) updateData.priority = priority;
     if (is_active !== undefined) updateData.is_active = is_active;
