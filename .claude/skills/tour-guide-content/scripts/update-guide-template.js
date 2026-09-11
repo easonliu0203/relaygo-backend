@@ -1,7 +1,7 @@
 // Template: Update a single tour guide's content with per-attraction photos
 // Usage: Copy this file, replace PHOTOS and content objects, run with `node`
-const SUPABASE_URL = 'https://vlyhwegpvpnjyocqmfqc.supabase.co/rest/v1';
-const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZseWh3ZWdwdnBuanlvY3FtZnFjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODk3Nzk5NiwiZXhwIjoyMDc0NTUzOTk2fQ.nQPynfQcSIZ1QPVSjDcgscugQcEgfRPUauW0psSRTQo';
+const SUPABASE_URL = `https://${process.env.SUPABASE_PROJECT_REF}.supabase.co/rest/v1`;
+const KEY = process.env.SUPABASE_SERVICE_KEY; // never hardcode keys (CLAUDE.md)
 const SLUG = 'REPLACE_ME'; // e.g., 'sun-moon-lake'
 
 const headers = {
