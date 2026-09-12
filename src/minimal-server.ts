@@ -27,6 +27,7 @@ import aiExtractAddressRoutes from './routes/ai-extract-address';
 import aiTravelPlannerRoutes from './routes/ai-travel-planner'; // ✅ 新增：AI 旅遊行程規劃師（2026-02-28）
 import legalRoutes from './routes/legal'; // ✅ 新增：法律文件 API（2026-03-01）
 import flightsRoutes from './routes/flights'; // ✅ 新增：航班搜尋代理（2026-03-19）
+import chatCallsRoutes from './routes/chatCalls'; // ✅ 新增：聊天室「呼叫對方」（2026-09-12）
 // import translationRoutes from './routes/translation'; // TODO: 翻譯路由檔案不存在，暫時註解
 import { initializeFirebase } from './config/firebase';
 import { initializePaymentProviders } from './services/payment';
@@ -135,6 +136,7 @@ app.use('/api/ai', aiExtractAddressRoutes);
 app.use('/api/ai-travel-planner', aiTravelPlannerRoutes); // ✅ 新增：AI 旅遊行程規劃師（2026-02-28）
 app.use('/api/legal', legalRoutes); // ✅ 新增：法律文件 API（2026-03-01）
 app.use('/api/flights', flightsRoutes); // ✅ 新增：航班搜尋代理（2026-03-19）
+app.use('/api/chat-calls', chatCallsRoutes); // ✅ 新增：聊天室「呼叫對方」（2026-09-12）
 app.use('/api', ratingsRoutes); // 保留舊的 ratings 路由以向後兼容
 // app.use('/api/translation', translationRoutes); // TODO: 翻譯路由檔案不存在，暫時註解
 
