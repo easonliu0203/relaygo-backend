@@ -2,7 +2,7 @@
  * 聊天室「呼叫對方」API（2026-09-12）
  *
  * 客戶或司機在聊天室按「呼叫對方」→ 對方手機響鈴 30 秒，
- * 直到對方打開聊天室按「正準備回覆」，或 30 秒逾時。
+ * 直到對方點響鈴通知、在聊天室按「正準備回覆」、響鈴中送出訊息，或 30 秒逾時。
  *
  * - 呼叫狀態寫在 chat_rooms/{bookingId}.activeCall（Admin SDK 寫入，App 只讀，不需改 Firestore rules）
  * - 聊天紀錄留一則 messageType='call' 的系統訊息：
@@ -10,6 +10,7 @@
  *   預先帶 translations → Cloud Function onMessageCreate 會跳過（不花 OpenAI 翻譯費）
  * - 推播：Android 送 data-only，由 App 自己顯示「持續響鈴」通知（手機預設鈴聲）；
  *         iOS 由系統顯示通知並播放 App 內附的 30 秒鈴聲 ring30.wav
+ * - 被呼叫方回覆（正準備回覆）時，推播通知呼叫方；因送出訊息而回覆時不推播（訊息本身會通知）
  * - 行程結束（或取消）後不能再呼叫
  *
  * 失敗回應帶 code，App 依此顯示對應提示：
@@ -30,8 +31,12 @@ const RING_DURATION_MS = 30 * 1000;
 const RING_COOLDOWN_MS = 32 * 1000;
 /** 按「正準備回覆」的網路延遲寬限 */
 const ACK_GRACE_MS = 5 * 1000;
+/** 「對方正準備回覆」推播的有效時間：呼叫方太久沒上線就不送了 */
+const ACK_PUSH_TTL_MS = 10 * 60 * 1000;
 /** iOS 響鈴音檔（mobile/ios/Runner/ring30.wav，iOS 通知音上限 30 秒） */
 const IOS_RING_SOUND = 'ring30.wav';
+/** 「對方正準備回覆」的 Android 通知頻道（mobile ChatRingNotifier 會建立） */
+const ACK_CHANNEL_ID = 'chat_ring_ack';
 /** 行程已結束（或取消）的訂單狀態：不能再呼叫 */
 const ENDED_BOOKING_STATUSES = ['trip_ended', 'pending_balance', 'completed', 'cancelled', 'refunded'];
 
@@ -57,6 +62,16 @@ interface Rejected {
   code: string;
   error: string;
   retryAfterMs?: number;
+}
+
+interface AckResult {
+  status: number;
+  error?: string;
+  /** 這次請求才把呼叫改成已回覆（重複回覆為 false，不再推播） */
+  newlyAcked?: boolean;
+  callId?: string;
+  callerId?: string;
+  calleeName?: string;
 }
 
 /**
@@ -197,26 +212,28 @@ router.post('/:bookingId/ring', requireAuth, async (req: Request, res: Response)
 
 /**
  * @route POST /api/chat-calls/:bookingId/ack
- * @desc 被呼叫方按「正準備回覆」（停止響鈴，呼叫方會看到「對方正準備回覆」）
+ * @desc 被呼叫方「正準備回覆」（點響鈴通知、按按鈕、或響鈴中送出訊息）
+ * @body callId（選填，沒帶就回覆目前這次呼叫）、silent（true = 不推播給呼叫方，送出訊息時用）
  * @access 被呼叫的人（需要認證）
  */
 router.post('/:bookingId/ack', requireAuth, async (req: Request, res: Response) => {
   const uid = req.user!.uid;
   const { bookingId } = req.params;
-  const { callId } = req.body || {};
+  const { callId, silent } = req.body || {};
   const logPrefix = `[ChatCall ack booking=${bookingId.slice(0, 8)}]`;
 
   try {
     const firestore = getFirestore();
     const roomRef = firestore.collection('chat_rooms').doc(bookingId);
 
-    const result: { status: number; error?: string } = await firestore.runTransaction(async (tx) => {
+    const result: AckResult = await firestore.runTransaction(async (tx) => {
       const snap = await tx.get(roomRef);
       if (!snap.exists) {
         return { status: 404, error: '聊天室不存在' };
       }
 
-      const call = snap.data()!.activeCall;
+      const room = snap.data()!;
+      const call = room.activeCall;
       if (!call || (callId && call.callId !== callId)) {
         return { status: 404, error: '找不到這次呼叫' };
       }
@@ -224,7 +241,7 @@ router.post('/:bookingId/ack', requireAuth, async (req: Request, res: Response) 
         return { status: 403, error: '只有被呼叫的人可以回覆' };
       }
       if (call.status === 'acknowledged') {
-        return { status: 200 };
+        return { status: 200, newlyAcked: false };
       }
 
       const now = admin.firestore.Timestamp.now();
@@ -237,15 +254,28 @@ router.post('/:bookingId/ack', requireAuth, async (req: Request, res: Response) 
         'activeCall.acknowledgedAt': now,
         updatedAt: now,
       });
-      return { status: 200 };
+
+      const calleeIsCustomer = room.customerId === uid;
+      return {
+        status: 200,
+        newlyAcked: true,
+        callId: call.callId,
+        callerId: call.callerId,
+        calleeName: (calleeIsCustomer ? room.customerName : room.driverName) || (calleeIsCustomer ? '客戶' : '司機'),
+      };
     });
 
     if (result.status !== 200) {
       return res.status(result.status).json({ success: false, error: result.error });
     }
 
-    console.log(`${logPrefix} ✅ 被呼叫方已回覆 callId=${callId}`);
-    return res.json({ success: true });
+    let pushSent = false;
+    if (result.newlyAcked && silent !== true) {
+      pushSent = await sendAckPush(bookingId, result, logPrefix);
+    }
+
+    console.log(`${logPrefix} ✅ 被呼叫方已回覆 callId=${result.callId ?? callId} silent=${silent === true} pushSent=${pushSent}`);
+    return res.json({ success: true, pushSent });
   } catch (error: any) {
     console.error(`${logPrefix} ❌ 回覆失敗：`, error?.message || error);
     return res.status(500).json({ success: false, error: '回覆失敗' });
@@ -273,33 +303,62 @@ async function isTripEnded(bookingId: string, logPrefix: string): Promise<boolea
   return ENDED_BOOKING_STATUSES.includes(data.status);
 }
 
+/** 取得推播對象的 FCM token 與語言；沒有 token 回傳 null */
+async function getPushTarget(uid: string): Promise<{ token: string; language: string | null } | null> {
+  const userDoc = await getFirestore().collection('users').doc(uid).get();
+  const token = userDoc.data()?.fcmToken as string | undefined;
+  if (!token) {
+    return null;
+  }
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('preferred_language')
+    .eq('firebase_uid', uid)
+    .maybeSingle();
+
+  return { token, language: user?.preferred_language ?? null };
+}
+
+/** 推播失敗時，失效的 token 從 Firestore 清掉 */
+async function cleanupInvalidToken(uid: string, error: any, logPrefix: string): Promise<void> {
+  if (
+    error?.code !== 'messaging/invalid-registration-token' &&
+    error?.code !== 'messaging/registration-token-not-registered'
+  ) {
+    return;
+  }
+  try {
+    await getFirestore().collection('users').doc(uid).update({
+      fcmToken: admin.firestore.FieldValue.delete(),
+      fcmTokenDeletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      fcmTokenDeleteReason: 'Invalid or unregistered token',
+    });
+    console.log(`${logPrefix} 🧹 已清理失效 fcmToken`);
+  } catch (cleanupErr) {
+    console.error(`${logPrefix} 清理失效 token 失敗：`, cleanupErr);
+  }
+}
+
 /**
  * 發響鈴推播給被呼叫方。永遠不拋出，回傳是否送出。
  */
 async function sendRingPush(bookingId: string, call: RingCreated, logPrefix: string): Promise<boolean> {
   try {
-    const firestore = getFirestore();
-    const userDoc = await firestore.collection('users').doc(call.calleeId).get();
-    const fcmToken = userDoc.data()?.fcmToken as string | undefined;
-    if (!fcmToken) {
+    const target = await getPushTarget(call.calleeId);
+    if (!target) {
       console.warn(`${logPrefix} 被呼叫方沒有 fcmToken（可能沒裝 app 或沒授權通知）`);
       return false;
     }
 
-    const { data: user } = await supabase
-      .from('users')
-      .select('preferred_language')
-      .eq('firebase_uid', call.calleeId)
-      .maybeSingle();
-
     await pushI18n.ensureLoaded();
-    const { title, body } = pushI18n.get('chat_ring', user?.preferred_language, {
+    const { title, body } = pushI18n.get('chat_ring', target.language, {
       callerName: call.callerName,
     });
 
     const ttlMs = Math.max(1000, call.expiresAtMs - Date.now());
     const message: admin.messaging.Message = {
-      token: fcmToken,
+      token: target.token,
       // Android 沒有 notification 區塊 = data-only，由 App 背景處理器顯示持續響鈴通知
       data: {
         type: 'chat_ring',
@@ -333,22 +392,58 @@ async function sendRingPush(bookingId: string, call: RingCreated, logPrefix: str
     return true;
   } catch (error: any) {
     console.error(`${logPrefix} ❌ 響鈴推播失敗：`, error?.message || error);
+    await cleanupInvalidToken(call.calleeId, error, logPrefix);
+    return false;
+  }
+}
 
-    if (
-      error?.code === 'messaging/invalid-registration-token' ||
-      error?.code === 'messaging/registration-token-not-registered'
-    ) {
-      try {
-        await getFirestore().collection('users').doc(call.calleeId).update({
-          fcmToken: admin.firestore.FieldValue.delete(),
-          fcmTokenDeletedAt: admin.firestore.FieldValue.serverTimestamp(),
-          fcmTokenDeleteReason: 'Invalid or unregistered token',
-        });
-        console.log(`${logPrefix} 🧹 已清理失效 fcmToken`);
-      } catch (cleanupErr) {
-        console.error(`${logPrefix} 清理失效 token 失敗：`, cleanupErr);
-      }
+/**
+ * 推播「對方正準備回覆」給呼叫方。永遠不拋出，回傳是否送出。
+ */
+async function sendAckPush(bookingId: string, ack: AckResult, logPrefix: string): Promise<boolean> {
+  if (!ack.callerId) {
+    return false;
+  }
+  try {
+    const target = await getPushTarget(ack.callerId);
+    if (!target) {
+      console.warn(`${logPrefix} 呼叫方沒有 fcmToken，略過「正準備回覆」推播`);
+      return false;
     }
+
+    await pushI18n.ensureLoaded();
+    const { title, body } = pushI18n.get('chat_ring_ack', target.language, {
+      calleeName: ack.calleeName || '',
+    });
+
+    const message: admin.messaging.Message = {
+      token: target.token,
+      notification: { title, body },
+      data: {
+        type: 'chat_ring_ack',
+        bookingId,
+        callId: ack.callId || '',
+      },
+      android: {
+        priority: 'high',
+        ttl: ACK_PUSH_TTL_MS,
+        notification: {
+          channelId: ACK_CHANNEL_ID,
+          sound: 'default',
+          clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+        },
+      },
+      apns: {
+        headers: { 'apns-priority': '10' },
+        payload: { aps: { sound: 'default' } },
+      },
+    };
+
+    await admin.messaging(getFirebaseApp()).send(message);
+    return true;
+  } catch (error: any) {
+    console.error(`${logPrefix} ❌「正準備回覆」推播失敗：`, error?.message || error);
+    await cleanupInvalidToken(ack.callerId, error, logPrefix);
     return false;
   }
 }

@@ -28,7 +28,8 @@ type EventType =
   | 'driver_departed'
   | 'driver_arrived'
   | 'driver_changed'
-  | 'chat_ring'; // 聊天室「呼叫對方」（routes/chatCalls.ts）
+  | 'chat_ring' // 聊天室「呼叫對方」（routes/chatCalls.ts）
+  | 'chat_ring_ack'; // 被呼叫方「正準備回覆」通知呼叫方（routes/chatCalls.ts）
 
 const SUPABASE_REF = process.env.SUPABASE_PROJECT_REF || 'vlyhwegpvpnjyocqmfqc';
 const BASE_URL = `https://${SUPABASE_REF}.supabase.co/storage/v1/object/public/translations/push`;
@@ -47,7 +48,8 @@ const HARDCODED_FALLBACK: Record<EventType, PushString> = {
   driver_departed: { title: '司機已出發', body: '{driverName} 已出發前往上車地點' },
   driver_arrived: { title: '司機已到達', body: '{driverName} 已抵達上車地點,請準備上車' },
   driver_changed: { title: '司機已更換', body: '本訂單司機已更換為 {driverName},請與新司機聯絡' },
-  chat_ring: { title: '📞 {callerName} 正在呼叫你', body: '請打開聊天室，按「正準備回覆」' },
+  chat_ring: { title: '📞 {callerName} 正在呼叫你', body: '點這則通知，讓對方知道你正準備回覆' },
+  chat_ring_ack: { title: '✅ {calleeName} 正準備回覆', body: '對方已看到你的呼叫，請稍候' },
 };
 
 class PushI18nService {
