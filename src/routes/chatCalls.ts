@@ -10,6 +10,10 @@
  *   預先帶 translations → Cloud Function onMessageCreate 會跳過（不花 OpenAI 翻譯費）
  * - 推播：Android 送 data-only，由 App 自己顯示「持續響鈴」通知（手機預設鈴聲）；
  *         iOS 由系統顯示通知並播放 App 內附的 30 秒鈴聲 ring30.wav
+ * - 行程結束（或取消）後不能再呼叫
+ *
+ * 失敗回應帶 code，App 依此顯示對應提示：
+ *   ROOM_NOT_FOUND / NOT_MEMBER / TRIP_ENDED / COOLDOWN / OTHER_PARTY_CALLING
  */
 import { Router, Request, Response } from 'express';
 import admin from 'firebase-admin';
@@ -28,6 +32,8 @@ const RING_COOLDOWN_MS = 32 * 1000;
 const ACK_GRACE_MS = 5 * 1000;
 /** iOS 響鈴音檔（mobile/ios/Runner/ring30.wav，iOS 通知音上限 30 秒） */
 const IOS_RING_SOUND = 'ring30.wav';
+/** 行程已結束（或取消）的訂單狀態：不能再呼叫 */
+const ENDED_BOOKING_STATUSES = ['trip_ended', 'pending_balance', 'completed', 'cancelled', 'refunded'];
 
 const supabase = createClient(
   process.env.SUPABASE_URL || '',
@@ -48,6 +54,7 @@ interface RingCreated {
 interface Rejected {
   ok: false;
   status: number;
+  code: string;
   error: string;
   retryAfterMs?: number;
 }
@@ -55,7 +62,7 @@ interface Rejected {
 /**
  * @route POST /api/chat-calls/:bookingId/ring
  * @desc 呼叫聊天室的另一方（對方手機響鈴 30 秒）
- * @access 聊天室的客戶或司機（需要認證）
+ * @access 聊天室的客戶或司機（需要認證），行程結束後不能呼叫
  */
 router.post('/:bookingId/ring', requireAuth, async (req: Request, res: Response) => {
   const uid = req.user!.uid; // 身分一律取自已驗證的登入憑證，不相信請求裡帶的 ID
@@ -69,7 +76,7 @@ router.post('/:bookingId/ring', requireAuth, async (req: Request, res: Response)
     const result: RingCreated | Rejected = await firestore.runTransaction(async (tx) => {
       const snap = await tx.get(roomRef);
       if (!snap.exists) {
-        return { ok: false, status: 404, error: '聊天室不存在' };
+        return { ok: false, status: 404, code: 'ROOM_NOT_FOUND', error: '聊天室不存在' };
       }
       const room = snap.data()!;
 
@@ -79,7 +86,11 @@ router.post('/:bookingId/ring', requireAuth, async (req: Request, res: Response)
       } else if (room.driverId === uid) {
         callerRole = 'driver';
       } else {
-        return { ok: false, status: 403, error: '你不是這個聊天室的成員' };
+        return { ok: false, status: 403, code: 'NOT_MEMBER', error: '你不是這個聊天室的成員' };
+      }
+
+      if (await isTripEnded(bookingId, logPrefix)) {
+        return { ok: false, status: 403, code: 'TRIP_ENDED', error: '行程已結束，無法呼叫' };
       }
 
       const now = admin.firestore.Timestamp.now();
@@ -91,6 +102,7 @@ router.post('/:bookingId/ring', requireAuth, async (req: Request, res: Response)
           return {
             ok: false,
             status: 429,
+            code: 'COOLDOWN',
             error: '呼叫太頻繁，請稍後再試',
             retryAfterMs: RING_COOLDOWN_MS - elapsed,
           };
@@ -103,7 +115,7 @@ router.post('/:bookingId/ring', requireAuth, async (req: Request, res: Response)
           lastExpiresMs !== undefined &&
           now.toMillis() < lastExpiresMs
         ) {
-          return { ok: false, status: 409, error: '對方正在呼叫你' };
+          return { ok: false, status: 409, code: 'OTHER_PARTY_CALLING', error: '對方正在呼叫你' };
         }
       }
 
@@ -162,6 +174,7 @@ router.post('/:bookingId/ring', requireAuth, async (req: Request, res: Response)
     if (!result.ok) {
       return res.status(result.status).json({
         success: false,
+        code: result.code,
         error: result.error,
         ...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
       });
@@ -238,6 +251,27 @@ router.post('/:bookingId/ack', requireAuth, async (req: Request, res: Response) 
     return res.status(500).json({ success: false, error: '回覆失敗' });
   }
 });
+
+/**
+ * 行程是否已結束（或取消）。
+ * 查不到訂單視為已結束；查詢失敗則放行，避免 Supabase 暫時故障讓呼叫功能全壞。
+ */
+async function isTripEnded(bookingId: string, logPrefix: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('status')
+    .eq('id', bookingId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn(`${logPrefix} 查詢訂單狀態失敗，先放行：`, error.message);
+    return false;
+  }
+  if (!data) {
+    return true;
+  }
+  return ENDED_BOOKING_STATUSES.includes(data.status);
+}
 
 /**
  * 發響鈴推播給被呼叫方。永遠不拋出，回傳是否送出。
