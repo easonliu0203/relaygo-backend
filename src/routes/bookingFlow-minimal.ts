@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import { createChatRoomInFirestore, chatRoomExists, sendSystemMessage, saveDriverLocationHistory } from '../config/firebase';
+import { createChatRoomInFirestore, chatRoomExists, sendSystemMessage, saveDriverLocationHistory, updateChatRoomWindow } from '../config/firebase';
+import { getChatWindow } from '../utils/bookingTimezone';
 import { notifyBookingEvent } from '../services/notification/BookingNotifier';
 
 dotenv.config();
@@ -220,7 +221,8 @@ router.post('/bookings/:bookingId/accept', async (req: Request, res: Response): 
       customerName,                       // 使用真實姓名或 Email 截取
       driverName,                         // 使用真實姓名或 Email 截取
       pickupAddress: booking.pickup_location || '',
-      bookingTime: booking.start_date
+      // 上車前 24 小時才開放聊天（時區依上下車地點判斷）
+      chatWindow: getChatWindow(booking)
     };
 
     console.log('[API] 聊天室資料:', {
@@ -248,6 +250,9 @@ router.post('/bookings/:bookingId/accept', async (req: Request, res: Response): 
         console.log('[API] ✅ 聊天室創建成功');
       } else {
         console.log('[API] ℹ️  聊天室已存在，跳過創建');
+        if (chatRoomData.chatWindow) {
+          await updateChatRoomWindow(bookingId, chatRoomData.chatWindow);
+        }
       }
     } catch (firebaseError) {
       // Firebase 錯誤不應該影響主流程

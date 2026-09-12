@@ -1,5 +1,6 @@
 import admin from 'firebase-admin';
 import dotenv from 'dotenv';
+import type { ChatWindow } from '../utils/bookingTimezone';
 
 dotenv.config();
 
@@ -96,7 +97,7 @@ export async function createChatRoomInFirestore(chatRoomData: {
   customerName?: string;
   driverName?: string;
   pickupAddress?: string;
-  bookingTime?: string;
+  chatWindow: ChatWindow | null;
 }): Promise<string> {
   try {
     const firestore = getFirestore();
@@ -112,9 +113,8 @@ export async function createChatRoomInFirestore(chatRoomData: {
       customerName: chatRoomData.customerName || '客戶',
       driverName: chatRoomData.driverName || '司機',
       pickupAddress: chatRoomData.pickupAddress || '',
-      bookingTime: chatRoomData.bookingTime 
-        ? admin.firestore.Timestamp.fromDate(new Date(chatRoomData.bookingTime))
-        : admin.firestore.Timestamp.now(),
+      bookingTime: admin.firestore.Timestamp.now(),
+      ...(chatRoomData.chatWindow ? chatWindowFields(chatRoomData.chatWindow) : {}),
       lastMessage: null,
       lastMessageTime: null,
       customerUnreadCount: 0,
@@ -137,8 +137,28 @@ export async function createChatRoomInFirestore(chatRoomData: {
 }
 
 /**
+ * 聊天室的上車時間與開放時間（上車前 24 小時開放）。
+ * Firestore rules 用 chatOpensAt 擋開放前發訊息，App 用 utcOffsetMinutes 以目的地當地時間顯示。
+ */
+function chatWindowFields(chatWindow: ChatWindow) {
+  return {
+    bookingTime: admin.firestore.Timestamp.fromDate(chatWindow.pickupAt),
+    chatOpensAt: admin.firestore.Timestamp.fromDate(chatWindow.chatOpensAt),
+    timezone: chatWindow.timezone,
+    utcOffsetMinutes: chatWindow.utcOffsetMinutes,
+  };
+}
+
+/**
+ * 更新已存在聊天室的上車時間與開放時間（例如換司機後新司機再接單）
+ */
+export async function updateChatRoomWindow(bookingId: string, chatWindow: ChatWindow): Promise<void> {
+  await getFirestore().collection('chat_rooms').doc(bookingId).update(chatWindowFields(chatWindow));
+}
+
+/**
  * 檢查聊天室是否存在
- * 
+ *
  * @param bookingId 訂單 ID
  * @returns 是否存在
  */

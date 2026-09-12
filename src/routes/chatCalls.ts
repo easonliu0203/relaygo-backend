@@ -11,10 +11,10 @@
  * - 推播：Android 送 data-only，由 App 自己顯示「持續響鈴」通知（手機預設鈴聲）；
  *         iOS 由系統顯示通知並播放 App 內附的 30 秒鈴聲 ring30.wav
  * - 被呼叫方回覆（正準備回覆）時，推播通知呼叫方；因送出訊息而回覆時不推播（訊息本身會通知）
- * - 行程結束（或取消）後不能再呼叫
+ * - 聊天室開放前（上車前 24 小時才開放）不能呼叫；行程結束（或取消）後也不能再呼叫
  *
  * 失敗回應帶 code，App 依此顯示對應提示：
- *   ROOM_NOT_FOUND / NOT_MEMBER / TRIP_ENDED / COOLDOWN / OTHER_PARTY_CALLING
+ *   ROOM_NOT_FOUND / NOT_MEMBER / CHAT_NOT_OPEN / TRIP_ENDED / COOLDOWN / OTHER_PARTY_CALLING
  */
 import { Router, Request, Response } from 'express';
 import admin from 'firebase-admin';
@@ -102,6 +102,11 @@ router.post('/:bookingId/ring', requireAuth, async (req: Request, res: Response)
         callerRole = 'driver';
       } else {
         return { ok: false, status: 403, code: 'NOT_MEMBER', error: '你不是這個聊天室的成員' };
+      }
+
+      const chatOpensAtMs: number | undefined = room.chatOpensAt?.toMillis?.();
+      if (chatOpensAtMs !== undefined && Date.now() < chatOpensAtMs) {
+        return { ok: false, status: 403, code: 'CHAT_NOT_OPEN', error: '聊天室尚未開放（上車前 24 小時開放）' };
       }
 
       if (await isTripEnded(bookingId, logPrefix)) {
